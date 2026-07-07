@@ -20,7 +20,7 @@ from playwright.async_api import async_playwright
 SCREENER_URL = "https://chartink.com/screener/monthly-breakouts-898"
 MIN_VOLUME = 5000000  # 50,00,000
 ARCHIVE_THRESHOLD_PCT = 20
-SHEET_NAME = "Stock Dashboard"
+SHEET_NAME = "Monthly Breakout Scan"
 
 HEADERS = ["symbol", "name", "price", "percent_change", "volume",
            "buy_target", "status", "added_date", "archived_date", "archived_reason"]

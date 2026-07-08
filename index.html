@@ -265,6 +265,10 @@
         <div class="label">Buy zone</div>
       </div>
       <div class="stat">
+        <div class="num" id="stat-neartarget">–</div>
+        <div class="label">Near target</div>
+      </div>
+      <div class="stat">
         <div class="num" id="stat-needtarget">–</div>
         <div class="label">Need target</div>
       </div>
@@ -373,6 +377,7 @@
   function updateStats() {
     document.getElementById("stat-total").textContent = latestStocks.length;
     document.getElementById("stat-buyzone").textContent = latestStocks.filter((s) => classify(s) === "buyzone").length;
+    document.getElementById("stat-neartarget").textContent = latestStocks.filter((s) => classify(s) === "watch").length;
     document.getElementById("stat-needtarget").textContent = latestStocks.filter((s) => classify(s) === "needtarget").length;
   }
 

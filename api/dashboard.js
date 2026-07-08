@@ -1,6 +1,7 @@
 const { google } = require("googleapis");
 
 module.exports = async (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   try {
     const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
     const auth = new google.auth.GoogleAuth({

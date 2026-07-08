@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Monthly Breakout Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface-1: #12171f;
+    --surface-2: #1a212c;
+    --border: #232b38;
+    --text-primary: #edeff2;
+    --text-secondary: #7c8798;
+    --accent-buy: #34d399;
+    --accent-buy-dim: rgba(52, 211, 153, 0.12);
+    --accent-watch: #fbbf24;
+    --accent-watch-dim: rgba(251, 191, 36, 0.12);
+    --accent-loss: #f87171;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", monospace;
+    min-height: 100vh;
+  }
+
+  .wrap {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .title {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle {
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .stats {
+    display: flex;
+    gap: 24px;
+  }
+
+  .stat {
+    text-align: right;
+  }
+
+  .stat .num {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .stat .label {
+    color: var(--text-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+  }
+
+  .filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .filter-btn {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .filter-btn:hover { border-color: var(--text-secondary); }
+  .filter-btn.active {
+    background: var(--surface-2);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+
+  .rows { display: flex; flex-direction: column; gap: 6px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 100px 1fr 90px 130px 90px;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+
+  .row.buy-zone { background: var(--accent-buy-dim); border-color: rgba(52,211,153,0.35); }
+  .row.watch { background: var(--accent-watch-dim); border-color: rgba(251,191,36,0.3); }
+
+  .symbol {
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.01em;
+  }
+
+  .name {
+    color: var(--text-secondary);
+    font-size: 11px;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .prices {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .prices .price { color: var(--text-primary); font-size: 13px; }
+
+  .target-edit {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .target-input {
+    width: 72px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 4px;
+  }
+  .target-input:focus { outline: none; border-color: var(--accent-buy); }
+
+  .save-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .save-btn:hover { color: var(--accent-buy); border-color: var(--accent-buy); }
+  .save-btn.saving { opacity: 0.5; pointer-events: none; }
+
+  .gauge-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .gauge-track {
+    position: relative;
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .gauge-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    border-radius: 3px;
+  }
+
+  .gauge-label {
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .day-change {
+    text-align: right;
+    font-size: 12px;
+  }
+
+  .badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .badge.buy { background: rgba(52,211,153,0.2); color: var(--accent-buy); }
+  .badge.watch { background: rgba(251,191,36,0.2); color: var(--accent-watch); }
+  .badge.tracking { background: var(--surface-2); color: var(--text-secondary); }
+  .badge.needs-target { background: var(--surface-2); color: var(--text-secondary); border: 1px dashed var(--border); }
+
+  .empty, .loading {
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 60px 0;
+    font-size: 13px;
+  }
+
+  footer {
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-align: center;
+    margin-top: 32px;
+  }
+
+  @media (max-width: 640px) {
+    .row { grid-template-columns: 1fr; gap: 8px; }
+    .day-change { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title">Monthly Breakout Scan</div>
+      <div class="subtitle" id="synced-at">Loading last sync time…</div>
+    </div>
+    <div class="stats">
+      <div class="stat">
+        <div class="num" id="stat-total">–</div>
+        <div class="label">Tracked</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="stat-buyzone">–</div>
+        <div class="label">Buy zone</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="stat-needtarget">–</div>
+        <div class="label">Need target</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="filters">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="buyzone">Buy zone</button>
+    <button class="filter-btn" data-filter="watch">Near target</button>
+    <button class="filter-btn" data-filter="needtarget">Needs target</button>
+  </div>
+
+  <div class="rows" id="rows">
+    <div class="loading">Fetching dashboard…</div>
+  </div>
+
+  <footer>Auto-refreshes every 5 minutes · data synced from Chartlink via scheduled job</footer>
+</div>
+
+<script>
+  const WATCH_THRESHOLD = 2; // within this % counts as "watch"
+  let currentFilter = "all";
+  let latestStocks = [];
+
+  function classify(stock) {
+    if (stock.distance_pct === undefined) return "needtarget";
+    const d = Math.abs(stock.distance_pct);
+    if (stock.distance_pct <= 0) return "buyzone";
+    if (d <= WATCH_THRESHOLD) return "watch";
+    return "tracking";
+  }
+
+  function renderRow(stock) {
+    const cls = classify(stock);
+    const rowClass = cls === "buyzone" ? "buy-zone" : cls === "watch" ? "watch" : "";
+
+    let gaugeHtml = "";
+    let distanceLabel = "no target set";
+
+    if (stock.distance_pct !== undefined) {
+      const clamped = Math.max(-20, Math.min(20, stock.distance_pct));
+      const widthPct = (Math.abs(clamped) / 20) * 50;
+      const fillColor = stock.distance_pct <= 0 ? "var(--accent-buy)" : cls === "watch" ? "var(--accent-watch)" : "var(--text-secondary)";
+      const leftPos = stock.distance_pct <= 0 ? `calc(50% - ${widthPct}%)` : "50%";
+      gaugeHtml = `<div class="gauge-track"><div class="gauge-fill" style="left:${leftPos}; width:${widthPct}%; background:${fillColor};"></div></div>`;
+      distanceLabel = `${stock.distance_pct > 0 ? "+" : ""}${stock.distance_pct}%`;
+    } else {
+      gaugeHtml = `<div class="gauge-track"></div>`;
+    }
+
+    const badgeMap = {
+      buyzone: '<span class="badge buy">Buy zone</span>',
+      watch: '<span class="badge watch">Watch</span>',
+      tracking: '<span class="badge tracking">Tracking</span>',
+      needtarget: '<span class="badge needs-target">Needs target</span>',
+    };
+
+    const dayChange = stock.percent_change || 0;
+    const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
+
+    return `
+      <div class="row ${rowClass}" data-category="${cls}">
+        <div>${badgeMap[cls]}</div>
+        <div>
+          <div class="symbol">${stock.symbol}</div>
+          <div class="name">${stock.name || ""}</div>
+        </div>
+        <div class="prices">
+          <div class="price">₹${Number(stock.price).toFixed(2)}</div>
+          <div class="target-edit">
+            <input
+              type="number"
+              step="0.01"
+              class="target-input"
+              value="${stock.buy_target || ""}"
+              placeholder="target"
+              data-symbol="${stock.symbol}"
+            />
+            <button class="save-btn" data-symbol="${stock.symbol}">Save</button>
+          </div>
+        </div>
+        <div class="gauge-wrap">
+          ${gaugeHtml}
+          <div class="gauge-label" style="color:${stock.distance_pct !== undefined ? (stock.distance_pct <= 0 ? 'var(--accent-buy)' : 'var(--text-secondary)') : 'var(--text-secondary)'}">${distanceLabel}</div>
+        </div>
+        <div class="day-change" style="color:${dayChangeColor}">${dayChange >= 0 ? "+" : ""}${dayChange}%</div>
+      </div>
+    `;
+  }
+
+  function render() {
+    const container = document.getElementById("rows");
+    const filtered = currentFilter === "all"
+      ? latestStocks
+      : latestStocks.filter((s) => classify(s) === currentFilter);
+
+    if (filtered.length === 0) {
+      container.innerHTML = '<div class="empty">Nothing matches this filter right now.</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(renderRow).join("");
+  }
+
+  function updateStats() {
+    document.getElementById("stat-total").textContent = latestStocks.length;
+    document.getElementById("stat-buyzone").textContent = latestStocks.filter((s) => classify(s) === "buyzone").length;
+    document.getElementById("stat-needtarget").textContent = latestStocks.filter((s) => classify(s) === "needtarget").length;
+  }
+
+  async function loadDashboard() {
+    try {
+      const res = await fetch("/api/dashboard");
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById("rows").innerHTML = `<div class="empty">Error loading data: ${data.error}</div>`;
+        return;
+      }
+
+      latestStocks = data.stocks || [];
+      updateStats();
+      render();
+
+      const syncedDate = new Date(data.syncedAt);
+      document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
+    } catch (e) {
+      document.getElementById("rows").innerHTML = `<div class="empty">Could not reach the dashboard API.</div>`;
+    }
+  }
+
+  document.getElementById("rows").addEventListener("click", async (e) => {
+    if (!e.target.classList.contains("save-btn")) return;
+
+    const btn = e.target;
+    const symbol = btn.dataset.symbol;
+    const input = document.querySelector(`.target-input[data-symbol="${symbol}"]`);
+    const value = parseFloat(input.value);
+
+    if (!value || value <= 0) {
+      input.style.borderColor = "var(--accent-loss)";
+      return;
+    }
+
+    btn.classList.add("saving");
+    btn.textContent = "…";
+
+    try {
+      const res = await fetch("/api/set-target", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, target: value }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to save");
+      }
+
+      await loadDashboard();
+    } catch (err) {
+      btn.classList.remove("saving");
+      btn.textContent = "Retry";
+      alert("Could not save target: " + err.message);
+    }
+  });
+
+  document.querySelectorAll(".filter-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentFilter = btn.dataset.filter;
+      render();
+    });
+  });
+
+  loadDashboard();
+  setInterval(loadDashboard, 5 * 60 * 1000);
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@ name: Sync stock dashboard
 
 on:
   schedule:
-    - cron: "*/30 3-10 * * 1-5"
+    - cron: "7,37 3-10 * * 1-5"
   workflow_dispatch: {}
 
 jobs:

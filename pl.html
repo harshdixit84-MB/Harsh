@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>P/L Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface-1: #12171f;
+    --surface-2: #1a212c;
+    --border: #232b38;
+    --text-primary: #edeff2;
+    --text-secondary: #7c8798;
+    --accent-buy: #34d399;
+    --accent-buy-dim: rgba(52, 211, 153, 0.12);
+    --accent-loss: #f87171;
+    --accent-loss-dim: rgba(248, 113, 113, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", monospace;
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 26px; }
+  .back-link {
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  .back-link:hover { color: var(--text-primary); border-color: var(--text-primary); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .stat-box {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .stat-box .num { font-family: "Space Grotesk", sans-serif; font-size: 20px; font-weight: 600; }
+  .stat-box .label { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+
+  .section-title {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    margin: 28px 0 12px;
+  }
+
+  .add-form {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  input[type="text"], input[type="number"] {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    padding: 7px 10px;
+    border-radius: 5px;
+  }
+  input[type="text"] { width: 100px; text-transform: uppercase; }
+  input[type="number"] { width: 90px; }
+  input:focus { outline: none; border-color: var(--accent-buy); }
+
+  button.action-btn {
+    background: var(--accent-buy);
+    border: none;
+    color: #0a0e14;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  button.action-btn:hover { opacity: 0.85; }
+  button.action-btn.saving { opacity: 0.5; pointer-events: none; }
+
+  .rows { display: flex; flex-direction: column; gap: 6px; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 90px 90px 120px 110px auto;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+  }
+  .row.gain { border-color: rgba(52,211,153,0.3); }
+  .row.loss { border-color: rgba(248,113,113,0.3); }
+
+  .row .symbol { font-weight: 600; font-size: 13px; }
+  .row .label { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+
+  .pl-amount.gain { color: var(--accent-buy); }
+  .pl-amount.loss { color: var(--accent-loss); }
+
+  .sell-form { display: flex; gap: 6px; justify-content: flex-end; }
+  .sell-form input { width: 80px; }
+
+  .empty { color: var(--text-secondary); text-align: center; padding: 30px 0; font-size: 13px; }
+
+  @media (max-width: 700px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .row { grid-template-columns: 1fr; gap: 6px; }
+    .sell-form { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">P/L Tracker</div>
+    <a href="/" class="back-link">← Back to dashboard</a>
+  </header>
+
+  <div class="stats">
+    <div class="stat-box">
+      <div class="num" id="stat-realized">–</div>
+      <div class="label">Realized P/L</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" id="stat-unrealized">–</div>
+      <div class="label">Unrealized P/L</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" id="stat-open">–</div>
+      <div class="label">Open positions</div>
+    </div>
+    <div class="stat-box">
+      <div class="num" id="stat-closed">–</div>
+      <div class="label">Closed trades</div>
+    </div>
+  </div>
+
+  <div class="section-title">Record a new buy</div>
+  <div class="add-form">
+    <input type="text" id="buy-symbol" placeholder="SYMBOL" />
+    <input type="number" step="0.01" id="buy-price" placeholder="Buy price" />
+    <button class="action-btn" id="add-buy-btn">Add position</button>
+  </div>
+
+  <div class="section-title">Open positions</div>
+  <div class="rows" id="open-rows">
+    <div class="empty">Loading…</div>
+  </div>
+
+  <div class="section-title">Closed trades</div>
+  <div class="rows" id="closed-rows">
+    <div class="empty">Loading…</div>
+  </div>
+</div>
+
+<script>
+  async function loadTrades() {
+    try {
+      const res = await fetch("/api/trades?t=" + Date.now(), { cache: "no-store" });
+      const data = await res.json();
+
+      if (data.error) {
+        document.getElementById("open-rows").innerHTML = `<div class="empty">Error: ${data.error}</div>`;
+        return;
+      }
+
+      document.getElementById("stat-realized").textContent = "₹" + data.summary.realized;
+      document.getElementById("stat-unrealized").textContent = "₹" + data.summary.unrealized;
+      document.getElementById("stat-open").textContent = data.summary.openCount;
+      document.getElementById("stat-closed").textContent = data.summary.closedCount;
+
+      renderOpen(data.open);
+      renderClosed(data.closed);
+    } catch (e) {
+      document.getElementById("open-rows").innerHTML = `<div class="empty">Could not reach the trades API.</div>`;
+    }
+  }
+
+  function renderOpen(trades) {
+    const container = document.getElementById("open-rows");
+    if (trades.length === 0) {
+      container.innerHTML = '<div class="empty">No open positions yet.</div>';
+      return;
+    }
+
+    container.innerHTML = trades.map((t) => {
+      const hasPrice = t.current_price !== null && t.current_price !== undefined;
+      const cls = hasPrice ? (t.pl_amount >= 0 ? "gain" : "loss") : "";
+      const plText = hasPrice ? `₹${t.pl_amount} (${t.pl_percent >= 0 ? "+" : ""}${t.pl_percent}%)` : "price unavailable";
+
+      return `
+        <div class="row ${cls}">
+          <div><div class="label">Symbol</div><div class="symbol">${t.symbol}</div></div>
+          <div><div class="label">Buy</div>₹${t.buy_price}</div>
+          <div><div class="label">Current</div>${hasPrice ? "₹" + t.current_price : "—"}</div>
+          <div><div class="label">Unrealized P/L</div><span class="pl-amount ${cls}">${plText}</span></div>
+          <div class="sell-form">
+            <input type="number" step="0.01" class="sell-price-input" data-symbol="${t.symbol}" placeholder="Sell @" />
+            <button class="action-btn sell-btn" data-symbol="${t.symbol}">Sell</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderClosed(trades) {
+    const container = document.getElementById("closed-rows");
+    if (trades.length === 0) {
+      container.innerHTML = '<div class="empty">No closed trades yet.</div>';
+      return;
+    }
+
+    container.innerHTML = trades.map((t) => {
+      const cls = t.pl_amount >= 0 ? "gain" : "loss";
+      return `
+        <div class="row ${cls}">
+          <div><div class="label">Symbol</div><div class="symbol">${t.symbol}</div></div>
+          <div><div class="label">Buy</div>₹${t.buy_price}</div>
+          <div><div class="label">Sell</div>₹${t.sell_price}</div>
+          <div><div class="label">Realized P/L</div><span class="pl-amount ${cls}">₹${t.pl_amount} (${t.pl_percent >= 0 ? "+" : ""}${t.pl_percent}%)</span></div>
+          <div style="color:var(--text-secondary); font-size:11px;">${t.buy_date} → ${t.sell_date}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  document.getElementById("add-buy-btn").addEventListener("click", async () => {
+    const symbol = document.getElementById("buy-symbol").value.trim();
+    const price = parseFloat(document.getElementById("buy-price").value);
+    const btn = document.getElementById("add-buy-btn");
+
+    if (!symbol || !price || price <= 0) {
+      alert("Enter a valid symbol and buy price.");
+      return;
+    }
+
+    btn.classList.add("saving");
+    try {
+      const res = await fetch("/api/add-trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "buy", symbol, price }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to add");
+
+      document.getElementById("buy-symbol").value = "";
+      document.getElementById("buy-price").value = "";
+      await loadTrades();
+    } catch (err) {
+      alert("Could not add position: " + err.message);
+    } finally {
+      btn.classList.remove("saving");
+    }
+  });
+
+  document.getElementById("open-rows").addEventListener("click", async (e) => {
+    if (!e.target.classList.contains("sell-btn")) return;
+
+    const btn = e.target;
+    const symbol = btn.dataset.symbol;
+    const input = document.querySelector(`.sell-price-input[data-symbol="${symbol}"]`);
+    const price = parseFloat(input.value);
+
+    if (!price || price <= 0) {
+      input.style.borderColor = "var(--accent-loss)";
+      return;
+    }
+
+    btn.classList.add("saving");
+    try {
+      const res = await fetch("/api/add-trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sell", symbol, price }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Failed to sell");
+
+      await loadTrades();
+    } catch (err) {
+      alert("Could not close position: " + err.message);
+      btn.classList.remove("saving");
+    }
+  });
+
+  loadTrades();
+  setInterval(loadTrades, 5 * 60 * 1000);
+</script>
+</body>
+</html>

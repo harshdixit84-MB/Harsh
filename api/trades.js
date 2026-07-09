@@ -60,10 +60,12 @@ module.exports = async (req, res) => {
     let totalUnrealized = 0;
     openTrades.forEach((t, i) => {
       const buy = parseFloat(t.buy_price);
+      const qty = parseFloat(t.quantity) || 1;
       const current = livePrices[i];
       t.current_price = current;
+      t.quantity = qty;
       if (current !== null && !isNaN(current)) {
-        t.pl_amount = Math.round((current - buy) * 100) / 100;
+        t.pl_amount = Math.round((current - buy) * qty * 100) / 100;
         t.pl_percent = Math.round(((current - buy) / buy) * 10000) / 100;
         totalUnrealized += t.pl_amount;
       } else {
@@ -76,7 +78,9 @@ module.exports = async (req, res) => {
     closedTrades.forEach((t) => {
       const buy = parseFloat(t.buy_price);
       const sell = parseFloat(t.sell_price);
-      t.pl_amount = Math.round((sell - buy) * 100) / 100;
+      const qty = parseFloat(t.quantity) || 1;
+      t.quantity = qty;
+      t.pl_amount = Math.round((sell - buy) * qty * 100) / 100;
       t.pl_percent = Math.round(((sell - buy) / buy) * 10000) / 100;
       totalRealized += t.pl_amount;
     });

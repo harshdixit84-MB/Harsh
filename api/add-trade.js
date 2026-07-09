@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { action, symbol, price } = req.body;
+    const { action, symbol, price, quantity } = req.body;
 
     if (!action || !symbol || !price) {
       res.status(400).json({ error: "action, symbol, and price are required" });
@@ -29,12 +29,13 @@ module.exports = async (req, res) => {
     const cleanSymbol = symbol.toUpperCase().trim();
 
     if (action === "buy") {
+      const qty = quantity && quantity > 0 ? quantity : 1;
       await sheets.spreadsheets.values.append({
         spreadsheetId: process.env.SHEET_ID,
         range: "Trades!A1",
         valueInputOption: "RAW",
         requestBody: {
-          values: [[cleanSymbol, price, "", today, "", ""]],
+          values: [[cleanSymbol, price, qty, "", today, "", ""]],
         },
       });
       res.status(200).json({ success: true });

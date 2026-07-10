@@ -181,7 +181,7 @@ def compute_signal(symbol):
             score += 1
 
         label = "Strong" if score >= 4 else "Moderate" if score >= 2 else "Weak"
-        consolidating = bb_width_percentile <= 20
+        consolidating = bool(bb_width_percentile <= 20)
 
         return {
             "rsi": round(float(latest_rsi), 1),

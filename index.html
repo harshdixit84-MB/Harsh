@@ -228,6 +228,26 @@
   .badge.tracking { background: var(--surface-2); color: var(--text-secondary); }
   .badge.needs-target { background: var(--surface-2); color: var(--text-secondary); border: 1px dashed var(--border); }
 
+  .signal-badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 4px;
+  }
+  .signal-badge.strong { background: rgba(52,211,153,0.18); color: var(--accent-buy); }
+  .signal-badge.moderate { background: rgba(251,191,36,0.18); color: var(--accent-watch); }
+  .signal-badge.weak { background: var(--surface-2); color: var(--text-secondary); }
+  .squeeze-tag {
+    font-size: 10px;
+    color: #a78bfa;
+    margin-top: 4px;
+    display: inline-block;
+    margin-left: 4px;
+  }
+
   .empty, .loading {
     color: var(--text-secondary);
     text-align: center;
@@ -333,7 +353,11 @@
 
     return `
       <div class="row ${rowClass}" data-category="${cls}">
-        <div>${badgeMap[cls]}</div>
+        <div>
+          ${badgeMap[cls]}
+          ${stock.signal_label ? `<div class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</div>` : ""}
+          ${stock.consolidating ? `<span class="squeeze-tag">◆ Squeeze</span>` : ""}
+        </div>
         <div>
           <div class="symbol">${stock.symbol}</div>
           <div class="name">${stock.name || ""}</div>

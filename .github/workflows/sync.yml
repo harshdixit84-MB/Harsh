@@ -17,7 +17,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright gspread google-auth yfinance
+          pip install playwright gspread google-auth yfinance ta pandas
           playwright install chromium
           playwright install-deps chromium
 

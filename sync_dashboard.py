@@ -17,6 +17,7 @@ import os
 from datetime import date
 
 import gspread
+import numpy as np
 import ta
 import yfinance as yf
 from google.oauth2.service_account import Credentials
@@ -204,6 +205,20 @@ def get_signals(symbols):
     return signals
 
 
+def _json_safe(value):
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return float(value)
+    if isinstance(value, (bool, int, float, str)):
+        return value
+    if value is None:
+        return ""
+    return str(value)
+
+
 def get_sheet():
     key_json = os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"]
     key_dict = json.loads(key_json)
@@ -280,7 +295,7 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
 
         updated_rows.append(record)
 
-    rows_for_sheet = [[r.get(h, "") for h in HEADERS] for r in updated_rows]
+    rows_for_sheet = [[_json_safe(r.get(h, "")) for h in HEADERS] for r in updated_rows]
     sheet.update([HEADERS] + rows_for_sheet, "A1")
     print(f"Synced {len(updated_rows)} rows ({len(live_prices)} live prices, {len(signals)} signals computed).")
 

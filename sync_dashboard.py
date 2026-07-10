@@ -1,10 +1,11 @@
 """
 Scheduled job: fetches NEW matches from a Chartlink screener (to discover
-stocks worth tracking), then refreshes LIVE prices for every currently
-active tracked stock via Yahoo Finance -- so price stays current even
-after a stock drops out of today's screener results. Merges everything
-into a Google Sheet, preserving manually-set buy targets and auto-archiving
-stocks that have moved 20%+ away from their target.
+stocks worth tracking), refreshes LIVE prices for every currently active
+tracked stock via Yahoo Finance, computes a technical signal score
+(trend structure, trend strength, momentum, MACD, volume confirmation,
+and a consolidation/squeeze flag), then merges everything into a Google
+Sheet -- preserving manually-set buy targets and auto-archiving stocks
+that have moved 20%+ away from their target.
 
 Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY (the full JSON
 key content, as a string).
@@ -16,6 +17,7 @@ import os
 from datetime import date
 
 import gspread
+import ta
 import yfinance as yf
 from google.oauth2.service_account import Credentials
 from playwright.async_api import async_playwright
@@ -26,7 +28,8 @@ ARCHIVE_THRESHOLD_PCT = 20
 SHEET_NAME = "Monthly Breakout Scan"
 
 HEADERS = ["symbol", "name", "price", "percent_change", "volume",
-           "buy_target", "status", "added_date", "archived_date", "archived_reason"]
+           "buy_target", "status", "added_date", "archived_date", "archived_reason",
+           "rsi", "adx", "signal_score", "signal_label", "consolidating"]
 
 
 async def fetch_raw_results():
@@ -132,6 +135,75 @@ def get_live_prices(symbols):
     return prices
 
 
+def compute_signal(symbol):
+    try:
+        hist = yf.Ticker(f"{symbol}.NS").history(period="1y")
+        if hist.empty or len(hist) < 60:
+            return None
+
+        close = hist["Close"]
+        volume = hist["Volume"]
+
+        ema20 = close.ewm(span=20).mean()
+        ema50 = close.ewm(span=50).mean()
+
+        rsi = ta.momentum.RSIIndicator(close, window=14).rsi()
+        adx_ind = ta.trend.ADXIndicator(hist["High"], hist["Low"], close, window=14).adx()
+        macd_hist = ta.trend.MACD(close).macd_diff()
+
+        bb = ta.volatility.BollingerBands(close, window=20, window_dev=2)
+        bb_width = (bb.bollinger_hband() - bb.bollinger_lband()) / close
+
+        latest_close = close.iloc[-1]
+        latest_ema20 = ema20.iloc[-1]
+        latest_ema50 = ema50.iloc[-1]
+        latest_rsi = rsi.iloc[-1]
+        latest_adx = adx_ind.iloc[-1]
+        latest_macd_hist = macd_hist.iloc[-1]
+        latest_bb_width = bb_width.iloc[-1]
+
+        lookback = bb_width.iloc[-100:] if len(bb_width) >= 100 else bb_width
+        bb_width_percentile = (lookback < latest_bb_width).mean() * 100
+
+        avg_volume_20 = volume.iloc[-20:].mean()
+        volume_ratio = (volume.iloc[-1] / avg_volume_20) if avg_volume_20 else 0
+
+        score = 0
+        if latest_close > latest_ema20 > latest_ema50:
+            score += 1
+        if latest_adx >= 20:
+            score += 1
+        if 50 <= latest_rsi <= 70:
+            score += 1
+        if latest_macd_hist > 0:
+            score += 1
+        if volume_ratio > 1.2:
+            score += 1
+
+        label = "Strong" if score >= 4 else "Moderate" if score >= 2 else "Weak"
+        consolidating = bb_width_percentile <= 20
+
+        return {
+            "rsi": round(float(latest_rsi), 1),
+            "adx": round(float(latest_adx), 1),
+            "signal_score": score,
+            "signal_label": label,
+            "consolidating": consolidating,
+        }
+    except Exception as e:
+        print(f"Signal calculation failed for {symbol}: {e}")
+        return None
+
+
+def get_signals(symbols):
+    signals = {}
+    for symbol in symbols:
+        result = compute_signal(symbol)
+        if result:
+            signals[symbol] = result
+    return signals
+
+
 def get_sheet():
     key_json = os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"]
     key_dict = json.loads(key_json)
@@ -167,6 +239,7 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
 
     active_symbols = [s for s, r in existing_by_symbol.items() if r.get("status") != "archived"]
     live_prices = get_live_prices(active_symbols)
+    signals = get_signals(active_symbols)
 
     updated_rows = []
     for symbol, record in existing_by_symbol.items():
@@ -186,6 +259,14 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
         if symbol in fetched_by_symbol:
             record["volume"] = fetched_by_symbol[symbol]["volume"]
 
+        if symbol in signals:
+            sig = signals[symbol]
+            record["rsi"] = sig["rsi"]
+            record["adx"] = sig["adx"]
+            record["signal_score"] = sig["signal_score"]
+            record["signal_label"] = sig["signal_label"]
+            record["consolidating"] = sig["consolidating"]
+
         buy_target = record.get("buy_target")
         if buy_target not in (None, "", 0):
             try:
@@ -201,7 +282,7 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
 
     rows_for_sheet = [[r.get(h, "") for h in HEADERS] for r in updated_rows]
     sheet.update([HEADERS] + rows_for_sheet, "A1")
-    print(f"Synced {len(updated_rows)} total rows ({len(live_prices)} live prices fetched).")
+    print(f"Synced {len(updated_rows)} rows ({len(live_prices)} live prices, {len(signals)} signals computed).")
 
 
 async def main():

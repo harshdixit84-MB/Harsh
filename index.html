@@ -8,17 +8,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0e14;
-    --surface-1: #12171f;
-    --surface-2: #1a212c;
-    --border: #232b38;
+    --bg: #191c24;
+    --surface-1: #20242e;
+    --surface-2: #262b36;
+    --border: #2a2f3a;
     --text-primary: #edeff2;
-    --text-secondary: #7c8798;
-    --accent-buy: #34d399;
-    --accent-buy-dim: rgba(52, 211, 153, 0.12);
-    --accent-watch: #fbbf24;
-    --accent-watch-dim: rgba(251, 191, 36, 0.12);
-    --accent-loss: #f87171;
+    --text-secondary: #8a8f9c;
+    --accent-buy: #198754;
+    --accent-buy-dim: rgba(25, 135, 84, 0.16);
+    --accent-watch: #ffc107;
+    --accent-watch-dim: rgba(255, 193, 7, 0.14);
+    --accent-tracking: #0d6efd;
+    --accent-tracking-dim: rgba(13, 110, 253, 0.14);
+    --accent-needtarget: #0dcaf0;
+    --accent-loss: #ab2e3c;
+    --accent-magenta: #af1763;
   }
 
   * { box-sizing: border-box; }
@@ -113,18 +117,57 @@
   .rows { display: flex; flex-direction: column; gap: 6px; }
 
   .row {
-    display: grid;
-    grid-template-columns: 100px 1fr 90px 130px 90px;
+    display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 0;
     background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 16px;
+    border-radius: 10px;
+    overflow: hidden;
   }
 
-  .row.buy-zone { background: var(--accent-buy-dim); border-color: rgba(52,211,153,0.35); }
-  .row.watch { background: var(--accent-watch-dim); border-color: rgba(251,191,36,0.3); }
+  .row-accent {
+    width: 4px;
+    align-self: stretch;
+    flex-shrink: 0;
+  }
+  .row-accent.buyzone { background: var(--accent-buy); }
+  .row-accent.watch { background: var(--accent-watch); }
+  .row-accent.tracking { background: var(--accent-tracking); }
+  .row-accent.needtarget { background: var(--accent-needtarget); }
+
+  .avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+    font-family: "Space Grotesk", sans-serif;
+    margin: 12px;
+    flex-shrink: 0;
+  }
+  .avatar.buyzone { background: rgba(25,135,84,0.18); color: #3ddc8a; }
+  .avatar.watch { background: rgba(255,193,7,0.18); color: #ffcf3d; }
+  .avatar.tracking { background: rgba(13,110,253,0.18); color: #6ea8fe; }
+  .avatar.needtarget { background: rgba(13,202,240,0.18); color: #5fd8ec; }
+
+  .row-main {
+    flex: 1;
+    padding: 12px 8px 12px 0;
+    min-width: 0;
+  }
+
+  .row-side {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 16px;
+    flex-wrap: nowrap;
+  }
+
+  .trend-arrow { font-size: 10px; margin-right: 3px; }
 
   .symbol {
     font-weight: 600;
@@ -148,7 +191,7 @@
     flex-direction: column;
     gap: 4px;
   }
-  .prices .price { color: var(--text-primary); font-size: 13px; }
+  .price { color: var(--text-primary); font-size: 14px; font-weight: 600; }
 
   .target-edit {
     display: flex;
@@ -223,10 +266,10 @@
     white-space: nowrap;
   }
 
-  .badge.buy { background: rgba(52,211,153,0.2); color: var(--accent-buy); }
-  .badge.watch { background: rgba(251,191,36,0.2); color: var(--accent-watch); }
-  .badge.tracking { background: var(--surface-2); color: var(--text-secondary); }
-  .badge.needs-target { background: var(--surface-2); color: var(--text-secondary); border: 1px dashed var(--border); }
+  .badge.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
+  .badge.watch { background: rgba(255,193,7,0.18); color: #ffcf3d; }
+  .badge.tracking { background: rgba(13,110,253,0.18); color: #6ea8fe; }
+  .badge.needs-target { background: rgba(13,202,240,0.14); color: #5fd8ec; border: 1px dashed rgba(13,202,240,0.4); }
 
   .signal-badge {
     font-size: 10px;
@@ -235,17 +278,17 @@
     padding: 2px 7px;
     border-radius: 4px;
     display: inline-block;
-    margin-top: 4px;
   }
-  .signal-badge.strong { background: rgba(52,211,153,0.18); color: var(--accent-buy); }
-  .signal-badge.moderate { background: rgba(251,191,36,0.18); color: var(--accent-watch); }
+  .signal-badge.strong { background: rgba(13,110,253,0.18); color: #6ea8fe; }
+  .signal-badge.moderate { background: rgba(13,202,240,0.18); color: #5fd8ec; }
   .signal-badge.weak { background: var(--surface-2); color: var(--text-secondary); }
   .squeeze-tag {
     font-size: 10px;
-    color: #a78bfa;
-    margin-top: 4px;
+    color: #f28ab4;
+    background: rgba(175,23,99,0.2);
+    padding: 2px 7px;
+    border-radius: 4px;
     display: inline-block;
-    margin-left: 4px;
   }
 
   .empty, .loading {
@@ -263,8 +306,8 @@
   }
 
   @media (max-width: 640px) {
-    .row { grid-template-columns: 1fr; gap: 8px; }
-    .day-change { text-align: left; }
+    .row { flex-wrap: wrap; }
+    .row-side { flex-wrap: wrap; gap: 10px; padding: 0 16px 12px; }
   }
 </style>
 </head>
@@ -325,7 +368,6 @@
 
   function renderRow(stock) {
     const cls = classify(stock);
-    const rowClass = cls === "buyzone" ? "buy-zone" : cls === "watch" ? "watch" : "";
 
     let gaugeHtml = "";
     let distanceLabel = "no target set";
@@ -350,20 +392,23 @@
 
     const dayChange = stock.percent_change || 0;
     const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
+    const trendArrow = dayChange >= 0 ? "▲" : "▼";
+    const initial = (stock.symbol || "?").charAt(0);
 
     return `
-      <div class="row ${rowClass}" data-category="${cls}">
-        <div>
-          ${badgeMap[cls]}
-          ${stock.signal_label ? `<div class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</div>` : ""}
-          ${stock.consolidating ? `<span class="squeeze-tag">◆ Squeeze</span>` : ""}
-        </div>
-        <div>
+      <div class="row" data-category="${cls}">
+        <div class="row-accent ${cls}"></div>
+        <div class="avatar ${cls}">${initial}</div>
+        <div class="row-main">
           <div class="symbol">${stock.symbol}</div>
           <div class="name">${stock.name || ""}</div>
+          <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
+            ${badgeMap[cls]}
+            ${stock.signal_label ? `<span class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</span>` : ""}
+            ${stock.consolidating ? `<span class="squeeze-tag">◆ Squeeze</span>` : ""}
+          </div>
         </div>
-        <div class="prices">
-          <div class="price">₹${Number(stock.price).toFixed(2)}</div>
+        <div class="row-side">
           <div class="target-edit">
             <input
               type="number"
@@ -375,12 +420,15 @@
             />
             <button class="save-btn" data-symbol="${stock.symbol}">Save</button>
           </div>
+          <div class="gauge-wrap">
+            ${gaugeHtml}
+            <div class="gauge-label" style="color:${stock.distance_pct !== undefined ? (stock.distance_pct <= 0 ? 'var(--accent-buy)' : 'var(--text-secondary)') : 'var(--text-secondary)'}">${distanceLabel}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="price">₹${Number(stock.price).toFixed(2)}</div>
+            <div class="day-change" style="color:${dayChangeColor};"><span class="trend-arrow">${trendArrow}</span>${dayChange >= 0 ? "+" : ""}${dayChange}%</div>
+          </div>
         </div>
-        <div class="gauge-wrap">
-          ${gaugeHtml}
-          <div class="gauge-label" style="color:${stock.distance_pct !== undefined ? (stock.distance_pct <= 0 ? 'var(--accent-buy)' : 'var(--text-secondary)') : 'var(--text-secondary)'}">${distanceLabel}</div>
-        </div>
-        <div class="day-change" style="color:${dayChangeColor}">${dayChange >= 0 ? "+" : ""}${dayChange}%</div>
       </div>
     `;
   }

@@ -18,6 +18,13 @@ module.exports = async (req, res) => {
       : [];
     const cookieHeader = rawCookies.map((c) => c.split(";")[0]).join("; ");
 
+    const homeHeadersObj = {};
+    homeResp.headers.forEach((value, key) => {
+      homeHeadersObj[key] = value;
+    });
+
+    const homeText = await homeResp.text();
+
     // Step 2: use those cookies to call the actual option chain API
     const apiResp = await fetch(
       `https://www.nseindia.com/api/option-chain-equities?symbol=${symbol}`,
@@ -42,6 +49,9 @@ module.exports = async (req, res) => {
 
     res.status(200).json({
       symbol,
+      homepage_status: homeResp.status,
+      homepage_headers: homeHeadersObj,
+      homepage_body_preview: homeText.slice(0, 300),
       nse_response_status: status,
       got_cookies: rawCookies.length > 0,
       cookie_count: rawCookies.length,

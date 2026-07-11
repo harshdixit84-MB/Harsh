@@ -2,6 +2,7 @@
   "name": "stock-dashboard-site",
   "version": "1.0.0",
   "dependencies": {
-    "googleapis": "^126.0.0"
+    "googleapis": "^126.0.0",
+    "otpauth": "^9.2.2"
   }
 }

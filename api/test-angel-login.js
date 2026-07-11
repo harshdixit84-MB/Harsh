@@ -1,6 +1,17 @@
 const OTPAuth = require("otpauth");
 
 module.exports = async (req, res) => {
+  const required = ["ANGEL_TOTP_SECRET", "ANGEL_CLIENT_ID", "ANGEL_PASSWORD", "ANGEL_API_KEY"];
+  const missing = required.filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    res.status(200).json({
+      error: "Missing environment variables",
+      missing_vars: missing,
+    });
+    return;
+  }
+
   try {
     const totp = new OTPAuth.TOTP({
       secret: OTPAuth.Secret.fromBase32(process.env.ANGEL_TOTP_SECRET),

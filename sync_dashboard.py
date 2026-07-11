@@ -13,11 +13,13 @@ key content, as a string).
 
 import asyncio
 import json
+import math
 import os
 from datetime import date
 
 import gspread
 import numpy as np
+import pandas as pd
 import ta
 import yfinance as yf
 from google.oauth2.service_account import Credentials
@@ -163,6 +165,12 @@ def compute_signal(symbol):
         latest_macd_hist = macd_hist.iloc[-1]
         latest_bb_width = bb_width.iloc[-1]
 
+        check_values = [latest_close, latest_ema20, latest_ema50, latest_rsi,
+                         latest_adx, latest_macd_hist, latest_bb_width]
+        if any(pd.isna(v) for v in check_values):
+            print(f"Signal calculation for {symbol} produced NaN, skipping.")
+            return None
+
         lookback = bb_width.iloc[-100:] if len(bb_width) >= 100 else bb_width
         bb_width_percentile = (lookback < latest_bb_width).mean() * 100
 
@@ -211,8 +219,12 @@ def _json_safe(value):
     if isinstance(value, np.integer):
         return int(value)
     if isinstance(value, np.floating):
-        return float(value)
-    if isinstance(value, (bool, int, float, str)):
+        value = float(value)
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return ""
+        return value
+    if isinstance(value, (bool, int, str)):
         return value
     if value is None:
         return ""

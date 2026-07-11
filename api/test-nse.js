@@ -12,7 +12,11 @@ module.exports = async (req, res) => {
     // Step 1: hit the homepage first to get session cookies -- NSE's API
     // rejects requests that don't carry a valid session cookie.
     const homeResp = await fetch("https://www.nseindia.com/", { headers });
-    const cookies = homeResp.headers.get("set-cookie");
+
+    const rawCookies = homeResp.headers.getSetCookie
+      ? homeResp.headers.getSetCookie()
+      : [];
+    const cookieHeader = rawCookies.map((c) => c.split(";")[0]).join("; ");
 
     // Step 2: use those cookies to call the actual option chain API
     const apiResp = await fetch(
@@ -20,7 +24,7 @@ module.exports = async (req, res) => {
       {
         headers: {
           ...headers,
-          Cookie: cookies || "",
+          Cookie: cookieHeader,
         },
       }
     );
@@ -39,7 +43,8 @@ module.exports = async (req, res) => {
     res.status(200).json({
       symbol,
       nse_response_status: status,
-      got_cookies: !!cookies,
+      got_cookies: rawCookies.length > 0,
+      cookie_count: rawCookies.length,
       parsed_successfully: !!parsed,
       parse_error: parseError,
       raw_preview: text.slice(0, 500),

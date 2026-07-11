@@ -291,6 +291,90 @@
     display: inline-block;
   }
 
+  .fno-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .fno-toggle input { accent-color: var(--accent-tracking); cursor: pointer; }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-box {
+    background: var(--surface-1);
+    border-radius: 12px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 24px;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .modal-title { font-family: "Space Grotesk", sans-serif; font-size: 18px; font-weight: 600; }
+  .modal-close {
+    background: var(--surface-2);
+    border: none;
+    color: var(--text-secondary);
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+  }
+  .bias-banner {
+    padding: 14px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .bias-banner.bullish { background: rgba(25,135,84,0.18); color: #3ddc8a; }
+  .bias-banner.bearish { background: rgba(171,46,60,0.18); color: #e5626b; }
+  .bias-banner.neutral { background: var(--surface-2); color: var(--text-secondary); }
+  .oc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .oc-card {
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .oc-card .oc-label { font-size: 10px; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; }
+  .oc-card .oc-value { font-size: 14px; font-weight: 600; }
+  .oc-list-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .oc-list-row:last-child { border-bottom: none; }
+  .narrative-item { font-size: 12px; padding: 6px 0; color: var(--text-primary); border-bottom: 1px solid var(--border); }
+  .narrative-item:last-child { border-bottom: none; }
+  .verdict-box {
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 13px;
+    margin-top: 12px;
+    border-left: 3px solid var(--accent-magenta);
+  }
+
   .empty, .loading {
     color: var(--text-secondary);
     text-align: center;
@@ -353,10 +437,24 @@
   <footer>Auto-refreshes every 5 minutes · data synced from Chartlink via scheduled job</footer>
 </div>
 
+<div id="oc-modal-container"></div>
+
 <script>
   const WATCH_THRESHOLD = 2; // within this % counts as "watch"
   let currentFilter = "all";
   let latestStocks = [];
+  let fnoSymbols = new Set();
+
+  async function loadFnoList() {
+    try {
+      const res = await fetch("/api/fno-list?t=" + Date.now(), { cache: "no-store" });
+      const data = await res.json();
+      fnoSymbols = new Set(data.symbols || []);
+      render();
+    } catch (e) {
+      // If this fails, radio buttons simply won't show -- not fatal to the dashboard
+    }
+  }
 
   function classify(stock) {
     if (stock.distance_pct === undefined) return "needtarget";
@@ -403,9 +501,9 @@
           <div class="symbol">${stock.symbol}</div>
           <div class="name">${stock.name || ""}</div>
           <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
-            ${badgeMap[cls]}
             ${stock.signal_label ? `<span class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</span>` : ""}
             ${stock.consolidating ? `<span class="squeeze-tag">◆ Squeeze</span>` : ""}
+            ${fnoSymbols.has(stock.symbol) ? `<label class="fno-toggle"><input type="radio" name="fno-select" class="fno-radio" data-symbol="${stock.symbol}"><span>Options view</span></label>` : ""}
           </div>
         </div>
         <div class="row-side">
@@ -520,7 +618,97 @@
     });
   });
 
+  document.getElementById("rows").addEventListener("click", async (e) => {
+    if (e.target.classList.contains("fno-radio")) {
+      const symbol = e.target.dataset.symbol;
+      showOptionChainModal(symbol);
+    }
+  });
+
+  function biasClass(bias) {
+    if (bias === "Bullish") return "bullish";
+    if (bias === "Bearish") return "bearish";
+    return "neutral";
+  }
+
+  function renderOcRow(item) {
+    const changeText = item.change_oi === null
+      ? "no history yet"
+      : `${item.change_oi >= 0 ? "+" : ""}${item.change_oi.toLocaleString()}`;
+    const changeColor = item.change_oi === null ? "var(--text-secondary)" : (item.change_oi >= 0 ? "var(--accent-buy)" : "var(--accent-loss)");
+    return `<div class="oc-list-row"><span>₹${item.strike}</span><span>OI: ${item.oi.toLocaleString()}</span><span style="color:${changeColor}">${changeText}</span></div>`;
+  }
+
+  async function showOptionChainModal(symbol) {
+    const container = document.getElementById("oc-modal-container");
+    container.innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal-box">
+          <div class="modal-header">
+            <div class="modal-title">${symbol} — Option Chain</div>
+            <button class="modal-close" id="oc-close-btn">✕</button>
+          </div>
+          <div style="color:var(--text-secondary); font-size:13px;">Fetching live option chain data…</div>
+        </div>
+      </div>
+    `;
+    document.getElementById("oc-close-btn").addEventListener("click", closeOptionChainModal);
+
+    try {
+      const res = await fetch(`/api/option-chain?symbol=${symbol}&t=${Date.now()}`, { cache: "no-store" });
+      const data = await res.json();
+
+      if (data.error) {
+        container.querySelector(".modal-box").innerHTML += `<div style="color:var(--accent-loss); font-size:13px; margin-top:10px;">Error: ${data.error}</div>`;
+        return;
+      }
+
+      const cls = biasClass(data.bias);
+
+      container.querySelector(".modal-box").innerHTML = `
+        <div class="modal-header">
+          <div class="modal-title">${data.symbol} — Option Chain (${data.expiry})</div>
+          <button class="modal-close" id="oc-close-btn">✕</button>
+        </div>
+
+        <div class="bias-banner ${cls}">Market Bias: ${data.bias} &nbsp;·&nbsp; Confidence: ${data.confidence}%</div>
+
+        <div class="oc-grid">
+          <div class="oc-card"><div class="oc-label">Spot Price</div><div class="oc-value">${data.spot_price ? "₹" + data.spot_price : "—"}</div></div>
+          <div class="oc-card"><div class="oc-label">PCR</div><div class="oc-value">${data.pcr ?? "—"}</div></div>
+          <div class="oc-card"><div class="oc-label">Max Pain</div><div class="oc-value">${data.max_pain ?? "—"}</div></div>
+          <div class="oc-card"><div class="oc-label">Expected Range</div><div class="oc-value">${data.expected_range.low ?? "—"} – ${data.expected_range.high ?? "—"}</div></div>
+        </div>
+
+        <div class="oc-grid">
+          <div>
+            <div class="oc-label" style="margin-bottom:6px; color:var(--accent-buy);">Support (Put OI)</div>
+            ${data.support.map(renderOcRow).join("")}
+          </div>
+          <div>
+            <div class="oc-label" style="margin-bottom:6px; color:var(--accent-loss);">Resistance (Call OI)</div>
+            ${data.resistance.map(renderOcRow).join("")}
+          </div>
+        </div>
+
+        <div class="oc-label" style="margin-bottom:6px;">Institutional Positioning</div>
+        ${data.narrative.map((n) => `<div class="narrative-item">${n}</div>`).join("")}
+
+        <div class="verdict-box">${data.verdict}</div>
+      `;
+      document.getElementById("oc-close-btn").addEventListener("click", closeOptionChainModal);
+    } catch (err) {
+      container.querySelector(".modal-box").innerHTML += `<div style="color:var(--accent-loss); font-size:13px; margin-top:10px;">Could not reach the option chain API.</div>`;
+    }
+  }
+
+  function closeOptionChainModal() {
+    document.getElementById("oc-modal-container").innerHTML = "";
+    document.querySelectorAll(".fno-radio").forEach((r) => (r.checked = false));
+  }
+
   loadDashboard();
+  loadFnoList();
   setInterval(loadDashboard, 5 * 60 * 1000);
 </script>
 </body>

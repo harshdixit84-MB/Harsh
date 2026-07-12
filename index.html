@@ -291,6 +291,15 @@
     display: inline-block;
   }
 
+  .high-dv-tag {
+    font-size: 10px;
+    color: #0dcaf0;
+    background: rgba(13,202,240,0.16);
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
   .fno-toggle {
     display: inline-flex;
     align-items: center;
@@ -503,6 +512,7 @@
           <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
             ${stock.signal_label ? `<span class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</span>` : ""}
             ${stock.consolidating ? `<span class="squeeze-tag">◆ Squeeze</span>` : ""}
+            ${stock.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
             ${fnoSymbols.has(stock.symbol) ? `<label class="fno-toggle"><input type="radio" name="fno-select" class="fno-radio" data-symbol="${stock.symbol}"><span>Options view</span></label>` : ""}
           </div>
         </div>

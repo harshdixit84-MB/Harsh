@@ -15,6 +15,29 @@ module.exports = async (req, res) => {
       range: "Sheet1!A1:O1000",
     });
 
+    let dvSummaryBysymbol = {};
+    try {
+      const dvResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "DV_Summary!A1:E1000",
+      });
+      const dvRows = dvResponse.data.values || [];
+      if (dvRows.length > 0) {
+        const dvHeaders = dvRows[0];
+        const symbolIdx = dvHeaders.indexOf("symbol");
+        const tagIdx = dvHeaders.indexOf("high_dv_tag");
+        dvRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          const tag = row[tagIdx];
+          if (symbol) {
+            dvSummaryBysymbol[symbol] = tag === "TRUE" || tag === "true" || tag === true;
+          }
+        });
+      }
+    } catch (e) {
+      // DV_Summary tab may not exist yet -- proceed without it
+    }
+
     const rows = response.data.values || [];
     if (rows.length === 0) {
       res.status(200).json({ stocks: [], syncedAt: new Date().toISOString() });
@@ -60,6 +83,7 @@ module.exports = async (req, res) => {
       r.signal_score = r.signal_score !== "" ? parseInt(r.signal_score) : null;
       r.signal_label = r.signal_label || null;
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";
+      r.high_dv = dvSummaryBysymbol[r.symbol] || false;
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

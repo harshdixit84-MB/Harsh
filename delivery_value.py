@@ -4,7 +4,8 @@ stocks, using NSE's official daily bhavcopy archive (a different, less
 locked-down subdomain than nseindia.com's main site).
 
 Delivery Value = DELIV_QTY x CLOSE_PRICE, both taken from the same day's
-bhavcopy row -- no separate price lookup needed.
+bhavcopy row -- no separate price lookup needed. Stored in crores
+(divided by 1,00,00,000) for readability.
 
 Logic:
 - Walks backward day by day from today, skipping any date where no file
@@ -86,10 +87,11 @@ def parse_bhavcopy_for_symbols(csv_text, symbols_wanted):
             try:
                 deliv_qty = float(row["DELIV_QTY"])
                 close_price = float(row["CLOSE_PRICE"])
+                delivery_value_cr = round((deliv_qty * close_price) / 1_00_00_000, 4)
                 results[symbol] = {
                     "deliv_qty": deliv_qty,
                     "close_price": close_price,
-                    "delivery_value": round(deliv_qty * close_price, 2),
+                    "delivery_value": delivery_value_cr,  # in crores
                 }
             except (ValueError, KeyError):
                 continue
@@ -186,7 +188,7 @@ def main():
         spreadsheet, HISTORY_SHEET, ["symbol", "date", "deliv_qty", "close_price", "delivery_value"]
     )
     summary_ws = get_or_create_sheet(
-        spreadsheet, SUMMARY_SHEET, ["symbol", "avg_dv_120", "high_dv_tag", "days_above_avg_last30", "last_updated"]
+        spreadsheet, SUMMARY_SHEET, ["symbol", "avg_dv_120_cr", "high_dv_tag", "days_above_avg_last30", "last_updated"]
     )
 
     history = load_existing_history(history_ws)

@@ -1,21 +1,21 @@
 """
 Builds and maintains 120-day Delivery Value history for actively tracked
-stocks, using NSE's official daily bhavcopy archive (a different, less
-locked-down subdomain than nseindia.com's main site).
+stocks, using NSE's official daily bhavcopy archive.
 
-Delivery Value = DELIV_QTY x CLOSE_PRICE, both taken from the same day's
-bhavcopy row -- no separate price lookup needed. Stored in crores
-(divided by 1,00,00,000) for readability.
+Delivery Value = DELIV_QTY x CLOSE_PRICE, stored in crores.
 
-Logic:
-- Walks backward day by day from today, skipping any date where no file
-  exists (weekend/holiday), fetching each day's full-market file once and
-  extracting data for every actively tracked symbol found in it.
-- Stops once every tracked symbol has at least 120 recorded days, or a
-  safety cap of ~250 calendar days is hit.
-- Trims each symbol's history to the most recent 120 days.
-- Computes avg_dv_120, the "High DV" tag, and the last-30-day highlight
-  count, writing results to a separate DV_Summary tab.
+Fixes applied after reviewing real data:
+1. NSE's archive sometimes serves stale/duplicate data for non-trading
+   days instead of a clean 404 (identical deliv_qty + close_price
+   repeated across dates). These are detected and skipped so they don't
+   pollute the history or dilute the trading-day count.
+2. The 120-day baseline uses the MEDIAN instead of the mean, since a
+   plain average gets dragged upward by the very spikes we're trying to
+   detect (Delivery Value can range 10x-20x within the same stock).
+3. "High DV" is no longer a simple day-count -- it requires CLUSTERING:
+   at least 3 elevated days within any 5-trading-day window in the last
+   30 days. A single huge spike (often just one block deal) no longer
+   triggers the tag on its own; sustained accumulation does.
 
 Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY
 """
@@ -24,6 +24,7 @@ import csv
 import io
 import json
 import os
+import statistics
 from datetime import date, timedelta
 
 import gspread
@@ -37,8 +38,9 @@ SUMMARY_SHEET = "DV_Summary"
 TARGET_DAYS = 120
 HIGHLIGHT_MULTIPLIER = 1.5
 LOOKBACK_WINDOW = 30
-HIGH_DV_THRESHOLD_COUNT = 10
-MAX_CALENDAR_LOOKBACK = 250
+CLUSTER_WINDOW_SIZE = 5
+CLUSTER_MIN_ELEVATED_DAYS = 3
+MAX_CALENDAR_LOOKBACK = 350
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
@@ -91,7 +93,7 @@ def parse_bhavcopy_for_symbols(csv_text, symbols_wanted):
                 results[symbol] = {
                     "deliv_qty": deliv_qty,
                     "close_price": close_price,
-                    "delivery_value": delivery_value_cr,  # in crores
+                    "delivery_value": delivery_value_cr,
                 }
             except (ValueError, KeyError):
                 continue
@@ -111,7 +113,39 @@ def load_existing_history(history_ws):
     return history
 
 
+def dedupe_symbol_history(symbol_history):
+    """Removes stale-duplicate entries where consecutive dates (in time)
+    have identical deliv_qty + close_price -- keeps only the earliest
+    date in each duplicate run, since that's the real trading day."""
+    dates_sorted = sorted(symbol_history.keys())
+    cleaned = {}
+    last_kept_values = None
+
+    for d in dates_sorted:
+        values = symbol_history[d]
+        signature = (values["deliv_qty"], values["close_price"])
+        if signature == last_kept_values:
+            continue  # stale duplicate, skip
+        cleaned[d] = values
+        last_kept_values = signature
+
+    return cleaned
+
+
 def backfill_history(active_symbols, history):
+    # Clean up any duplicates already sitting in previously-loaded history
+    for symbol in list(history.keys()):
+        history[symbol] = dedupe_symbol_history(history[symbol])
+
+    # Track the last accepted (deliv_qty, close_price) per symbol so we can
+    # detect stale duplicates as we walk backward through new fetches too
+    last_accepted = {}
+    for symbol, days in history.items():
+        if days:
+            latest_date = max(days.keys())
+            v = days[latest_date]
+            last_accepted[symbol] = (v["deliv_qty"], v["close_price"])
+
     today = date.today()
     calendar_days_checked = 0
     current_day = today
@@ -132,16 +166,21 @@ def backfill_history(active_symbols, history):
             csv_text = fetch_bhavcopy(current_day)
             if csv_text:
                 day_data = parse_bhavcopy_for_symbols(csv_text, set(active_symbols))
+                accepted_count = 0
                 for symbol, values in day_data.items():
+                    signature = (values["deliv_qty"], values["close_price"])
+                    if last_accepted.get(symbol) == signature:
+                        continue  # stale duplicate of the last real day, skip
                     history.setdefault(symbol, {})[date_str] = values
-                print(f"{date_str}: fetched, {len(day_data)} tracked symbols found.")
+                    last_accepted[symbol] = signature
+                    accepted_count += 1
+                print(f"{date_str}: fetched, {accepted_count} symbols accepted (duplicates skipped).")
             else:
                 print(f"{date_str}: no file (likely non-trading day), skipping.")
 
         current_day -= timedelta(days=1)
         calendar_days_checked += 1
 
-    # Trim each symbol's history down to the most recent TARGET_DAYS entries
     for symbol in history:
         dates_sorted = sorted(history[symbol].keys(), reverse=True)[:TARGET_DAYS]
         history[symbol] = {d: history[symbol][d] for d in dates_sorted}
@@ -154,25 +193,33 @@ def compute_summary(symbol, symbol_history):
     values = [symbol_history[d]["delivery_value"] for d in dates_sorted]
 
     if len(values) < TARGET_DAYS:
-        return None  # not enough history yet to compute a meaningful average
+        return None
 
-    avg_dv_120 = sum(values) / len(values)
+    median_dv_120 = statistics.median(values)
 
     last_30_dates = dates_sorted[-LOOKBACK_WINDOW:]
     last_30_values = [symbol_history[d]["delivery_value"] for d in last_30_dates]
 
-    days_above_avg = sum(1 for v in last_30_values if v > avg_dv_120)
-    high_dv_tag = days_above_avg > HIGH_DV_THRESHOLD_COUNT
-
+    days_above_baseline = sum(1 for v in last_30_values if v > median_dv_120)
     highlighted_days = [
         d for d in last_30_dates
-        if symbol_history[d]["delivery_value"] >= HIGHLIGHT_MULTIPLIER * avg_dv_120
+        if symbol_history[d]["delivery_value"] >= HIGHLIGHT_MULTIPLIER * median_dv_120
     ]
 
+    # Clustering check: any 5-trading-day window in the last 30 with
+    # at least 3 days above the median baseline
+    elevated_flags = [v > median_dv_120 for v in last_30_values]
+    has_cluster = False
+    for i in range(len(elevated_flags) - CLUSTER_WINDOW_SIZE + 1):
+        window = elevated_flags[i:i + CLUSTER_WINDOW_SIZE]
+        if sum(window) >= CLUSTER_MIN_ELEVATED_DAYS:
+            has_cluster = True
+            break
+
     return {
-        "avg_dv_120": round(avg_dv_120, 2),
-        "high_dv_tag": high_dv_tag,
-        "days_above_avg_last30": days_above_avg,
+        "median_dv_120": round(median_dv_120, 2),
+        "high_dv_tag": has_cluster,
+        "days_above_baseline_last30": days_above_baseline,
         "highlighted_days_count": len(highlighted_days),
     }
 
@@ -188,32 +235,31 @@ def main():
         spreadsheet, HISTORY_SHEET, ["symbol", "date", "deliv_qty", "close_price", "delivery_value"]
     )
     summary_ws = get_or_create_sheet(
-        spreadsheet, SUMMARY_SHEET, ["symbol", "avg_dv_120_cr", "high_dv_tag", "days_above_avg_last30", "last_updated"]
+        spreadsheet, SUMMARY_SHEET,
+        ["symbol", "median_dv_120", "high_dv_tag", "days_above_baseline_last30", "highlighted_days_count", "last_updated"]
     )
 
     history = load_existing_history(history_ws)
     history = backfill_history(active_symbols, history)
 
-    # Write history back
     history_rows = [["symbol", "date", "deliv_qty", "close_price", "delivery_value"]]
     for symbol, days in history.items():
         for d, v in days.items():
             history_rows.append([symbol, d, v["deliv_qty"], v["close_price"], v["delivery_value"]])
     history_ws.update(history_rows, "A1")
-    print(f"Wrote {len(history_rows) - 1} history rows.")
+    print(f"Wrote {len(history_rows) - 1} history rows (after deduplication).")
 
-    # Compute and write summary
     today_str = str(date.today())
-    summary_rows = [["symbol", "avg_dv_120", "high_dv_tag", "days_above_avg_last30", "last_updated"]]
+    summary_rows = [["symbol", "median_dv_120", "high_dv_tag", "days_above_baseline_last30", "highlighted_days_count", "last_updated"]]
     for symbol in active_symbols:
         result = compute_summary(symbol, history.get(symbol, {}))
         if result:
             summary_rows.append([
-                symbol, result["avg_dv_120"], result["high_dv_tag"],
-                result["days_above_avg_last30"], today_str,
+                symbol, result["median_dv_120"], result["high_dv_tag"],
+                result["days_above_baseline_last30"], result["highlighted_days_count"], today_str,
             ])
         else:
-            summary_rows.append([symbol, "", "insufficient history", "", today_str])
+            summary_rows.append([symbol, "", "insufficient history", "", "", today_str])
 
     summary_ws.update(summary_rows, "A1")
     print(f"Wrote summary for {len(summary_rows) - 1} symbols.")

@@ -207,8 +207,10 @@ def compute_summary(symbol, symbol_history):
     ]
 
     # Clustering check: any 5-trading-day window in the last 30 with
-    # at least 3 days above the median baseline
-    elevated_flags = [v > median_dv_120 for v in last_30_values]
+    # at least 3 days that are genuinely elevated (1.5x median) -- using
+    # plain "above median" here would trigger for almost every stock,
+    # since ~50% of days are above their own median by definition
+    elevated_flags = [v >= HIGHLIGHT_MULTIPLIER * median_dv_120 for v in last_30_values]
     has_cluster = False
     for i in range(len(elevated_flags) - CLUSTER_WINDOW_SIZE + 1):
         window = elevated_flags[i:i + CLUSTER_WINDOW_SIZE]

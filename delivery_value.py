@@ -133,6 +133,13 @@ def dedupe_symbol_history(symbol_history):
 
 
 def backfill_history(active_symbols, history):
+    # Clean up any weekend dates that slipped in before this fix existed
+    for symbol in list(history.keys()):
+        history[symbol] = {
+            d: v for d, v in history[symbol].items()
+            if date.fromisoformat(d).weekday() < 5
+        }
+
     # Clean up any duplicates already sitting in previously-loaded history
     for symbol in list(history.keys()):
         history[symbol] = dedupe_symbol_history(history[symbol])
@@ -158,6 +165,12 @@ def backfill_history(active_symbols, history):
             break
 
         date_str = current_day.strftime("%Y-%m-%d")
+
+        if current_day.weekday() >= 5:  # Saturday=5, Sunday=6 -- NSE never trades these
+            current_day -= timedelta(days=1)
+            calendar_days_checked += 1
+            continue
+
         already_have_this_date = all(
             date_str in history.get(s, {}) for s in symbols_needing_data
         )

@@ -210,20 +210,37 @@ def compute_summary(symbol, symbol_history):
 
     median_dv_120 = statistics.median(values)
 
-    last_30_dates = dates_sorted[-LOOKBACK_WINDOW:]
-    last_30_values = [symbol_history[d]["delivery_value"] for d in last_30_dates]
+    start_idx = len(dates_sorted) - LOOKBACK_WINDOW
+    last_N_dates = dates_sorted[start_idx:]
+    last_N_values = [symbol_history[d]["delivery_value"] for d in last_N_dates]
 
-    days_above_baseline = sum(1 for v in last_30_values if v > median_dv_120)
+    days_above_baseline = sum(1 for v in last_N_values if v > median_dv_120)
     highlighted_days = [
-        d for d in last_30_dates
+        d for d in last_N_dates
         if symbol_history[d]["delivery_value"] >= HIGHLIGHT_MULTIPLIER * median_dv_120
     ]
 
-    # Clustering check: any 5-trading-day window in the last 30 with
-    # at least 3 days that are genuinely elevated (1.5x median) -- using
-    # plain "above median" here would trigger for almost every stock,
-    # since ~50% of days are above their own median by definition
-    elevated_flags = [v >= HIGHLIGHT_MULTIPLIER * median_dv_120 for v in last_30_values]
+    # Day-over-day price change for each day in the window, using the
+    # previous trading day's close (from full history, not just the window)
+    price_changes = []
+    for i, d in enumerate(last_N_dates):
+        idx_in_full = start_idx + i
+        if idx_in_full == 0:
+            price_changes.append(None)
+            continue
+        prev_close = symbol_history[dates_sorted[idx_in_full - 1]]["close_price"]
+        curr_close = symbol_history[d]["close_price"]
+        price_changes.append(((curr_close - prev_close) / prev_close) * 100 if prev_close else None)
+
+    # Clustering check: any 5-trading-day window with at least 3 days that
+    # are both genuinely elevated (2x median) AND quiet on price (<2% move)
+    # -- the classic "big volume, flat price" signature of quiet
+    # accumulation. Note: this pattern is directionally ambiguous on its
+    # own -- it can also reflect quiet distribution, not just buying.
+    elevated_flags = [
+        (v >= HIGHLIGHT_MULTIPLIER * median_dv_120) and (pc is not None and abs(pc) < 2)
+        for v, pc in zip(last_N_values, price_changes)
+    ]
     has_cluster = False
     for i in range(len(elevated_flags) - CLUSTER_WINDOW_SIZE + 1):
         window = elevated_flags[i:i + CLUSTER_WINDOW_SIZE]

@@ -300,6 +300,19 @@
     display: inline-block;
   }
 
+  .source-tag {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .source-tag.breakout { color: #6ea8fe; border-color: rgba(110,168,254,0.4); }
+  .source-tag.consolidation { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
+
   .fno-toggle {
     display: inline-flex;
     align-items: center;
@@ -437,6 +450,9 @@
     <button class="filter-btn" data-filter="buyzone">Buy zone</button>
     <button class="filter-btn" data-filter="watch">Near target</button>
     <button class="filter-btn" data-filter="needtarget">Needs target</button>
+    <button class="filter-btn active" data-source-filter="all">All sources</button>
+    <button class="filter-btn" data-source-filter="Breakout">Breakout</button>
+    <button class="filter-btn" data-source-filter="Consolidation">Consolidation</button>
   </div>
 
   <div class="rows" id="rows">
@@ -451,6 +467,7 @@
 <script>
   const WATCH_THRESHOLD = 2; // within this % counts as "watch"
   let currentFilter = "all";
+  let currentSourceFilter = "all";
   let latestStocks = [];
   let fnoSymbols = new Set();
 
@@ -513,6 +530,7 @@
             ${stock.signal_label ? `<span class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</span>` : ""}
             ${stock.consolidating ? `<span class="squeeze-tag">◆ Squeeze</span>` : ""}
             ${stock.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
+            ${(stock.source || "").split(",").filter(Boolean).map((s) => `<span class="source-tag ${s.toLowerCase()}">${s}</span>`).join("")}
             ${fnoSymbols.has(stock.symbol) ? `<label class="fno-toggle"><input type="radio" name="fno-select" class="fno-radio" data-symbol="${stock.symbol}"><span>Options view</span></label>` : ""}
           </div>
         </div>
@@ -543,9 +561,13 @@
 
   function render() {
     const container = document.getElementById("rows");
-    const filtered = currentFilter === "all"
+    let filtered = currentFilter === "all"
       ? latestStocks
       : latestStocks.filter((s) => classify(s) === currentFilter);
+
+    if (currentSourceFilter !== "all") {
+      filtered = filtered.filter((s) => (s.source || "").split(",").includes(currentSourceFilter));
+    }
 
     if (filtered.length === 0) {
       container.innerHTML = '<div class="empty">Nothing matches this filter right now.</div>';
@@ -619,11 +641,20 @@
     }
   });
 
-  document.querySelectorAll(".filter-btn").forEach((btn) => {
+  document.querySelectorAll(".filter-btn[data-filter]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".filter-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".filter-btn[data-filter]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentFilter = btn.dataset.filter;
+      render();
+    });
+  });
+
+  document.querySelectorAll(".filter-btn[data-source-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".filter-btn[data-source-filter]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentSourceFilter = btn.dataset.sourceFilter;
       render();
     });
   });

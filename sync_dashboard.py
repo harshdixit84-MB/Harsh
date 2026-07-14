@@ -25,17 +25,20 @@ import yfinance as yf
 from google.oauth2.service_account import Credentials
 from playwright.async_api import async_playwright
 
-SCREENER_URL = "https://chartink.com/screener/monthly-breakouts-898"
+SCREENER_URLS = {
+    "Breakout": "https://chartink.com/screener/monthly-breakouts-898",
+    "Consolidation": "https://chartink.com/screener/consolidation-20124597",
+}
 MIN_VOLUME = 5000000  # 50,00,000
 ARCHIVE_THRESHOLD_PCT = 20
 SHEET_NAME = "Monthly Breakout Scan"
 
-HEADERS = ["symbol", "name", "price", "percent_change", "volume",
+HEADERS = ["symbol", "name", "source", "price", "percent_change", "volume",
            "buy_target", "status", "added_date", "archived_date", "archived_reason",
            "rsi", "adx", "signal_score", "signal_label", "consolidating"]
 
 
-async def fetch_raw_results():
+async def fetch_raw_results(screener_url):
     captured = {}
 
     async with async_playwright() as p:
@@ -50,7 +53,7 @@ async def fetch_raw_results():
                     captured["error"] = str(e)
 
         page.on("response", handle_response)
-        await page.goto(SCREENER_URL, wait_until="networkidle")
+        await page.goto(screener_url, wait_until="networkidle")
         await page.wait_for_timeout(3000)
         await browser.close()
 
@@ -85,9 +88,23 @@ def clean_and_filter(raw_rows):
     return cleaned
 
 
-async def get_filtered_screener_stocks():
-    raw_rows = await fetch_raw_results()
-    return clean_and_filter(raw_rows)
+async def get_all_screener_stocks():
+    """Fetches from every configured screener, tagging each stock with
+    which screener(s) matched it today. A stock matching multiple
+    screeners in the same run gets multiple source tags."""
+    combined = {}
+
+    for source_name, url in SCREENER_URLS.items():
+        raw_rows = await fetch_raw_results(url)
+        cleaned = clean_and_filter(raw_rows)
+
+        for stock in cleaned:
+            symbol = stock["symbol"]
+            if symbol not in combined:
+                combined[symbol] = {**stock, "sources_today": set()}
+            combined[symbol]["sources_today"].add(source_name)
+
+    return list(combined.values())
 
 
 def _fast_info_value(info, *keys):
@@ -250,10 +267,14 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
     fetched_by_symbol = {s["symbol"]: s for s in fetched_stocks}
 
     for symbol, live in fetched_by_symbol.items():
+        sources_today = live.get("sources_today", set())
+        sources_str_today = ",".join(sorted(sources_today))
+
         if symbol not in existing_by_symbol:
             existing_by_symbol[symbol] = {
                 "symbol": symbol,
                 "name": live["name"],
+                "source": sources_str_today,
                 "price": live["price"],
                 "percent_change": live["percent_change"],
                 "volume": live["volume"],
@@ -263,6 +284,12 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
                 "archived_date": "",
                 "archived_reason": "",
             }
+        else:
+            # Union with whatever source tags this stock already earned --
+            # a screener no longer matching today never removes a tag
+            existing_sources = set(filter(None, existing_by_symbol[symbol].get("source", "").split(",")))
+            merged_sources = existing_sources | sources_today
+            existing_by_symbol[symbol]["source"] = ",".join(sorted(merged_sources))
 
     active_symbols = [s for s, r in existing_by_symbol.items() if r.get("status") != "archived"]
     live_prices = get_live_prices(active_symbols)
@@ -313,7 +340,7 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
 
 
 async def main():
-    stocks = await get_filtered_screener_stocks()
+    stocks = await get_all_screener_stocks()
     sheet = get_sheet()
     sync_stocks_to_sheet(sheet, stocks)
 

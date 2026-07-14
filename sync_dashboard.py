@@ -29,7 +29,10 @@ SCREENER_URLS = {
     "Breakout": "https://chartink.com/screener/monthly-breakouts-898",
     "Consolidation": "https://chartink.com/screener/consolidation-20124597",
 }
-MIN_VOLUME = 5000000  # 50,00,000
+MIN_VOLUME_BY_SOURCE = {
+    "Breakout": 5000000,      # 50,00,000 -- high volume is part of the breakout pattern
+    "Consolidation": 1000000, # 10,00,000 -- consolidation is naturally quieter, lower bar
+}
 ARCHIVE_THRESHOLD_PCT = 20
 SHEET_NAME = "Monthly Breakout Scan"
 
@@ -63,7 +66,7 @@ async def fetch_raw_results(screener_url):
     return captured["data"]["data"]
 
 
-def clean_and_filter(raw_rows):
+def clean_and_filter(raw_rows, min_volume):
     cleaned = []
     for row in raw_rows:
         if row.get("bsecode") is None:
@@ -74,7 +77,7 @@ def clean_and_filter(raw_rows):
             continue
 
         volume = row.get("scan-column-default-volume") or 0
-        if volume < MIN_VOLUME:
+        if volume < min_volume:
             continue
 
         cleaned.append({
@@ -96,7 +99,7 @@ async def get_all_screener_stocks():
 
     for source_name, url in SCREENER_URLS.items():
         raw_rows = await fetch_raw_results(url)
-        cleaned = clean_and_filter(raw_rows)
+        cleaned = clean_and_filter(raw_rows, MIN_VOLUME_BY_SOURCE[source_name])
 
         for stock in cleaned:
             symbol = stock["symbol"]

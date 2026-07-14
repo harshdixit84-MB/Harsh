@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
-      range: "Sheet1!A1:O1000",
+      range: "Sheet1!A1:P1000",
     });
 
     let dvSummaryBysymbol = {};

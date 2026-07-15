@@ -264,70 +264,40 @@ def enrich_history_with_verdicts(symbol_history):
             and day["delivery_value"] >= HIGHLIGHT_MULTIPLIER * median_dv_120
         )
 
-                day["change_in_price"] = round(price_change_pct, 2) if price_change_pct is not None else None
-        day["verdict"] = determine_daily_verdict(
-            is_dv_high,
-            price_change_pct,
-            range_position,
-        )
+        day["change_in_price"] = round(price_change_pct, 2) if price_change_pct is not None else None
+        day["verdict"] = determine_daily_verdict(is_dv_high, price_change_pct, range_position)
 
     return symbol_history
-    def compute_summary(symbol, symbol_history):
+
+
+def compute_summary(symbol, symbol_history):
     dates_sorted = sorted(symbol_history.keys())
     values = [symbol_history[d]["delivery_value"] for d in dates_sorted]
-
     if len(values) < TARGET_DAYS:
         return None
-
     median_dv_120 = statistics.median(values)
-
-    start_idx = max(0, len(dates_sorted) - LOOKBACK_WINDOW)
+    start_idx = max(0, len(dates_sorted)-LOOKBACK_WINDOW)
     last_N_dates = dates_sorted[start_idx:]
     last_N_values = [symbol_history[d]["delivery_value"] for d in last_N_dates]
-
-    days_above_baseline = sum(
-        1 for v in last_N_values if v > median_dv_120
-    )
-
-    highlighted_days = [
-        d for d in last_N_dates
-        if symbol_history[d]["delivery_value"] >= HIGHLIGHT_MULTIPLIER * median_dv_120
-    ]
-
-    price_changes = []
-    for i, d in enumerate(last_N_dates):
-        idx_in_full = start_idx + i
-
-        if idx_in_full == 0:
-            price_changes.append(None)
-            continue
-
-        prev_close = symbol_history[dates_sorted[idx_in_full - 1]]["close_price"]
-        curr_close = symbol_history[d]["close_price"]
-
-        if prev_close:
-            price_changes.append(
-                ((curr_close - prev_close) / prev_close) * 100
-            )
-        else:
-            price_changes.append(None)
-
-    elevated_flags = [
-        (v >= HIGHLIGHT_MULTIPLIER * median_dv_120)
-        and (pc is not None and abs(pc) < 2)
-        for v, pc in zip(last_N_values, price_changes)
-    ]
-
-    has_cluster = False
-    for i in range(len(elevated_flags) - CLUSTER_WINDOW_SIZE + 1):
-        if sum(
-            elevated_flags[i:i + CLUSTER_WINDOW_SIZE]
-        ) >= CLUSTER_MIN_ELEVATED_DAYS:
-            has_cluster = True
+    days_above_baseline = sum(1 for v in last_N_values if v > median_dv_120)
+    highlighted_days=[d for d in last_N_dates if symbol_history[d]["delivery_value"]>=HIGHLIGHT_MULTIPLIER*median_dv_120]
+    price_changes=[]
+    for i,d in enumerate(last_N_dates):
+        idx=start_idx+i
+        if idx==0:
+            price_changes.append(None); continue
+        prev=symbol_history[dates_sorted[idx-1]]["close_price"]
+        curr=symbol_history[d]["close_price"]
+        price_changes.append(((curr-prev)/prev)*100 if prev else None)
+    elevated=[(v>=HIGHLIGHT_MULTIPLIER*median_dv_120) and (pc is not None and abs(pc)<2)
+              for v,pc in zip(last_N_values,price_changes)]
+    has_cluster=False
+    for i in range(len(elevated)-CLUSTER_WINDOW_SIZE+1):
+        if sum(elevated[i:i+CLUSTER_WINDOW_SIZE])>=CLUSTER_MIN_ELEVATED_DAYS:
+            has_cluster=True
             break
-
     return {
-        "median_dv_120": round(median_dv_120, 2),
+        "median_dv_120": round(median_dv_120,2),
         "high_dv_tag": has_cluster,
         "days_above_baseline_last30": days_above_baseline,
         "highlighted_days_count": len(highlighted_days),
@@ -343,7 +313,7 @@ def main():
 
     history_ws = get_or_create_sheet(
         spreadsheet, HISTORY_SHEET,
-        ["symbol", "date", "deliv_qty", "close_price", "delivery_value", "change_in_price", "verdict"]
+        ["symbol","date","deliv_qty","close_price","high_price","low_price","delivery_value","change_in_price","verdict"]
     )
     summary_ws = get_or_create_sheet(
         spreadsheet, SUMMARY_SHEET,
@@ -358,11 +328,11 @@ def main():
     for symbol in history:
         history[symbol] = enrich_history_with_verdicts(history[symbol])
 
-    history_rows = [["symbol", "date", "deliv_qty", "close_price", "delivery_value", "change_in_price", "verdict"]]
+    history_rows = [["symbol","date","deliv_qty","close_price","high_price","low_price","delivery_value","change_in_price","verdict"]]
     for symbol, days in history.items():
         for d, v in days.items():
             history_rows.append([
-                symbol, d, v["deliv_qty"], v["close_price"], v["delivery_value"],
+                symbol, d, v["deliv_qty"], v["close_price"], v["high_price"], v["low_price"], v["delivery_value"],
                 v.get("change_in_price", ""), v.get("verdict", ""),
             ])
     history_ws.update(history_rows, "A1")
@@ -403,3 +373,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

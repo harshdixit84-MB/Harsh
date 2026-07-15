@@ -19,18 +19,23 @@ module.exports = async (req, res) => {
     try {
       const dvResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "DV_Summary!A1:E1000",
+        range: "DV_Summary!A1:G1000",
       });
       const dvRows = dvResponse.data.values || [];
       if (dvRows.length > 0) {
         const dvHeaders = dvRows[0];
         const symbolIdx = dvHeaders.indexOf("symbol");
         const tagIdx = dvHeaders.indexOf("high_dv_tag");
+        const verdictIdx = dvHeaders.indexOf("buying_selling_verdict");
         dvRows.slice(1).forEach((row) => {
           const symbol = row[symbolIdx];
           const tag = row[tagIdx];
+          const verdict = verdictIdx !== -1 ? row[verdictIdx] : "";
           if (symbol) {
-            dvSummaryBysymbol[symbol] = tag === "TRUE" || tag === "true" || tag === true;
+            dvSummaryBysymbol[symbol] = {
+              highDv: tag === "TRUE" || tag === "true" || tag === true,
+              buyingSellingVerdict: verdict || "",
+            };
           }
         });
       }
@@ -83,7 +88,8 @@ module.exports = async (req, res) => {
       r.signal_score = r.signal_score !== "" ? parseInt(r.signal_score) : null;
       r.signal_label = r.signal_label || null;
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";
-      r.high_dv = dvSummaryBysymbol[r.symbol] || false;
+      r.high_dv = dvSummaryBysymbol[r.symbol]?.highDv || false;
+      r.buying_selling_verdict = dvSummaryBysymbol[r.symbol]?.buyingSellingVerdict || "";
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

@@ -43,6 +43,37 @@ module.exports = async (req, res) => {
       // DV_Summary tab may not exist yet -- proceed without it
     }
 
+    let harmonicBysymbol = {};
+    try {
+      const hpResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Harmonic_Patterns!A1:F1000",
+      });
+      const hpRows = hpResponse.data.values || [];
+      if (hpRows.length > 0) {
+        const hpHeaders = hpRows[0];
+        const symbolIdx = hpHeaders.indexOf("symbol");
+        const patternIdx = hpHeaders.indexOf("pattern_name");
+        const statusIdx = hpHeaders.indexOf("status");
+        const dPriceIdx = hpHeaders.indexOf("d_price");
+        const confidenceIdx = hpHeaders.indexOf("confidence");
+        hpRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          const pattern = row[patternIdx];
+          if (symbol && pattern) {
+            harmonicBysymbol[symbol] = {
+              pattern,
+              status: row[statusIdx] || "",
+              dPrice: row[dPriceIdx] || "",
+              confidence: row[confidenceIdx] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // Harmonic_Patterns tab may not exist yet -- proceed without it
+    }
+
     const rows = response.data.values || [];
     if (rows.length === 0) {
       res.status(200).json({ stocks: [], syncedAt: new Date().toISOString() });
@@ -90,6 +121,10 @@ module.exports = async (req, res) => {
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";
       r.high_dv = dvSummaryBysymbol[r.symbol]?.highDv || false;
       r.buying_selling_verdict = dvSummaryBysymbol[r.symbol]?.buyingSellingVerdict || "";
+      r.harmonic_pattern = harmonicBysymbol[r.symbol]?.pattern || null;
+      r.harmonic_status = harmonicBysymbol[r.symbol]?.status || "";
+      r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
+      r.harmonic_confidence = harmonicBysymbol[r.symbol]?.confidence || "";
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

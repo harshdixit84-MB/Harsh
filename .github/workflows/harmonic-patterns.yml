@@ -1,0 +1,22 @@
+name: Harmonic pattern detection
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  harmonic-patterns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance gspread google-auth
+
+      - name: Run harmonic pattern detection
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: python harmonic_patterns.py

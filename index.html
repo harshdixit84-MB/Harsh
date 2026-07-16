@@ -325,6 +325,17 @@
   .verdict-tag.buying { background: rgba(25,135,84,0.2); color: #3ddc8a; }
   .verdict-tag.selling { background: rgba(171,46,60,0.2); color: #e5626b; }
 
+  .harmonic-tag {
+    font-size: 10px;
+    text-transform: none;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-block;
+    border: 1px solid;
+  }
+  .harmonic-tag.bullish { color: #3ddc8a; border-color: rgba(61,220,138,0.4); background: rgba(61,220,138,0.08); }
+  .harmonic-tag.bearish { color: #e5626b; border-color: rgba(229,98,107,0.4); background: rgba(229,98,107,0.08); }
+
   .fno-toggle {
     display: inline-flex;
     align-items: center;
@@ -545,6 +556,7 @@
             ${stock.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
             ${stock.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
             ${(stock.source || "").split(",").filter(Boolean).map((s) => `<span class="source-tag ${s.toLowerCase()}">${s}</span>`).join("")}
+            ${stock.harmonic_pattern ? `<span class="harmonic-tag ${stock.harmonic_pattern.toLowerCase().includes("bullish") ? "bullish" : "bearish"}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}% · Weekly">${stock.harmonic_pattern} (${stock.harmonic_confidence}%)</span>` : ""}
             ${fnoSymbols.has(stock.symbol) ? `<label class="fno-toggle"><input type="radio" name="fno-select" class="fno-radio" data-symbol="${stock.symbol}"><span>Options view</span></label>` : ""}
           </div>
         </div>

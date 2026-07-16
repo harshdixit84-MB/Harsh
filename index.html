@@ -336,6 +336,17 @@
   .harmonic-tag.bullish { color: #3ddc8a; border-color: rgba(61,220,138,0.4); background: rgba(61,220,138,0.08); }
   .harmonic-tag.bearish { color: #e5626b; border-color: rgba(229,98,107,0.4); background: rgba(229,98,107,0.08); }
 
+  .wm-tag {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-block;
+    border: 1px solid;
+  }
+  .wm-tag.confirmed { color: #3ddc8a; border-color: rgba(61,220,138,0.5); background: rgba(61,220,138,0.12); }
+  .wm-tag.pending-confirm { color: #ffcf3d; border-color: rgba(255,207,61,0.5); background: rgba(255,207,61,0.1); }
+  .wm-tag.awaiting { color: var(--text-secondary); border-color: var(--border); }
+
   .fno-toggle {
     display: inline-flex;
     align-items: center;
@@ -557,6 +568,10 @@
             ${stock.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
             ${(stock.source || "").split(",").filter(Boolean).map((s) => `<span class="source-tag ${s.toLowerCase()}">${s}</span>`).join("")}
             ${stock.harmonic_pattern ? `<span class="harmonic-tag ${stock.harmonic_pattern.toLowerCase().includes("bullish") ? "bullish" : "bearish"}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}% · Weekly">${stock.harmonic_pattern} (${stock.harmonic_confidence}%)</span>` : ""}
+            ${stock.wm_pattern ? (() => {
+              const cls = stock.wm_status === "Breakout Confirmed" ? "confirmed" : "awaiting";
+              return `<span class="wm-tag ${cls}" title="Neckline: ₹${stock.wm_breakout_level} · ${stock.wm_distance_pct}% away · Symmetry ${stock.wm_symmetry_pct}% · Weekly">"${stock.wm_pattern}" · ${stock.wm_status}</span>`;
+            })() : ""}
             ${fnoSymbols.has(stock.symbol) ? `<label class="fno-toggle"><input type="radio" name="fno-select" class="fno-radio" data-symbol="${stock.symbol}"><span>Options view</span></label>` : ""}
           </div>
         </div>

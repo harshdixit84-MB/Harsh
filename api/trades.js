@@ -52,8 +52,43 @@ module.exports = async (req, res) => {
         return obj;
       });
 
-    const openTrades = records.filter((r) => !r.sell_price);
-    const closedTrades = records.filter((r) => r.sell_price);
+    let dvSummaryBysymbol = {};
+    try {
+      const dvResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "DV_Summary!A1:G1000",
+      });
+      const dvRows = dvResponse.data.values || [];
+      if (dvRows.length > 0) {
+        const dvHeaders = dvRows[0];
+        const dvSymbolIdx = dvHeaders.indexOf("symbol");
+        const tagIdx = dvHeaders.indexOf("high_dv_tag");
+        const verdictIdx = dvHeaders.indexOf("buying_selling_verdict");
+        dvRows.slice(1).forEach((row) => {
+          const symbol = row[dvSymbolIdx];
+          const tag = row[tagIdx];
+          const verdict = verdictIdx !== -1 ? row[verdictIdx] : "";
+          if (symbol) {
+            dvSummaryBysymbol[symbol] = {
+              highDv: tag === "TRUE" || tag === "true" || tag === true,
+              buyingSellingVerdict: verdict || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // DV_Summary tab may not exist yet, or symbol isn't in the tracked
+      // screener list -- proceed without it, badges just won't show
+    }
+
+    function attachDvInfo(t) {
+      t.high_dv = dvSummaryBysymbol[t.symbol]?.highDv || false;
+      t.buying_selling_verdict = dvSummaryBysymbol[t.symbol]?.buyingSellingVerdict || "";
+      return t;
+    }
+
+    const openTrades = records.filter((r) => !r.sell_price).map(attachDvInfo);
+    const closedTrades = records.filter((r) => r.sell_price).map(attachDvInfo);
 
     const livePrices = await Promise.all(openTrades.map((t) => getLivePrice(t.symbol)));
 

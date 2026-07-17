@@ -2,6 +2,8 @@ name: Harmonic pattern detection
 
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: "33 4,6,9 * * 1-5"
 
 jobs:
   harmonic-patterns:

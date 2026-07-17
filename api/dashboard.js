@@ -74,6 +74,39 @@ module.exports = async (req, res) => {
       // Harmonic_Patterns tab may not exist yet -- proceed without it
     }
 
+    let wmBysymbol = {};
+    try {
+      const wmResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "WM_Patterns!A1:H1000",
+      });
+      const wmRows = wmResponse.data.values || [];
+      if (wmRows.length > 0) {
+        const wmHeaders = wmRows[0];
+        const symbolIdx = wmHeaders.indexOf("symbol");
+        const patternIdx = wmHeaders.indexOf("pattern");
+        const statusIdx = wmHeaders.indexOf("status");
+        const breakoutLevelIdx = wmHeaders.indexOf("breakout_level");
+        const distanceIdx = wmHeaders.indexOf("distance_to_breakout_pct");
+        const symmetryIdx = wmHeaders.indexOf("symmetry_pct");
+        wmRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          const pattern = row[patternIdx];
+          if (symbol && pattern) {
+            wmBysymbol[symbol] = {
+              pattern,
+              status: row[statusIdx] || "",
+              breakoutLevel: row[breakoutLevelIdx] || "",
+              distancePct: row[distanceIdx] || "",
+              symmetryPct: row[symmetryIdx] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // WM_Patterns tab may not exist yet -- proceed without it
+    }
+
     const rows = response.data.values || [];
     if (rows.length === 0) {
       res.status(200).json({ stocks: [], syncedAt: new Date().toISOString() });
@@ -125,6 +158,11 @@ module.exports = async (req, res) => {
       r.harmonic_status = harmonicBysymbol[r.symbol]?.status || "";
       r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
       r.harmonic_confidence = harmonicBysymbol[r.symbol]?.confidence || "";
+      r.wm_pattern = wmBysymbol[r.symbol]?.pattern || null;
+      r.wm_status = wmBysymbol[r.symbol]?.status || "";
+      r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";
+      r.wm_distance_pct = wmBysymbol[r.symbol]?.distancePct || "";
+      r.wm_symmetry_pct = wmBysymbol[r.symbol]?.symmetryPct || "";
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

@@ -479,6 +479,11 @@
     </div>
   </header>
 
+  <div style="margin-bottom: 12px;">
+    <input type="text" id="stock-search" placeholder="Search by symbol or name…"
+      style="width: 100%; max-width: 320px; background: var(--surface-1); border: 1px solid var(--border); color: var(--text-primary); font-family: 'IBM Plex Mono', monospace; font-size: 13px; padding: 8px 12px; border-radius: 6px;" />
+  </div>
+
   <div class="filters">
     <button class="filter-btn active" data-filter="all">All</button>
     <button class="filter-btn" data-filter="buyzone">Buy zone</button>
@@ -487,6 +492,9 @@
     <button class="filter-btn active" data-source-filter="all">All sources</button>
     <button class="filter-btn" data-source-filter="Breakout">Breakout</button>
     <button class="filter-btn" data-source-filter="Consolidation">Consolidation</button>
+    <button class="filter-btn active" data-verdict-filter="all">All (Buy/Sell)</button>
+    <button class="filter-btn" data-verdict-filter="Heavy Buying">Heavy Buying</button>
+    <button class="filter-btn" data-verdict-filter="Heavy Selling">Heavy Selling</button>
   </div>
 
   <div class="rows" id="rows">
@@ -502,6 +510,8 @@
   const WATCH_THRESHOLD = 2; // within this % counts as "watch"
   let currentFilter = "all";
   let currentSourceFilter = "all";
+  let currentVerdictFilter = "all";
+  let searchText = "";
   let latestStocks = [];
   let fnoSymbols = new Set();
 
@@ -610,6 +620,17 @@
       filtered = filtered.filter((s) => (s.source || "").split(",").includes(currentSourceFilter));
     }
 
+    if (currentVerdictFilter !== "all") {
+      filtered = filtered.filter((s) => s.buying_selling_verdict === currentVerdictFilter);
+    }
+
+    if (searchText.trim() !== "") {
+      const q = searchText.trim().toLowerCase();
+      filtered = filtered.filter((s) =>
+        (s.symbol || "").toLowerCase().includes(q) || (s.name || "").toLowerCase().includes(q)
+      );
+    }
+
     if (filtered.length === 0) {
       container.innerHTML = '<div class="empty">Nothing matches this filter right now.</div>';
       return;
@@ -698,6 +719,20 @@
       currentSourceFilter = btn.dataset.sourceFilter;
       render();
     });
+  });
+
+  document.querySelectorAll(".filter-btn[data-verdict-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".filter-btn[data-verdict-filter]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentVerdictFilter = btn.dataset.verdictFilter;
+      render();
+    });
+  });
+
+  document.getElementById("stock-search").addEventListener("input", (e) => {
+    searchText = e.target.value;
+    render();
   });
 
   document.getElementById("rows").addEventListener("click", async (e) => {

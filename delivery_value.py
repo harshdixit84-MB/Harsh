@@ -373,6 +373,7 @@ def main():
                 symbol, d, v["deliv_qty"], v["close_price"], v["delivery_value"],
                 v.get("change_in_price", ""), v.get("verdict", ""),
             ])
+    history_ws.clear()
     history_ws.update(history_rows, "A1")
     print(f"Wrote {len(history_rows) - 1} history rows (after deduplication).")
 
@@ -405,6 +406,7 @@ def main():
         else:
             summary_rows.append([symbol, "", "insufficient history", "", "", "", today_str])
 
+    summary_ws.clear()
     summary_ws.update(summary_rows, "A1")
     print(f"Wrote summary for {len(summary_rows) - 1} symbols.")
 

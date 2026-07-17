@@ -285,6 +285,9 @@ def enrich_history_with_verdicts(symbol_history):
         day["verdict"] = determine_daily_verdict(is_dv_high, price_change_pct, range_position)
 
     return symbol_history
+
+
+def compute_summary(symbol, symbol_history):
     dates_sorted = sorted(symbol_history.keys())
     values = [symbol_history[d]["delivery_value"] for d in dates_sorted]
 

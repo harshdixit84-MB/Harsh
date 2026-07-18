@@ -28,10 +28,12 @@ from playwright.async_api import async_playwright
 SCREENER_URLS = {
     "Breakout": "https://chartink.com/screener/monthly-breakouts-898",
     "Consolidation": "https://chartink.com/screener/consolidation-20124597",
+    "Near52WLow": "https://chartink.com/screener/stock-trading-near-52-week-low-by-5",
 }
 MIN_VOLUME_BY_SOURCE = {
     "Breakout": 5000000,      # 50,00,000 -- high volume is part of the breakout pattern
     "Consolidation": 1000000, # 10,00,000 -- consolidation is naturally quieter, lower bar
+    "Near52WLow": 1000000,    # 10,00,000 -- same reasoning as consolidation, depressed volume is common near lows
 }
 ARCHIVE_THRESHOLD_PCT = 20
 SHEET_NAME = "Monthly Breakout Scan"

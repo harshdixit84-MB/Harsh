@@ -351,7 +351,7 @@ def main():
 
     history_ws = get_or_create_sheet(
         spreadsheet, HISTORY_SHEET,
-        ["symbol", "date", "deliv_qty", "close_price", "delivery_value", "change_in_price", "verdict"]
+        ["symbol", "date", "deliv_qty", "close_price", "high_price", "low_price", "delivery_value", "change_in_price", "verdict"]
     )
     summary_ws = get_or_create_sheet(
         spreadsheet, SUMMARY_SHEET,

@@ -86,6 +86,7 @@ def fetch_bhavcopy(day):
     url = f"https://archives.nseindia.com/products/content/sec_bhavdata_full_{date_str}.csv"
     resp = requests.get(url, headers=HEADERS, timeout=15)
     if resp.status_code != 200:
+        print(f"  [diagnostic] {date_str}: HTTP {resp.status_code}, body preview: {resp.text[:150]!r}")
         return None
     return resp.text
 

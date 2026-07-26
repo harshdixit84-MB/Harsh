@@ -187,6 +187,18 @@
     letter-spacing: 0.01em;
   }
 
+  .tv-link {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tv-link:hover { color: var(--accent-tracking); border-color: var(--accent-tracking); }
+
   .name {
     color: var(--text-secondary);
     font-size: 11px;
@@ -582,7 +594,7 @@
         <div class="row-accent ${cls}"></div>
         <div class="avatar ${cls}">${initial}</div>
         <div class="row-main">
-          <div class="symbol">${stock.symbol}</div>
+          <div class="symbol">${stock.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a></div>
           <div class="name">${stock.name || ""}</div>
           <div style="display:flex; gap:6px; margin-top:5px; flex-wrap:wrap;">
             ${stock.signal_label ? `<span class="signal-badge ${stock.signal_label.toLowerCase()}">${stock.signal_label} signal</span>` : ""}

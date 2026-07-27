@@ -151,6 +151,18 @@
   .row .symbol { font-weight: 600; font-size: 13px; }
   .row .label { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
 
+  .tv-link {
+    font-size: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tv-link:hover { color: var(--accent-tracking); border-color: var(--accent-tracking); }
+
   .pl-amount.gain { color: var(--accent-buy); }
   .pl-amount.loss { color: var(--accent-loss); }
 
@@ -273,7 +285,7 @@
         <div class="row ${cls}">
           <div>
             <div class="label">Symbol</div>
-            <div class="symbol">${t.symbol}</div>
+            <div class="symbol">${t.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${t.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a></div>
             ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
             ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
             ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
@@ -304,7 +316,7 @@
         <div class="row ${cls}">
           <div>
             <div class="label">Symbol</div>
-            <div class="symbol">${t.symbol}</div>
+            <div class="symbol">${t.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${t.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a></div>
             ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
             ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
             ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}

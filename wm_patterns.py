@@ -16,6 +16,7 @@ Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY
 """
 
 import json
+import math
 import os
 from datetime import date
 
@@ -102,29 +103,46 @@ def detect_wm_pattern(symbol):
         p1, p2, p3 = pivots[-3], pivots[-2], pivots[-1]
         current_price = float(hist["Close"].iloc[-1])
 
+        if not math.isfinite(current_price) or current_price <= 0:
+            return None
+
+        p1_val = float(p1[1])
+        p2_val = float(p2[1])
+        p3_val = float(p3[1])
+
+        if not all(math.isfinite(v) for v in (p1_val, p2_val, p3_val)):
+            return None
+
         if p1[2] == "low" and p2[2] == "high" and p3[2] == "low":
             pattern_name = "W"
-            outer_avg = (p1[1] + p3[1]) / 2
-            symmetry_pct = round(abs(p1[1] - p3[1]) / outer_avg * 100, 2)
-            if symmetry_pct > SYMMETRY_TOLERANCE_PCT:
+            outer_avg = (p1_val + p3_val) / 2
+            if outer_avg <= 0:
+                return None
+            symmetry_pct = round(abs(p1_val - p3_val) / outer_avg * 100, 2)
+            if not math.isfinite(symmetry_pct) or symmetry_pct > SYMMETRY_TOLERANCE_PCT:
                 return None
 
-            neckline = p2[1]
+            neckline = p2_val
             status = "Breakout Confirmed" if current_price > neckline else "Awaiting Breakout"
             distance_pct = round((neckline - current_price) / current_price * 100, 2)
 
         elif p1[2] == "high" and p2[2] == "low" and p3[2] == "high":
             pattern_name = "M"
-            outer_avg = (p1[1] + p3[1]) / 2
-            symmetry_pct = round(abs(p1[1] - p3[1]) / outer_avg * 100, 2)
-            if symmetry_pct > SYMMETRY_TOLERANCE_PCT:
+            outer_avg = (p1_val + p3_val) / 2
+            if outer_avg <= 0:
+                return None
+            symmetry_pct = round(abs(p1_val - p3_val) / outer_avg * 100, 2)
+            if not math.isfinite(symmetry_pct) or symmetry_pct > SYMMETRY_TOLERANCE_PCT:
                 return None
 
-            neckline = p2[1]
+            neckline = p2_val
             status = "Breakout Confirmed" if current_price < neckline else "Awaiting Breakout"
             distance_pct = round((current_price - neckline) / current_price * 100, 2)
 
         else:
+            return None
+
+        if not math.isfinite(distance_pct):
             return None
 
         return {
@@ -139,6 +157,18 @@ def detect_wm_pattern(symbol):
     except Exception as e:
         print(f"W/M detection failed for {symbol}: {e}")
         return None
+
+
+def sanitize_row(row):
+    """Replace any non-finite float (nan/inf/-inf) with an empty string so
+    the payload is always valid JSON for the Sheets API."""
+    clean = []
+    for v in row:
+        if isinstance(v, float) and not math.isfinite(v):
+            clean.append("")
+        else:
+            clean.append(v)
+    return clean
 
 
 def main():
@@ -161,11 +191,12 @@ def main():
     for symbol in active_symbols:
         result = detect_wm_pattern(symbol)
         if result:
-            rows.append([
+            row = [
                 symbol, result["pattern"], result["status"], result["breakout_level"],
                 result["current_price"], result["distance_to_breakout_pct"],
                 result["symmetry_pct"], today_str,
-            ])
+            ]
+            rows.append(sanitize_row(row))
             print(f"{symbol}: {result['pattern']} pattern - {result['status']} - "
                   f"neckline {result['breakout_level']} - symmetry {result['symmetry_pct']}%")
         else:

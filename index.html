@@ -9,16 +9,16 @@
 <style>
   :root {
     /* Backgrounds */
-    --bg: #d3d3d3;
-    --surface-1: #e3e3e3;
-    --surface-2: #f0f0f0;
+    --bg:#081321;
+    --surface-1:#13233a;
+    --surface-2:#1a2f4d;
 
     /* Borders */
     --border: #000000;
 
     /* Text */
-    --text-primary: #1f2937;
-    --text-secondary: #000000;
+    --text-primary:#ffffff;
+    --text-secondary:#9ba8b8;
 
     /* Status Colors */
     --accent-buy: #198754;
@@ -474,35 +474,251 @@
     .row { flex-wrap: wrap; }
     .row-side { flex-wrap: wrap; gap: 10px; padding: 0 16px 12px; }
   }
+/* ===========================
+   NEW DASHBOARD HEADER
+=========================== */
+
+.dashboard-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:30px;
+    gap:25px;
+    flex-wrap:wrap;
+}
+
+.header-left{
+    display:flex;
+    flex-direction:column;
+}
+
+.dashboard-title{
+    font-size:34px;
+    font-weight:700;
+    color:#ffffff;
+    font-family:"Space Grotesk",sans-serif;
+}
+
+.dashboard-subtitle{
+    margin-top:6px;
+    color:#9ca3af;
+    font-size:13px;
+}
+
+.header-links{
+    margin-top:18px;
+}
+
+.header-btn{
+    text-decoration:none;
+    background:#18263d;
+    color:white;
+    padding:10px 18px;
+    border-radius:10px;
+    border:1px solid #2f4568;
+    transition:.25s;
+    display:inline-block;
+}
+
+.header-btn:hover{
+    background:#223557;
+}
+
+.header-right{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:18px;
+}
+
+.live-box{
+    background:#11273d;
+    border:1px solid #2e4a6d;
+    color:#6eff8d;
+    padding:8px 16px;
+    border-radius:20px;
+    font-size:13px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.live-dot{
+    width:10px;
+    height:10px;
+    border-radius:50%;
+    background:#2bff63;
+    animation:pulse 1.3s infinite;
+}
+
+@keyframes pulse{
+
+0%{
+opacity:1;
+transform:scale(1);
+}
+
+50%{
+opacity:.35;
+transform:scale(.8);
+}
+
+100%{
+opacity:1;
+transform:scale(1);
+}
+
+}
+
+.stats-grid{
+
+display:grid;
+
+grid-template-columns:repeat(4,130px);
+
+gap:14px;
+
+}
+
+.stat-card{
+
+background:#13233a;
+
+padding:16px;
+
+border-radius:12px;
+
+border:1px solid #263952;
+
+text-align:center;
+
+transition:.3s;
+
+}
+
+.stat-card:hover{
+
+transform:translateY(-3px);
+
+}
+
+.stat-value{
+
+font-size:30px;
+
+font-weight:700;
+
+color:white;
+
+}
+
+.stat-label{
+
+margin-top:5px;
+
+font-size:12px;
+
+color:#97a6bb;
+
+text-transform:uppercase;
+
+letter-spacing:1px;
+
+}
+
+.green{
+
+border-left:4px solid #2dd36f;
+
+}
+
+.yellow{
+
+border-left:4px solid #ffc107;
+
+}
+
+.blue{
+
+border-left:4px solid #00b8ff;
+
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
-      <div class="title">Monthly Breakout Scan</div>
-      <div class="subtitle" id="synced-at">Loading last sync time…</div>
-      <a href="/pl.html" style="color:var(--text-secondary); font-size:11px; text-decoration:none; border:1px solid var(--border); padding:4px 10px; border-radius:5px; display:inline-block; margin-top:8px;">P/L Tracker →</a>
-    </div>
-    <div class="stats">
-      <div class="stat">
-        <div class="num" id="stat-total">–</div>
-        <div class="label">Tracked</div>
+  <header class="dashboard-header">
+
+  <div class="header-left">
+
+      <div class="dashboard-title">
+          Monthly Breakout Scan
       </div>
-      <div class="stat">
-        <div class="num" id="stat-buyzone">–</div>
-        <div class="label">Buy zone</div>
+
+      <div class="dashboard-subtitle" id="synced-at">
+          Loading last sync...
       </div>
-      <div class="stat">
-        <div class="num" id="stat-neartarget">–</div>
-        <div class="label">Near target</div>
+
+      <div class="header-links">
+
+          <a href="/pl.html" class="header-btn">
+              📊 P/L Tracker
+          </a>
+
       </div>
-      <div class="stat">
-        <div class="num" id="stat-needtarget">–</div>
-        <div class="label">Need target</div>
+
+  </div>
+
+  <div class="header-right">
+
+      <div class="live-box">
+
+          <span class="live-dot"></span>
+
+          LIVE
+
       </div>
-    </div>
-  </header>
+
+      <div class="stats-grid">
+
+          <div class="stat-card">
+
+              <div class="stat-value" id="stat-total">0</div>
+
+              <div class="stat-label">Tracked</div>
+
+          </div>
+
+          <div class="stat-card green">
+
+              <div class="stat-value" id="stat-buyzone">0</div>
+
+              <div class="stat-label">Buy Zone</div>
+
+          </div>
+
+          <div class="stat-card yellow">
+
+              <div class="stat-value" id="stat-neartarget">0</div>
+
+              <div class="stat-label">Near Target</div>
+
+          </div>
+
+          <div class="stat-card blue">
+
+              <div class="stat-value" id="stat-needtarget">0</div>
+
+              <div class="stat-label">Need Target</div>
+
+          </div>
+
+      </div>
+
+  </div>
+
+</header>
 
   <div style="margin-bottom: 12px;">
     <input type="text" id="stock-search" placeholder="Search by symbol or name…"

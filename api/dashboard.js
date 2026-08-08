@@ -149,6 +149,7 @@ module.exports = async (req, res) => {
       r.percent_change = parseFloat(r.percent_change) || 0;
       r.rsi = r.rsi !== "" ? parseFloat(r.rsi) : null;
       r.adx = r.adx !== "" ? parseFloat(r.adx) : null;
+      r.stop_loss = r.stop_loss !== "" ? parseFloat(r.stop_loss) : null;
       r.signal_score = r.signal_score !== "" ? parseInt(r.signal_score) : null;
       r.signal_label = r.signal_label || null;
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";

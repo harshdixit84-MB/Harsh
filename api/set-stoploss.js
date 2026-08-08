@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
     const sheets = google.sheets({ version: "v4", auth });
     const getResp = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
-      range: "Sheet1!A1:J1000",
+      range: "Sheet1!A1:Q1000",
     });
     const rows = getResp.data.values || [];
     if (rows.length === 0) {

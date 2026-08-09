@@ -1263,7 +1263,7 @@
     btn.disabled = true;
 
     try {
-      const res = await fetch("/api/dismiss-news", {
+      const res = await fetch("/api/news", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),

@@ -776,7 +776,7 @@
       tags.push(`<span class="mini-tag ${hc}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}%">${stock.harmonic_pattern}</span>`);
     }
     if (stock.wm_pattern) {
-      tags.push(`<span class="mini-tag wm" title="Neckline ₹${stock.wm_breakout_level} · ${stock.wm_distance_pct}% away">${stock.wm_status}</span>`);
+      tags.push(`<span class="mini-tag wm" title="Neckline ₹${stock.wm_breakout_level} · ${stock.wm_distance_pct}% away · ${stock.wm_status}">"${stock.wm_pattern}" · ${stock.wm_status}</span>`);
     }
     (stock.source || "").split(",").filter(Boolean).forEach((s) => {
       tags.push(`<span class="mini-tag">${s}</span>`);

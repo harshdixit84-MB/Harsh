@@ -657,6 +657,8 @@
     <div class="quick-row">
       <label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
       <label class="chip-check" id="chip-needtarget"><input type="checkbox" data-quick="needtarget"><span>Need Target</span></label>
+      <label class="chip-check" id="chip-wbreakout"><input type="checkbox" data-quick="wbreakout"><span>"W" Breakout</span></label>
+      <label class="chip-check" id="chip-mbreakout"><input type="checkbox" data-quick="mbreakout"><span>"M" Breakout</span></label>
       <label class="chip-check" id="chip-squeeze"><input type="checkbox" data-quick="squeeze"><span>◆ Squeeze</span></label>
       <label class="chip-check" id="chip-fno"><input type="checkbox" data-quick="fno"><span>FUT</span></label>
       <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
@@ -715,7 +717,7 @@
 <script>
   const WATCH_THRESHOLD = 2; // within this % counts as "watch"
   let currentSearch = "";
-  let quickFilters = { neartarget: false, needtarget: false, squeeze: false, fno: false };
+  let quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, fno: false };
   let buysellFilter = "all";
   let decisionFilter = "all";
   let sourceFilter = "all";
@@ -837,6 +839,8 @@
 
     if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");
     if (quickFilters.needtarget) filtered = filtered.filter((s) => classify(s) === "needtarget");
+    if (quickFilters.wbreakout) filtered = filtered.filter((s) => (s.wm_pattern || "").trim().toUpperCase().startsWith("W"));
+    if (quickFilters.mbreakout) filtered = filtered.filter((s) => (s.wm_pattern || "").trim().toUpperCase().startsWith("M"));
     if (quickFilters.squeeze) filtered = filtered.filter((s) => !!s.consolidating);
     if (quickFilters.fno) filtered = filtered.filter((s) => fnoSymbols.has(s.symbol));
 
@@ -991,7 +995,7 @@
   document.getElementById("reset-filters").addEventListener("click", () => {
     currentSearch = "";
     document.getElementById("stock-search").value = "";
-    quickFilters = { neartarget: false, needtarget: false, squeeze: false, fno: false };
+    quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, fno: false };
     document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
       cb.checked = false;
       cb.closest(".chip-check").classList.remove("on");

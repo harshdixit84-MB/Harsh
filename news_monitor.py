@@ -1,8 +1,9 @@
 """
 Scheduled job: fetches recent news for every actively-tracked stock (read
 from Sheet1, same as sync_dashboard.py), classifies each new headline as
-Good / Bad / Neutral news for a swing trader using Claude, and appends it
-to the "News" tab of the same Google Sheet -- sorted by date descending.
+Good / Bad / Neutral news for a swing trader using a free keyword-rule
+engine (no paid API), and appends it to the "News" tab of the same Google
+Sheet -- sorted by date descending.
 
 Articles are deduped by a hash of their link, so re-running this job never
 creates duplicate rows. Dismissing an article from the dashboard UI (via
@@ -11,19 +12,22 @@ un-dismisses or removes rows, it only appends genuinely new ones, so a
 dismissed article will not reappear even though Google News keeps
 returning it for a couple of days.
 
+NOTE on accuracy: keyword rules are a blunt instrument. They catch clear,
+literal cases ("profit rises", "downgrade", "fraud probe") but will
+mis-classify or shrug (Neutral) on sarcasm, relative-to-estimate framing
+("beats muted expectations"), and anything phrased unusually. Treat the
+flag as a rough first pass, not a verdict -- always read the headline.
+
 Environment variables required:
   GOOGLE_SERVICE_ACCOUNT_KEY (the full JSON key content, as a string)
-  ANTHROPIC_API_KEY
 """
 
 import hashlib
 import json
 import os
-import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-import anthropic
 import feedparser
 import gspread
 from google.oauth2.service_account import Credentials
@@ -32,10 +36,53 @@ SHEET_NAME = "Monthly Breakout Scan"
 NEWS_SHEET = "News"
 NEWS_HEADERS = ["id", "date", "symbol", "headline", "link", "source", "sentiment", "reason", "dismissed"]
 LOOKBACK_WINDOW = "2d"       # Google News RSS "when:" filter
-MAX_ARTICLES_PER_SYMBOL = 5  # cap per stock per run, keeps classification cost predictable
-CLASSIFY_MODEL = "claude-haiku-4-5-20251001"
+MAX_ARTICLES_PER_SYMBOL = 5  # cap per stock per run
 
-client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+# Keyword lists -- lowercase, checked as substrings against the lowercased headline.
+# Extend these over time as you notice misses in your own News tab.
+GOOD_KEYWORDS = [
+    "profit rises", "profit jumps", "profit surges", "profit up", "net profit rises",
+    "beats estimates", "beat estimates", "record high", "record profit", "record revenue",
+    "order win", "wins order", "bags order", "secures order", "large order",
+    "upgrade", "upgraded to buy", "raises target", "target price raised",
+    "buyback", "bonus issue", "stock split", "dividend announced",
+    "acquisition", "acquires", "stake buy", "expansion plan", "capacity expansion",
+    "strong guidance", "raises guidance", "outlook raised", "all-time high", "52-week high",
+    "stock surges", "stock rallies", "shares jump", "shares soar", "block deal buy",
+]
+
+BAD_KEYWORDS = [
+    "profit falls", "profit drops", "profit declines", "net loss", "widens loss",
+    "misses estimates", "miss estimates", "below estimates",
+    "downgrade", "downgraded to sell", "cuts target", "target price cut",
+    "fraud", "probe", "raid", "show-cause notice", "penalty", "fined", "sebi action",
+    "resigns", "resignation", "steps down", "promoter pledge", "pledged shares", "stake sale",
+    "default", "debt concern", "credit rating cut", "rating downgrade",
+    "weak guidance", "cuts guidance", "outlook cut", "52-week low", "stock crashes",
+    "shares plunge", "shares tumble", "block deal sell", "order cancelled", "contract terminated",
+]
+
+
+def classify_news(symbol, headline):
+    """Free keyword-rule classifier. Counts good/bad keyword hits in the
+    headline and picks whichever side has more matches; ties or no
+    matches fall back to Neutral."""
+    text = headline.lower()
+
+    good_hits = [kw for kw in GOOD_KEYWORDS if kw in text]
+    bad_hits = [kw for kw in BAD_KEYWORDS if kw in text]
+
+    if len(good_hits) > len(bad_hits):
+        sentiment = "Good"
+        reason = f"Matched: {good_hits[0]}"
+    elif len(bad_hits) > len(good_hits):
+        sentiment = "Bad"
+        reason = f"Matched: {bad_hits[0]}"
+    else:
+        sentiment = "Neutral"
+        reason = "No clear keyword match -- read the headline"
+
+    return sentiment, reason
 
 
 def get_sheet_client():
@@ -98,36 +145,6 @@ def make_id(link):
     return hashlib.sha256(link.encode()).hexdigest()[:16]
 
 
-def classify_news(symbol, headline):
-    prompt = (
-        f"You are classifying an Indian stock-market headline for the stock {symbol}.\n"
-        f'Headline: "{headline}"\n\n'
-        "Respond with ONLY a JSON object, no other text, in this exact format:\n"
-        '{"sentiment": "Good", "reason": "<one short sentence, under 15 words>"}\n\n'
-        'sentiment must be exactly one of: "Good", "Bad", "Neutral".\n'
-        "Classify from the perspective of a swing trader deciding whether this news is likely to push "
-        "the stock price up (Good), down (Bad), or have negligible/unclear near-term price impact (Neutral)."
-    )
-    try:
-        response = client.messages.create(
-            model=CLASSIFY_MODEL,
-            max_tokens=100,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = response.content[0].text.strip()
-        text = text.replace("```json", "").replace("```", "").strip()
-        parsed = json.loads(text)
-
-        sentiment = parsed.get("sentiment", "Neutral")
-        if sentiment not in ("Good", "Bad", "Neutral"):
-            sentiment = "Neutral"
-        reason = parsed.get("reason", "")
-        return sentiment, reason
-    except Exception as e:
-        print(f"Classification failed for '{headline}': {e}")
-        return "Neutral", "Could not classify automatically"
-
-
 def main():
     gc = get_sheet_client()
     spreadsheet = gc.open(SHEET_NAME)
@@ -170,7 +187,6 @@ def main():
             })
             existing_ids.add(article_id)
             new_count += 1
-            time.sleep(0.5)  # gentle pacing against the classification API
 
     all_rows.sort(key=lambda r: r.get("date", ""), reverse=True)
 

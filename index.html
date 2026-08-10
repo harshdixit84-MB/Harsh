@@ -53,10 +53,6 @@
     padding: 32px 20px 60px;
   }
 
-  /* ===========================
-     DASHBOARD HEADER (unchanged)
-  =========================== */
-
   .dashboard-header{
       display:flex;
       justify-content:space-between;
@@ -176,10 +172,6 @@
   .yellow{ border-left:4px solid #ffc107; }
   .blue{ border-left:4px solid #00b8ff; }
 
-  /* ===========================
-     TOOLBAR (search + chips + dropdowns)
-  =========================== */
-
   .toolbar {
     display: flex;
     flex-direction: column;
@@ -260,10 +252,6 @@
   }
   .dd-select:focus { outline: none; border-color: var(--text-primary); }
 
-  /* ===========================
-     CONSISTENT / TICKER BAND
-  =========================== */
-
   .ticker-band {
     display: flex;
     align-items: baseline;
@@ -300,9 +288,92 @@
 
   .ticker-empty { font-size: 11px; color: var(--text-secondary); }
 
-  /* ===========================
-     TABLE
-  =========================== */
+  /* NEWS PANEL */
+  .news-panel {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-1);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .news-panel-header {
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .news-list {
+    max-height: 360px;
+    overflow-y: auto;
+  }
+
+  .news-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .news-item:last-child { border-bottom: none; }
+  .news-item:hover { background: var(--surface-2); }
+
+  .news-flag {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .news-flag.good { background: rgba(25,135,84,0.18); color: #3ddc8a; }
+  .news-flag.bad { background: rgba(192,57,43,0.18); color: #e5626b; }
+  .news-flag.neutral { background: var(--surface-2); color: var(--text-secondary); }
+
+  .news-body { flex: 1; min-width: 0; }
+
+  .news-top-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .news-symbol { font-weight: 600; font-size: 12px; color: var(--text-primary); }
+
+  .news-date { font-size: 10px; color: var(--text-secondary); }
+
+  .news-headline {
+    font-size: 12px;
+    color: var(--text-primary);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .news-headline a { color: inherit; text-decoration: none; }
+  .news-headline a:hover { color: var(--accent-tracking); }
+
+  .news-reason { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+  .news-dismiss {
+    flex-shrink: 0;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 2px;
+  }
+  .news-dismiss:hover { color: var(--accent-loss); border-color: var(--accent-loss); }
+
+  .news-empty { padding: 16px; font-size: 12px; color: var(--text-secondary); text-align: center; }
 
   .table-scroll {
     overflow-x: auto;
@@ -412,7 +483,6 @@
   }
   .fno-radio-wrap input { accent-color: var(--accent-tracking); cursor: pointer; }
 
-  /* Buy / Sell pill */
   .bs-pill {
     display: inline-flex;
     align-items: center;
@@ -426,7 +496,6 @@
   .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
   .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
 
-  /* Entry / CMP cells */
   .mono-cell {
     font-family: "IBM Plex Mono", monospace;
     white-space: nowrap;
@@ -470,7 +539,6 @@
   .day-change { font-size: 10px; }
   .trend-arrow { font-size: 9px; margin-right: 2px; }
 
-  /* Decision pill */
   .decision-pill {
     font-size: 10px;
     font-weight: 600;
@@ -495,10 +563,6 @@
     text-align: center;
     margin-top: 32px;
   }
-
-  /* ===========================
-     MODAL (option chain) — unchanged behaviour
-  =========================== */
 
   .modal-overlay {
     position: fixed;
@@ -691,6 +755,13 @@
     <div class="ticker-list" id="ticker-list"></div>
   </div>
 
+  <div class="news-panel">
+    <div class="news-panel-header">News</div>
+    <div class="news-list" id="news-list">
+      <div class="news-empty">Loading news…</div>
+    </div>
+  </div>
+
   <div class="table-scroll">
     <table class="stock-table">
       <thead>
@@ -744,7 +815,6 @@
     return "tracking";
   }
 
-  // Buy/Sell direction: prefers an explicit verdict, falls back to distance sign.
   function buySell(stock) {
     if (stock.buying_selling_verdict === "Heavy Buying") return "buy";
     if (stock.buying_selling_verdict === "Heavy Selling") return "sell";
@@ -752,7 +822,6 @@
     return "buy";
   }
 
-  // Decision label: buy-zone stocks read as Confirmed, everything else is still Watching.
   function decision(stock) {
     return classify(stock) === "buyzone" ? "Confirmed" : "Watching";
   }
@@ -865,8 +934,6 @@
     container.innerHTML = filtered.map(renderRow).join("");
   }
 
-  // "Consistent" band: every symbol currently matching the active filters,
-  // colored green if it's up on the day and red if it's down.
   function renderTickerBand(filtered) {
     const list = document.getElementById("ticker-list");
     if (filtered.length === 0) {
@@ -913,7 +980,7 @@
     if (e.target.classList.contains("save-btn")) {
       const btn = e.target;
       const symbol = btn.dataset.symbol;
-      const field = btn.dataset.field; // "target" or "stop_loss"
+      const field = btn.dataset.field;
       const input = document.querySelector(`.value-input[data-symbol="${symbol}"][data-field="${field}"]`);
       const value = parseFloat(input.value);
 
@@ -922,9 +989,6 @@
         return;
       }
 
-      // NOTE: /api/set-target is your existing endpoint for entry price.
-      // /api/set-stoploss is a NEW endpoint this UI now calls for the SL column —
-      // it needs to exist on your backend (body: { symbol, stop_loss }) or saving SL will fail.
       const endpoint = field === "stop_loss" ? "/api/set-stoploss" : "/api/set-target";
       const payload = field === "stop_loss" ? { symbol, stop_loss: value } : { symbol, target: value };
       const label = field === "stop_loss" ? "stop loss" : "target";
@@ -1089,131 +1153,6 @@
     document.querySelectorAll(".fno-radio").forEach((r) => (r.checked = false));
   }
 
-  loadDashboard();
-  loadFnoList();
-  setInterval(loadDashboard, 5 * 60 * 1000);
-</script>
-</body>
-</html>
-<!--
-  ADDITIONS FOR index.html — News panel
-  Three blocks below: CSS, HTML, JS. Paste each into the matching section
-  of your existing index.html at the marked insertion point.
--->
-
-<!-- ============================================================
-     1) CSS — paste right after the ".ticker-empty" rule
-        (inside the existing <style> block)
-============================================================ -->
-<style>
-  .news-panel {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface-1);
-    margin-bottom: 16px;
-    overflow: hidden;
-  }
-
-  .news-panel-header {
-    padding: 12px 16px;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .news-list {
-    max-height: 360px;
-    overflow-y: auto;
-  }
-
-  .news-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .news-item:last-child { border-bottom: none; }
-  .news-item:hover { background: var(--surface-2); }
-
-  .news-flag {
-    flex-shrink: 0;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 5px;
-    white-space: nowrap;
-    margin-top: 2px;
-  }
-  .news-flag.good { background: rgba(25,135,84,0.18); color: #3ddc8a; }
-  .news-flag.bad { background: rgba(192,57,43,0.18); color: #e5626b; }
-  .news-flag.neutral { background: var(--surface-2); color: var(--text-secondary); }
-
-  .news-body { flex: 1; min-width: 0; }
-
-  .news-top-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .news-symbol { font-weight: 600; font-size: 12px; color: var(--text-primary); }
-
-  .news-date { font-size: 10px; color: var(--text-secondary); }
-
-  .news-headline {
-    font-size: 12px;
-    color: var(--text-primary);
-    margin-top: 3px;
-    line-height: 1.4;
-  }
-  .news-headline a { color: inherit; text-decoration: none; }
-  .news-headline a:hover { color: var(--accent-tracking); }
-
-  .news-reason { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-
-  .news-dismiss {
-    flex-shrink: 0;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    margin-top: 2px;
-  }
-  .news-dismiss:hover { color: var(--accent-loss); border-color: var(--accent-loss); }
-
-  .news-empty { padding: 16px; font-size: 12px; color: var(--text-secondary); text-align: center; }
-</style>
-
-<!-- ============================================================
-     2) HTML — paste right after the closing </div> of
-        <div class="ticker-band" ...> ... </div>
-        and before <div class="table-scroll">
-============================================================ -->
-<div class="news-panel">
-  <div class="news-panel-header">News</div>
-  <div class="news-list" id="news-list">
-    <div class="news-empty">Loading news…</div>
-  </div>
-</div>
-
-<!-- ============================================================
-     3) JS — paste inside the existing <script> block.
-        Add the two functions below, then:
-        - call loadNews(); right next to loadDashboard(); and loadFnoList();
-          at the bottom of the script
-        - add loadNews to the setInterval alongside loadDashboard, e.g.:
-          setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
-============================================================ -->
-<script>
   function flagClass(sentiment) {
     if (sentiment === "Good") return "good";
     if (sentiment === "Bad") return "bad";
@@ -1281,4 +1220,11 @@
       alert("Could not dismiss: " + err.message);
     }
   });
+
+  loadDashboard();
+  loadFnoList();
+  loadNews();
+  setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
 </script>
+</body>
+</html>

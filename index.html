@@ -291,21 +291,68 @@
   /* NEWS PANEL */
   .news-panel {
     border: 1px solid var(--border);
+    border-top: 3px solid var(--accent-buy);
     border-radius: 10px;
     background: var(--surface-1);
     margin-bottom: 16px;
     overflow: hidden;
   }
 
-  .news-panel-header {
+  .news-panel-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
     padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .news-panel-header {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-secondary);
-    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
   }
+
+  .news-filter-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .news-search-input {
+    flex: 1;
+    min-width: 120px;
+    max-width: 200px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    padding: 5px 9px;
+    border-radius: 6px;
+  }
+  .news-search-input:focus { outline: none; border-color: var(--accent-tracking); }
+
+  .news-filter-chip {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .news-filter-chip:hover { color: var(--text-primary); border-color: var(--text-primary); }
+  .news-filter-chip.on { color: var(--text-primary); border-color: var(--text-primary); }
+  .news-filter-chip.on[data-filter="Good"] { background: rgba(25,135,84,0.18); color: #3ddc8a; border-color: rgba(61,220,138,0.5); }
+  .news-filter-chip.on[data-filter="Bad"] { background: rgba(192,57,43,0.18); color: #e5626b; border-color: rgba(229,98,107,0.5); }
+  .news-filter-chip.on[data-filter="Neutral"] { background: var(--surface-2); color: var(--text-primary); border-color: var(--text-primary); }
 
   .news-list {
     max-height: 360px;
@@ -756,7 +803,16 @@
   </div>
 
   <div class="news-panel">
-    <div class="news-panel-header">News</div>
+    <div class="news-panel-header-row">
+      <div class="news-panel-header">News</div>
+      <input type="text" id="news-search" class="news-search-input" placeholder="Search any stock…" />
+      <div class="news-filter-row" id="news-filter-row">
+        <button class="news-filter-chip on" data-filter="all">All</button>
+        <button class="news-filter-chip" data-filter="Good">Good</button>
+        <button class="news-filter-chip" data-filter="Bad">Bad</button>
+        <button class="news-filter-chip" data-filter="Neutral">Neutral</button>
+      </div>
+    </div>
     <div class="news-list" id="news-list">
       <div class="news-empty">Loading news…</div>
     </div>
@@ -890,8 +946,7 @@
     `;
   }
 
-  function render() {
-    const container = document.getElementById("rows");
+  function computeFilteredStocks() {
     let filtered = latestStocks.slice();
 
     if (buysellFilter !== "all") {
@@ -924,14 +979,22 @@
       filtered.sort((a, b) => cmpSortDir === "asc" ? a.price - b.price : b.price - a.price);
     }
 
+    return filtered;
+  }
+
+  function render() {
+    const container = document.getElementById("rows");
+    const filtered = computeFilteredStocks();
+
     renderTickerBand(filtered);
 
     if (filtered.length === 0) {
       container.innerHTML = '<tr><td colspan="6" class="empty">Nothing matches this filter right now.</td></tr>';
-      return;
+    } else {
+      container.innerHTML = filtered.map(renderRow).join("");
     }
 
-    container.innerHTML = filtered.map(renderRow).join("");
+    renderNewsList(); // keep the news panel in sync with whatever the table is currently showing
   }
 
   function renderTickerBand(filtered) {
@@ -1153,6 +1216,10 @@
     document.querySelectorAll(".fno-radio").forEach((r) => (r.checked = false));
   }
 
+  let newsSentimentFilter = "all";
+  let newsSearchQuery = "";
+  let latestNews = [];
+
   function flagClass(sentiment) {
     if (sentiment === "Good") return "good";
     if (sentiment === "Bad") return "bad";
@@ -1176,23 +1243,65 @@
     `;
   }
 
+  function renderNewsList() {
+    const container = document.getElementById("news-list");
+    let base;
+
+    const q = newsSearchQuery.trim().toLowerCase();
+    if (q !== "") {
+      // Explicit search overrides the table-filter restriction -- look up any stock's news.
+      base = latestNews.filter((item) =>
+        (item.symbol || "").toLowerCase().includes(q) || (item.headline || "").toLowerCase().includes(q)
+      );
+    } else {
+      // Default: only news for stocks currently visible in the table above.
+      const visibleSymbols = new Set(computeFilteredStocks().map((s) => s.symbol));
+      base = latestNews.filter((item) => visibleSymbols.has(item.symbol));
+    }
+
+    const filtered = newsSentimentFilter === "all"
+      ? base
+      : base.filter((item) => item.sentiment === newsSentimentFilter);
+
+    if (filtered.length === 0) {
+      if (latestNews.length === 0) {
+        container.innerHTML = '<div class="news-empty">No news yet.</div>';
+      } else if (q !== "") {
+        container.innerHTML = '<div class="news-empty">No news found for that search.</div>';
+      } else {
+        container.innerHTML = '<div class="news-empty">No news for the currently filtered stocks.</div>';
+      }
+      return;
+    }
+
+    container.innerHTML = filtered.map(renderNewsItem).join("");
+  }
+
   async function loadNews() {
     const container = document.getElementById("news-list");
     try {
       const res = await fetch("/api/news?t=" + Date.now(), { cache: "no-store" });
       const data = await res.json();
-      const items = data.news || [];
-
-      if (items.length === 0) {
-        container.innerHTML = '<div class="news-empty">No news yet.</div>';
-        return;
-      }
-
-      container.innerHTML = items.map(renderNewsItem).join("");
+      latestNews = data.news || [];
+      renderNewsList();
     } catch (e) {
       container.innerHTML = '<div class="news-empty">Could not reach the news API.</div>';
     }
   }
+
+  document.getElementById("news-search").addEventListener("input", (e) => {
+    newsSearchQuery = e.target.value;
+    renderNewsList();
+  });
+
+  document.getElementById("news-filter-row").addEventListener("click", (e) => {
+    if (!e.target.classList.contains("news-filter-chip")) return;
+    newsSentimentFilter = e.target.dataset.filter;
+    document.querySelectorAll(".news-filter-chip").forEach((chip) => {
+      chip.classList.toggle("on", chip.dataset.filter === newsSentimentFilter);
+    });
+    renderNewsList();
+  });
 
   document.addEventListener("click", async (e) => {
     if (!e.target.classList.contains("news-dismiss")) return;
@@ -1211,9 +1320,10 @@
       if (!res.ok || data.error) throw new Error(data.error || "Failed to dismiss");
 
       btn.closest(".news-item").remove();
+      latestNews = latestNews.filter((item) => item.id !== id);
       const container = document.getElementById("news-list");
       if (!container.querySelector(".news-item")) {
-        container.innerHTML = '<div class="news-empty">No news yet.</div>';
+        renderNewsList();
       }
     } catch (err) {
       btn.disabled = false;

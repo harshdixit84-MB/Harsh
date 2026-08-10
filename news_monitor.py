@@ -36,7 +36,46 @@ SHEET_NAME = "Monthly Breakout Scan"
 NEWS_SHEET = "News"
 NEWS_HEADERS = ["id", "date", "symbol", "headline", "link", "source", "sentiment", "reason", "dismissed"]
 LOOKBACK_WINDOW = "2d"       # Google News RSS "when:" filter
-MAX_ARTICLES_PER_SYMBOL = 5  # cap per stock per run
+MAX_ARTICLES_PER_SYMBOL = 10  # raw candidates fetched per stock -- many get filtered out by is_relevant()
+
+# A headline must contain at least one of these to be kept at all -- this is
+# what filters out generic "Buy/Sell/Hold" listicles, "Top 5 stocks today"
+# roundups, and other noise that isn't actually about this company's own
+# financial performance or corporate activity. Extend this list as you spot
+# genuinely relevant headlines getting filtered out, or noise slipping through.
+RELEVANCE_KEYWORDS = [
+    # Financial performance
+    "profit", "loss", "revenue", "sales", "turnover", "earnings", "ebitda", "margin", "eps",
+    "quarter", "q1", "q2", "q3", "q4", "quarterly results", "results", "guidance", "outlook",
+    # Institutional / ownership activity
+    "fii", "dii", "institutional", "mutual fund", "promoter", "pledge", "pledged shares",
+    "stake", "insider", "bulk deal", "block deal",
+    # Corporate actions
+    "acquisition", "acquires", "merger", "amalgamation", "stake sale", "stake buy",
+    "dividend", "buyback", "bonus issue", "stock split", "rights issue",
+    "ipo", "listing", "delisting",
+    # Growth / capacity / operations
+    "capex", "capital expenditure", "expansion", "capacity expansion", "new plant", "new unit",
+    "order", "contract", "tender", "wins order", "bags order", "secures order",
+    "jv", "joint venture", "capacity",
+    # Ratings / market reaction
+    "rating", "upgrade", "downgrade", "target price", "record high", "record low",
+    "52-week", "all-time high", "surge", "rally", "plunge", "crash", "jump", "soar", "tumble",
+    # Regulatory / legal / governance
+    "raid", "ed raid", "probe", "sebi", "penalty", "fine", "litigation", "notice", "tribunal",
+    "npa", "debt", "credit rating", "default", "resign", "resignation", "steps down",
+    # Workforce / trade
+    "layoff", "hiring", "gst", "tax notice", "income tax", "export", "import", "tariff", "duty", "subsidy",
+]
+
+
+def is_relevant(headline):
+    """Keeps only headlines that actually touch on financial performance,
+    corporate activity, or market-moving events -- filters out generic
+    "Buy/Sell/Hold" comparisons, roundup listicles, and similar noise."""
+    text = headline.lower()
+    return any(kw in text for kw in RELEVANCE_KEYWORDS)
+
 
 # Keyword lists -- lowercase, checked as substrings against the lowercased headline.
 # Extend these over time as you notice misses in your own News tab.
@@ -157,6 +196,7 @@ def main():
     all_rows = list(existing_records)
 
     new_count = 0
+    skipped_count = 0
     for stock in stocks:
         symbol = stock["symbol"]
         name = stock["name"]
@@ -168,6 +208,10 @@ def main():
             continue
 
         for article in articles:
+            if not is_relevant(article["headline"]):
+                skipped_count += 1
+                continue  # generic/listicle noise, not worth tracking
+
             article_id = make_id(article["link"])
             if article_id in existing_ids:
                 continue  # already seen (including previously dismissed) -- skip
@@ -193,7 +237,7 @@ def main():
     rows_for_sheet = [[str(r.get(h, "")) for h in NEWS_HEADERS] for r in all_rows]
     news_ws.update([NEWS_HEADERS] + rows_for_sheet, "A1")
 
-    print(f"News sync complete. {new_count} new article(s) added, {len(all_rows)} total rows.")
+    print(f"News sync complete. {new_count} new article(s) added, {skipped_count} filtered out as irrelevant, {len(all_rows)} total rows.")
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ from googleapiclient.discovery import build
 SHEET_ID = os.environ["SHEET_ID"]
 CREDENTIALS = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"])
 TAB_NAME = "OHLC_Daily"
-LOOKBACK_PERIOD = "5y"  # how much history to keep in the rolling window
+LOOKBACK_PERIOD = "4y"  # how much history to keep in the rolling window
 
 
 def get_sheets_service():

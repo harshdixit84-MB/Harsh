@@ -6,7 +6,8 @@
 <title>Monthly Breakout Scan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
+<script src="https://cdn.jsdelivr.net/npm/klinecharts/dist/umd/klinecharts.min.js"></script>
+  <style>
   :root {
     /* Backgrounds */
     --bg:#081321;
@@ -917,7 +918,7 @@
         <td class="cell-symbol">
           <div class="symbol-line">
             <span class="symbol">${stock.symbol}</span>
-            <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
+            <button class="tv-link" onclick="showChartModal('${stock.symbol}')" style="background:none; cursor:pointer; border:1px solid var(--border);">Chart ↗</button>
           </div>
           <div class="name">${stock.name || ""}</div>
           <div class="tag-row">${tags.join("")}</div>
@@ -1215,6 +1216,109 @@
     document.getElementById("oc-modal-container").innerHTML = "";
     document.querySelectorAll(".fno-radio").forEach((r) => (r.checked = false));
   }
+  let activeChart = null;
+let activeChartSymbol = null;
+
+async function showChartModal(symbol) {
+  const container = document.getElementById("oc-modal-container");
+  container.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-box" style="max-width:960px; width:95%; height:640px; padding:0; display:flex; flex-direction:column;">
+        <div class="modal-header" style="padding:14px 18px; margin-bottom:0; border-bottom:1px solid var(--border);">
+          <div class="modal-title">${symbol} — Chart</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
+              <option value="">Drawing tool…</option>
+              <option value="segment">Trend Line</option>
+              <option value="horizontalStraightLine">Horizontal Line</option>
+              <option value="fibonacciLine">Fib Retracement</option>
+              <option value="priceChannelLine">Price Channel</option>
+            </select>
+            <button class="save-btn" id="clear-drawings-btn">Clear Drawings</button>
+            <button class="modal-close" onclick="closeChartModal()">✕</button>
+          </div>
+        </div>
+        <div id="kline-chart" style="flex:1; width:100%;"></div>
+      </div>
+    </div>
+  `;
+
+  activeChartSymbol = symbol;
+
+  try {
+    const res = await fetch(`/api/ohlc?symbol=${symbol}&t=${Date.now()}`, { cache: "no-store" });
+    const data = await res.json();
+
+    if (!data.candles || data.candles.length === 0) {
+      document.getElementById("kline-chart").innerHTML =
+        `<div style="padding:40px; text-align:center; color:var(--text-secondary);">No candle data yet for ${symbol}. Make sure fetch_ohlc.py has run at least once.</div>`;
+      return;
+    }
+
+    activeChart = klinecharts.init("kline-chart");
+    activeChart.applyNewData(data.candles);
+
+    // Restore any previously saved drawings for this symbol (localStorage-based, free, no backend).
+    const saved = loadDrawings(symbol);
+    saved.forEach((overlay) => {
+      activeChart.createOverlay(overlay);
+    });
+
+    // Persist drawings on every draw/move/remove event.
+    if (klinecharts.ActionType) {
+      activeChart.subscribeAction(klinecharts.ActionType.OnDrawEnd, () => saveDrawings(symbol));
+    }
+
+    document.getElementById("draw-tool-select").addEventListener("change", (e) => {
+      const tool = e.target.value;
+      if (tool) {
+        activeChart.createOverlay(tool);
+        e.target.value = "";
+      }
+    });
+
+    document.getElementById("clear-drawings-btn").addEventListener("click", () => {
+      activeChart.removeOverlay();
+      saveDrawings(symbol, []);
+    });
+  } catch (err) {
+    document.getElementById("kline-chart").innerHTML =
+      `<div style="padding:40px; text-align:center; color:var(--accent-loss);">Could not load chart data: ${err.message}</div>`;
+  }
+}
+
+function closeChartModal() {
+  if (activeChart) {
+    klinecharts.dispose("kline-chart");
+    activeChart = null;
+    activeChartSymbol = null;
+  }
+  document.getElementById("oc-modal-container").innerHTML = "";
+}
+
+function drawingsKey(symbol) {
+  return `chart-drawings:${symbol}`;
+}
+
+function saveDrawings(symbol, overrideOverlays) {
+  try {
+    const overlays = overrideOverlays !== undefined
+      ? overrideOverlays
+      : (activeChart ? activeChart.getOverlayInfoAll?.() ?? [] : []);
+    localStorage.setItem(drawingsKey(symbol), JSON.stringify(overlays));
+  } catch (e) {
+    console.warn("Could not save drawings:", e);
+  }
+}
+
+function loadDrawings(symbol) {
+  try {
+    const raw = localStorage.getItem(drawingsKey(symbol));
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
 
   let newsSentimentFilter = "all";
   let newsSearchQuery = "";

@@ -1218,6 +1218,7 @@
   }
   let activeChart = null;
 let activeChartSymbol = null;
+  let activeRawCandles = [];
 
 async function showChartModal(symbol) {
   const container = document.getElementById("oc-modal-container");
@@ -1227,7 +1228,14 @@ async function showChartModal(symbol) {
         <div class="modal-header" style="padding:14px 18px; margin-bottom:0; border-bottom:1px solid var(--border);">
           <div class="modal-title">${symbol} — Chart</div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+  <select id="interval-select" class="dd-select" style="font-size:11px;">
+    <option value="1d">Daily</option>
+    <option value="1w">Weekly</option>
+    <option value="1M">Monthly</option>
+  </select>
+  <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
+  <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
               <option value="">Drawing tool…</option>
               <option value="segment">Trend Line</option>
               <option value="horizontalStraightLine">Horizontal Line</option>
@@ -1255,8 +1263,14 @@ async function showChartModal(symbol) {
       return;
     }
 
-    activeChart = klinecharts.init("kline-chart");
-    activeChart.applyNewData(data.candles);
+activeRawCandles = data.candles; // keep the original daily candles around for re-aggregation
+activeChart = klinecharts.init("kline-chart");
+activeChart.applyNewData(activeRawCandles);
+
+document.getElementById("interval-select").addEventListener("change", (e) => {
+  const aggregated = aggregateCandles(activeRawCandles, e.target.value);
+  activeChart.applyNewData(aggregated);
+});
 
     // Restore any previously saved drawings for this symbol (localStorage-based, free, no backend).
     const saved = loadDrawings(symbol);
@@ -1292,6 +1306,7 @@ function closeChartModal() {
     klinecharts.dispose("kline-chart");
     activeChart = null;
     activeChartSymbol = null;
+    activeRawCandles = [];
   }
   document.getElementById("oc-modal-container").innerHTML = "";
 }
@@ -1318,6 +1333,45 @@ function loadDrawings(symbol) {
   } catch (e) {
     return [];
   }
+}
+  function aggregateCandles(dailyCandles, interval) {
+  if (interval === "1d" || !dailyCandles.length) return dailyCandles;
+
+  const groups = new Map(); // bucketKey -> array of daily candles
+
+  dailyCandles.forEach((candle) => {
+    const d = new Date(candle.timestamp);
+    let key;
+
+    if (interval === "1w") {
+      // Bucket by the Monday of that week (ISO-ish week start)
+      const day = d.getUTCDay(); // 0 = Sunday
+      const diffToMonday = (day === 0 ? -6 : 1) - day;
+      const monday = new Date(d);
+      monday.setUTCDate(d.getUTCDate() + diffToMonday);
+      key = monday.toISOString().slice(0, 10);
+    } else if (interval === "1M") {
+      key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    }
+
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(candle);
+  });
+
+  const aggregated = [];
+  for (const [, bucket] of groups) {
+    bucket.sort((a, b) => a.timestamp - b.timestamp);
+    aggregated.push({
+      timestamp: bucket[0].timestamp, // use the first day in the bucket as the candle's timestamp
+      open: bucket[0].open,
+      close: bucket[bucket.length - 1].close,
+      high: Math.max(...bucket.map((c) => c.high)),
+      low: Math.min(...bucket.map((c) => c.low)),
+      volume: bucket.reduce((sum, c) => sum + (c.volume || 0), 0),
+    });
+  }
+
+  return aggregated.sort((a, b) => a.timestamp - b.timestamp);
 }
 
   let newsSentimentFilter = "all";

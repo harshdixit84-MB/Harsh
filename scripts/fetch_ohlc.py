@@ -37,7 +37,7 @@ from googleapiclient.discovery import build
 SHEET_ID = os.environ["SHEET_ID"]
 CREDENTIALS = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"])
 TAB_NAME = "OHLC_Daily"
-LOOKBACK_PERIOD = "6y"  # how much history to keep in the rolling window
+LOOKBACK_PERIOD = "6mo"  # how much history to keep in the rolling window
 
 
 def get_sheets_service():
@@ -122,18 +122,46 @@ def write_candles(service, all_rows):
 
     # Clear the existing tab first so we don't accumulate duplicate/stale rows.
     service.spreadsheets().values().clear(
-        spreadsheetId=SHEET_ID, range=f"{TAB_NAME}!A1:Z1000000"
+        spreadsheetId=SHEET_ID, range=f"{TAB_NAME}!A1:Z10000000"
     ).execute()
 
     header = ["symbol", "date", "open", "high", "low", "close", "volume"]
-    values = [header] + all_rows
 
-    service.spreadsheets().values().update(
-        spreadsheetId=SHEET_ID,
-        range=f"{TAB_NAME}!A1",
-        valueInputOption="RAW",
-        body={"values": values},
-    ).execute()
+    # Writing everything in one request is what caused the 500 error --
+    # 300k+ rows in a single payload is too large for the Sheets API to
+    # handle reliably. Write the header once, then the data in batches.
+    CHUNK_SIZE = 20000  # rows per request -- comfortably under API limits
+
+    write_chunk_with_retry(service, f"{TAB_NAME}!A1", [header])
+
+    next_row = 2  # header occupies row 1
+    for i in range(0, len(all_rows), CHUNK_SIZE):
+        chunk = all_rows[i : i + CHUNK_SIZE]
+        write_chunk_with_retry(service, f"{TAB_NAME}!A{next_row}", chunk)
+        next_row += len(chunk)
+        print(f"  wrote rows {i + 1}-{i + len(chunk)} of {len(all_rows)}")
+
+
+def write_chunk_with_retry(service, range_, values, max_retries=3):
+    """Write one chunk, retrying on transient 5xx errors from the Sheets API."""
+    from googleapiclient.errors import HttpError
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            service.spreadsheets().values().update(
+                spreadsheetId=SHEET_ID,
+                range=range_,
+                valueInputOption="RAW",
+                body={"values": values},
+            ).execute()
+            return
+        except HttpError as e:
+            if e.resp.status >= 500 and attempt < max_retries:
+                wait = 5 * attempt
+                print(f"  [retry] Sheets API {e.resp.status} error, retrying in {wait}s (attempt {attempt}/{max_retries})")
+                time.sleep(wait)
+                continue
+            raise
 
 
 def main():

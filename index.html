@@ -918,7 +918,8 @@
         <td class="cell-symbol">
           <div class="symbol-line">
             <span class="symbol">${stock.symbol}</span>
-            <button class="tv-link" onclick="showChartModal('${stock.symbol}')" style="background:none; cursor:pointer; border:1px solid var(--border);">Chart ↗</button>
+            <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
+<button class="tv-link" onclick="showChartModal('${stock.symbol}')" style="background:none; cursor:pointer; border:1px solid var(--border);">Chart ↗</button>
           </div>
           <div class="name">${stock.name || ""}</div>
           <div class="tag-row">${tags.join("")}</div>
@@ -1281,6 +1282,13 @@ async function showChartModal(symbol) {
       console.log(`[chart] container size at init: ${el.clientWidth}x${el.clientHeight}`);
 
       activeChart = klinecharts.init("kline-chart");
+      activeChart = klinecharts.init("kline-chart");
+activeChart.setStyles({
+  grid: {
+    horizontal: { show: false },
+    vertical: { show: false }
+  }
+});
       activeChart.applyNewData(activeRawCandles);
       activeChart.resize();
 

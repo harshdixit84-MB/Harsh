@@ -1317,30 +1317,7 @@ async function showChartModal(symbol) {
   }
 }
 
-    // Persist drawings on every draw/move/remove event.
-    if (klinecharts.ActionType) {
-      activeChart.subscribeAction(klinecharts.ActionType.OnDrawEnd, () => saveDrawings(symbol));
-    }
-
-    document.getElementById("draw-tool-select").addEventListener("change", (e) => {
-      const tool = e.target.value;
-      if (tool) {
-        activeChart.createOverlay(tool);
-        e.target.value = "";
-      }
-    });
-
-    document.getElementById("clear-drawings-btn").addEventListener("click", () => {
-      activeChart.removeOverlay();
-      saveDrawings(symbol, []);
-    });
-  } catch (err) {
-    document.getElementById("kline-chart").innerHTML =
-      `<div style="padding:40px; text-align:center; color:var(--accent-loss);">Could not load chart data: ${err.message}</div>`;
-  }
-}
-
-function closeChartModal() {
+ function closeChartModal() {
   if (activeChart) {
     klinecharts.dispose("kline-chart");
     activeChart = null;

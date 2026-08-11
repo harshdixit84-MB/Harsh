@@ -78,16 +78,31 @@ def fetch_candles(symbol):
         return []
 
     rows = []
+    skipped = 0
     for date, row in hist.iterrows():
+        o, h, l, c = row["Open"], row["High"], row["Low"], row["Close"]
+        v = row["Volume"]
+
+        # Yahoo occasionally returns NaN for thinly-traded days -- NaN isn't
+        # valid JSON, so a single bad row would break the entire batch write.
+        # Skip any row with missing OHLC data rather than sending it upstream.
+        if any(map(lambda x: x is None or x != x, [o, h, l, c])):  # x != x is a NaN check
+            skipped += 1
+            continue
+
         rows.append([
             symbol,
             date.strftime("%Y-%m-%d"),
-            round(float(row["Open"]), 2),
-            round(float(row["High"]), 2),
-            round(float(row["Low"]), 2),
-            round(float(row["Close"]), 2),
-            int(row["Volume"]),
+            round(float(o), 2),
+            round(float(h), 2),
+            round(float(l), 2),
+            round(float(c), 2),
+            int(v) if v == v else 0,  # guard volume NaN too, default to 0
         ])
+
+    if skipped:
+        print(f"  [warn] {symbol}: skipped {skipped} row(s) with NaN OHLC values")
+
     return rows
 
 

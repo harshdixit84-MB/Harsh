@@ -1220,22 +1220,22 @@
 let activeChartSymbol = null;
   let activeRawCandles = [];
 
+// Replace your existing showChartModal() function entirely with this version.
+
 async function showChartModal(symbol) {
   const container = document.getElementById("oc-modal-container");
   container.innerHTML = `
     <div class="modal-overlay">
-      <div class="modal-box" style="max-width:960px; width:95%; height:640px; padding:0; display:flex; flex-direction:column; overflow:hidden;">
+      <div class="modal-box" style="max-width:960px; width:95%; padding:0; overflow:visible;">
         <div class="modal-header" style="padding:14px 18px; margin-bottom:0; border-bottom:1px solid var(--border);">
           <div class="modal-title">${symbol} — Chart</div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <div style="display:flex; gap:8px; align-items:center;">
-  <select id="interval-select" class="dd-select" style="font-size:11px;">
-    <option value="1d">Daily</option>
-    <option value="1w">Weekly</option>
-    <option value="1M">Monthly</option>
-  </select>
-  <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
-  <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
+            <select id="interval-select" class="dd-select" style="font-size:11px;">
+              <option value="1d">Daily</option>
+              <option value="1w">Weekly</option>
+              <option value="1M">Monthly</option>
+            </select>
+            <select id="draw-tool-select" class="dd-select" style="font-size:11px;">
               <option value="">Drawing tool…</option>
               <option value="segment">Trend Line</option>
               <option value="horizontalStraightLine">Horizontal Line</option>
@@ -1246,7 +1246,7 @@ async function showChartModal(symbol) {
             <button class="modal-close" onclick="closeChartModal()">✕</button>
           </div>
         </div>
-        <div id="kline-chart" style="flex:1; width:100%;"></div>
+        <div id="kline-chart" style="width:100%; height:560px; position:relative;"></div>
       </div>
     </div>
   `;
@@ -1257,28 +1257,65 @@ async function showChartModal(symbol) {
     const res = await fetch(`/api/ohlc?symbol=${symbol}&t=${Date.now()}`, { cache: "no-store" });
     const data = await res.json();
 
+    console.log(`[chart] ${symbol}: fetched ${data.candles ? data.candles.length : 0} candles`);
+
     if (!data.candles || data.candles.length === 0) {
       document.getElementById("kline-chart").innerHTML =
         `<div style="padding:40px; text-align:center; color:var(--text-secondary);">No candle data yet for ${symbol}. Make sure fetch_ohlc.py has run at least once.</div>`;
       return;
     }
 
-activeRawCandles = data.candles; // keep the original daily candles around for re-aggregation
-activeChart = klinecharts.init("kline-chart");
-activeChart.applyNewData(activeRawCandles);
-    activeChart.applyNewData(activeRawCandles);
-setTimeout(() => activeChart.resize(), 0);
+    if (typeof klinecharts === "undefined") {
+      console.error("[chart] klinecharts library is not loaded -- check the <script> tag in <head>");
+      document.getElementById("kline-chart").innerHTML =
+        `<div style="padding:40px; text-align:center; color:var(--accent-loss);">Chart library failed to load. Check browser console.</div>`;
+      return;
+    }
 
-document.getElementById("interval-select").addEventListener("change", (e) => {
-  const aggregated = aggregateCandles(activeRawCandles, e.target.value);
-  activeChart.applyNewData(aggregated);
-});
+    activeRawCandles = data.candles;
 
-    // Restore any previously saved drawings for this symbol (localStorage-based, free, no backend).
-    const saved = loadDrawings(symbol);
-    saved.forEach((overlay) => {
-      activeChart.createOverlay(overlay);
+    // Wait one frame so the modal box has actually been laid out with real
+    // dimensions before klinecharts measures its container.
+    requestAnimationFrame(() => {
+      const el = document.getElementById("kline-chart");
+      console.log(`[chart] container size at init: ${el.clientWidth}x${el.clientHeight}`);
+
+      activeChart = klinecharts.init("kline-chart");
+      activeChart.applyNewData(activeRawCandles);
+      activeChart.resize();
+
+      document.getElementById("interval-select").addEventListener("change", (e) => {
+        const aggregated = aggregateCandles(activeRawCandles, e.target.value);
+        activeChart.applyNewData(aggregated);
+      });
+
+      if (klinecharts.ActionType) {
+        activeChart.subscribeAction(klinecharts.ActionType.OnDrawEnd, () => saveDrawings(symbol));
+      }
+
+      document.getElementById("draw-tool-select").addEventListener("change", (e) => {
+        const tool = e.target.value;
+        if (tool) {
+          activeChart.createOverlay(tool);
+          e.target.value = "";
+        }
+      });
+
+      document.getElementById("clear-drawings-btn").addEventListener("click", () => {
+        activeChart.removeOverlay();
+        saveDrawings(symbol, []);
+      });
+
+      // Restore saved drawings after chart is confirmed rendered.
+      const saved = loadDrawings(symbol);
+      saved.forEach((overlay) => activeChart.createOverlay(overlay));
     });
+  } catch (err) {
+    console.error("[chart] error loading chart:", err);
+    document.getElementById("kline-chart").innerHTML =
+      `<div style="padding:40px; text-align:center; color:var(--accent-loss);">Could not load chart data: ${err.message}</div>`;
+  }
+}
 
     // Persist drawings on every draw/move/remove event.
     if (klinecharts.ActionType) {

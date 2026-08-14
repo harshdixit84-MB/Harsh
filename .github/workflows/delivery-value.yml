@@ -1,7 +1,9 @@
-name: Delivery Value tracking
+name: Delivery value scan
 
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: "30 15 * * *"
 
 jobs:
   delivery-value:
@@ -14,9 +16,9 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests gspread google-auth
+        run: pip install yfinance gspread google-auth
 
-      - name: Run delivery value tracking
+      - name: Run delivery value scan
         env:
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
         run: python delivery_value.py

@@ -513,6 +513,8 @@ table.stock-table {
 .mini-tag.harmonic-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
 .mini-tag.harmonic-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 .mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
+.mini-tag.rsi-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
+.mini-tag.rsi-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 
 .tag-row {
   display: flex;
@@ -805,6 +807,14 @@ function renderRow(stock) {
   }
   if (stock.wm_pattern) {
     tags.push(`<span class="mini-tag wm" title="Neckline ₹${stock.wm_breakout_level} · ${stock.wm_distance_pct}% away · ${stock.wm_status}">"${stock.wm_pattern}" · ${stock.wm_status}</span>`);
+  }
+  if (stock.rsi_daily_divergence) {
+    const rc = stock.rsi_daily_divergence.toLowerCase() === "bullish" ? "rsi-bull" : "rsi-bear";
+    tags.push(`<span class="mini-tag ${rc}" title="Latest daily RSI divergence">RSI D: ${stock.rsi_daily_divergence} · ${stock.rsi_daily_days_ago}d</span>`);
+  }
+  if (stock.rsi_weekly_divergence) {
+    const rc = stock.rsi_weekly_divergence.toLowerCase() === "bullish" ? "rsi-bull" : "rsi-bear";
+    tags.push(`<span class="mini-tag ${rc}" title="Latest weekly RSI divergence">RSI W: ${stock.rsi_weekly_divergence} · ${stock.rsi_weekly_days_ago}d</span>`);
   }
   (stock.source || "").split(",").filter(Boolean).forEach((s) => {
     tags.push(`<span class="mini-tag">${s}</span>`);

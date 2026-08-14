@@ -107,6 +107,36 @@ module.exports = async (req, res) => {
       // WM_Patterns tab may not exist yet -- proceed without it
     }
 
+    let rsiDivBysymbol = {};
+    try {
+      const rsiResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "RSI_Divergence!A1:F1000",
+      });
+      const rsiRows = rsiResponse.data.values || [];
+      if (rsiRows.length > 0) {
+        const rsiHeaders = rsiRows[0];
+        const symbolIdx = rsiHeaders.indexOf("symbol");
+        const dailyDivIdx = rsiHeaders.indexOf("daily_divergence");
+        const dailyDaysIdx = rsiHeaders.indexOf("daily_days_ago");
+        const weeklyDivIdx = rsiHeaders.indexOf("weekly_divergence");
+        const weeklyDaysIdx = rsiHeaders.indexOf("weekly_days_ago");
+        rsiRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol) {
+            rsiDivBysymbol[symbol] = {
+              dailyDivergence: row[dailyDivIdx] || "",
+              dailyDaysAgo: row[dailyDaysIdx] || "",
+              weeklyDivergence: row[weeklyDivIdx] || "",
+              weeklyDaysAgo: row[weeklyDaysIdx] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // RSI_Divergence tab may not exist yet -- proceed without it
+    }
+
     const rows = response.data.values || [];
     if (rows.length === 0) {
       res.status(200).json({ stocks: [], syncedAt: new Date().toISOString() });
@@ -164,6 +194,10 @@ module.exports = async (req, res) => {
       r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";
       r.wm_distance_pct = wmBysymbol[r.symbol]?.distancePct || "";
       r.wm_symmetry_pct = wmBysymbol[r.symbol]?.symmetryPct || "";
+      r.rsi_daily_divergence = rsiDivBysymbol[r.symbol]?.dailyDivergence || null;
+      r.rsi_daily_days_ago = rsiDivBysymbol[r.symbol]?.dailyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.dailyDaysAgo : null;
+      r.rsi_weekly_divergence = rsiDivBysymbol[r.symbol]?.weeklyDivergence || null;
+      r.rsi_weekly_days_ago = rsiDivBysymbol[r.symbol]?.weeklyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.weeklyDaysAgo : null;
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

@@ -3,8 +3,7 @@ name: W/M pattern detection
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "33 4,6,9 * * 1-5"
-
+    - cron: "30 3-9 * * 1-5"
 jobs:
   wm-patterns:
     runs-on: ubuntu-latest

@@ -1,0 +1,24 @@
+name: RSI divergence detection
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "30 3-9 * * 1-5"
+
+jobs:
+  rsi-divergence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance gspread google-auth pandas
+
+      - name: Run RSI divergence detection
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: python rsi_divergence.py

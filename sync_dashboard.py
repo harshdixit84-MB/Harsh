@@ -1,16 +1,17 @@
 """
 Scheduled job: fetches NEW matches from a Chartlink screener (to discover
-stocks worth tracking), refreshes LIVE prices for every currently active
-tracked stock via Yahoo Finance, computes a technical signal score
-(trend structure, trend strength, momentum, MACD, volume confirmation,
-and a consolidation/squeeze flag), then merges everything into a Google
-Sheet -- preserving manually-set buy targets and auto-archiving stocks
-that have moved 20%+ away from their target.
+stocks worth tracking), refreshes LIVE prices for EVERY currently tracked
+stock (active and archived alike) via Yahoo Finance, computes a technical
+signal score (trend structure, trend strength, momentum, MACD, volume
+confirmation, and a consolidation/squeeze flag), then merges everything
+into a Google Sheet -- preserving manually-set buy targets, auto-archiving
+stocks that have moved 20%+ away from their target, and auto-reactivating
+archived stocks once price (or an updated target) brings them back within
+20%.
 
-Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY (the full JSON
-key content, as a string).
+Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY (the full JSON key
+content, as a string).
 """
-
 import asyncio
 import json
 import math
@@ -94,9 +95,7 @@ def clean_and_filter(raw_rows, min_volume):
 
 
 async def get_all_screener_stocks():
-    """Fetches from every configured screener, tagging each stock with
-    which screener(s) matched it today. A stock matching multiple
-    screeners in the same run gets multiple source tags."""
+    "Fetches from every configured screener, tagging each stock with which screener(s) matched it today. A stock matching multiple screeners in the same run gets multiple source tags."
     combined = {}
 
     for source_name, url in SCREENER_URLS.items():
@@ -296,16 +295,15 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
             merged_sources = existing_sources | sources_today
             existing_by_symbol[symbol]["source"] = ",".join(sorted(merged_sources))
 
-    active_symbols = [s for s, r in existing_by_symbol.items() if r.get("status") != "archived"]
-    live_prices = get_live_prices(active_symbols)
-    signals = get_signals(active_symbols)
+    # Refresh live price + signals for EVERY tracked symbol, archived included --
+    # otherwise an archived stock's price freezes forever and it can never
+    # be re-evaluated even if it (or its buy target) moves back in range.
+    all_symbols = list(existing_by_symbol.keys())
+    live_prices = get_live_prices(all_symbols)
+    signals = get_signals(all_symbols)
 
     updated_rows = []
     for symbol, record in existing_by_symbol.items():
-        if record.get("status") == "archived":
-            updated_rows.append(record)
-            continue
-
         if symbol in live_prices:
             record["price"] = live_prices[symbol]["price"]
             if live_prices[symbol]["percent_change"] is not None:
@@ -326,14 +324,27 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
             record["signal_label"] = sig["signal_label"]
             record["consolidating"] = sig["consolidating"]
 
+        # Archive/reactivate check -- always uses the CURRENT price against
+        # whatever buy_target is currently set (the person may have edited
+        # it from the dashboard while the stock was archived).
         buy_target = record.get("buy_target")
         if buy_target not in (None, "", 0):
             try:
                 distance_pct = abs((float(record["price"]) - float(buy_target)) / float(buy_target)) * 100
-                if distance_pct >= ARCHIVE_THRESHOLD_PCT:
+                is_archived = record.get("status") == "archived"
+
+                if distance_pct >= ARCHIVE_THRESHOLD_PCT and not is_archived:
                     record["status"] = "archived"
                     record["archived_date"] = today
                     record["archived_reason"] = f"moved {round(distance_pct)}% from target"
+                elif distance_pct >= ARCHIVE_THRESHOLD_PCT and is_archived:
+                    # still beyond threshold -- keep archived, but keep the reason current
+                    record["archived_reason"] = f"moved {round(distance_pct)}% from target"
+                elif distance_pct < ARCHIVE_THRESHOLD_PCT and is_archived:
+                    # price (or an updated target) brought it back within range -- reactivate
+                    record["status"] = "active"
+                    record["archived_date"] = ""
+                    record["archived_reason"] = ""
             except (ValueError, TypeError) as e:
                 print(f"Skipping archive check for {symbol}: bad buy_target/price ({e})")
 

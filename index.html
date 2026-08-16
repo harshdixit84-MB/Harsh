@@ -821,9 +821,7 @@ function renderRow(stock) {
     const rc = stock.rsi_weekly_divergence.toLowerCase() === "bullish" ? "rsi-bull" : "rsi-bear";
     tags.push(`<span class="mini-tag ${rc}" title="Latest weekly RSI divergence">RSI W: ${stock.rsi_weekly_divergence} · ${stock.rsi_weekly_days_ago}d</span>`);
   }
-  (stock.source || "").split(",").filter(Boolean).forEach((s) => {
-    tags.push(`<span class="mini-tag">${s}</span>`);
-  });
+  
 
   return `
     <tr class="stock-row ${cls}" data-category="${cls}">

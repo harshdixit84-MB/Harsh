@@ -461,6 +461,7 @@ table.stock-table {
 .stock-row.watch { box-shadow: inset 3px 0 0 var(--accent-watch); }
 .stock-row.tracking { box-shadow: inset 3px 0 0 transparent; }
 .stock-row.needtarget { box-shadow: inset 3px 0 0 var(--accent-needtarget); }
+.stock-row.archived { opacity: 0.6; box-shadow: inset 3px 0 0 var(--text-secondary); }
 
 .cell-symbol { min-width: 190px; }
 
@@ -515,6 +516,7 @@ table.stock-table {
 .mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
 .mini-tag.rsi-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
 .mini-tag.rsi-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
+.mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
 
 .tag-row {
   display: flex;
@@ -804,6 +806,7 @@ function renderRow(stock) {
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
   const tags = [];
+  if (stock.archived) tags.push(`<span class="mini-tag archived" title="${stock.archived_reason || ""}">Archived</span>`);
   if (stock.consolidating) tags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
   if (stock.high_dv) tags.push(`<span class="mini-tag highdv">⬤ High DV</span>`);
   if (stock.harmonic_pattern) {
@@ -821,10 +824,12 @@ function renderRow(stock) {
     const rc = stock.rsi_weekly_divergence.toLowerCase() === "bullish" ? "rsi-bull" : "rsi-bear";
     tags.push(`<span class="mini-tag ${rc}" title="Latest weekly RSI divergence">RSI W: ${stock.rsi_weekly_divergence} · ${stock.rsi_weekly_days_ago}d</span>`);
   }
-  
+  (stock.source || "").split(",").filter(Boolean).forEach((s) => {
+    tags.push(`<span class="mini-tag">${s}</span>`);
+  });
 
   return `
-    <tr class="stock-row ${cls}" data-category="${cls}">
+    <tr class="stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
       <td class="cell-symbol">
         <div class="symbol-line">
           <span class="symbol">${stock.symbol}</span>
@@ -858,7 +863,8 @@ function renderRow(stock) {
 }
 
 function computeFilteredStocks() {
-  let filtered = latestStocks.slice();
+  const showArchived = quickFilters.above20 || quickFilters.below20;
+  let filtered = showArchived ? latestStocks.slice() : latestStocks.filter((s) => !s.archived);
 
   if (buysellFilter !== "all") {
     filtered = filtered.filter((s) => buySell(s) === buysellFilter);

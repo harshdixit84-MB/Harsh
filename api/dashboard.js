@@ -160,7 +160,7 @@ module.exports = async (req, res) => {
     const withoutTarget = [];
 
     for (const r of records) {
-      if (r.status === "archived") continue;
+      r.archived = r.status === "archived";
 
       const buyTarget = r.buy_target;
       const price = parseFloat(r.price);

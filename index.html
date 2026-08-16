@@ -863,8 +863,9 @@ function renderRow(stock) {
 }
 
 function computeFilteredStocks() {
-  const showArchived = quickFilters.above20 || quickFilters.below20;
-  let filtered = showArchived ? latestStocks.slice() : latestStocks.filter((s) => !s.archived);
+  const showExtreme = quickFilters.above20 || quickFilters.below20;
+  const isExtreme = (s) => s.archived || (s.distance_pct !== undefined && Math.abs(s.distance_pct) > 20);
+  let filtered = showExtreme ? latestStocks.slice() : latestStocks.filter((s) => !isExtreme(s));
 
   if (buysellFilter !== "all") {
     filtered = filtered.filter((s) => buySell(s) === buysellFilter);

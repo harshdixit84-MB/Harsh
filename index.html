@@ -697,6 +697,8 @@ LIVE
 <label class="chip-check" id="chip-rsidbear"><input type="checkbox" data-quick="rsiDBear"><span>RSI D Bear</span></label>
 <label class="chip-check" id="chip-rsiwbull"><input type="checkbox" data-quick="rsiWBull"><span>RSI W Bull</span></label>
 <label class="chip-check" id="chip-rsiwbear"><input type="checkbox" data-quick="rsiWBear"><span>RSI W Bear</span></label>
+<label class="chip-check" id="chip-above20"><input type="checkbox" data-quick="above20"><span>&gt;20%</span></label>
+<label class="chip-check" id="chip-below20"><input type="checkbox" data-quick="below20"><span>&lt;20%</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 </div>
 
@@ -751,7 +753,7 @@ LIVE
 <th>Buy/Sell</th>
 <th>Entry</th>
 <th class="sortable" id="th-cmp">CMP ›</th>
-<th>Decision</th>
+<th>Source</th>
 <th>SL</th>
 </tr>
 </thead>
@@ -767,7 +769,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false };
+let quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -796,7 +798,6 @@ function decision(stock) {
 function renderRow(stock) {
   const cls = classify(stock);
   const bs = buySell(stock);
-  const dec = decision(stock);
 
   const dayChange = stock.percent_change || 0;
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
@@ -847,7 +848,7 @@ function renderRow(stock) {
           <span class="day-change" style="color:${dayChangeColor};"><span class="trend-arrow">${trendArrow}</span>${dayChange >= 0 ? "+" : ""}${dayChange}%</span>
         </div>
       </td>
-      <td><span class="decision-pill ${dec === "Confirmed" ? "confirmed" : "watching"}">${dec}</span></td>
+      <td class="mono-cell">${(stock.source || "").split(",").filter(Boolean).join(", ") || "-"}</td>
       <td class="mono-cell">
         <div class="value-edit">
           <input type="number" step="0.01" class="value-input sl-input" value="${stock.stop_loss || ""}" placeholder="SL" data-symbol="${stock.symbol}" data-field="stop_loss" />
@@ -882,6 +883,8 @@ function computeFilteredStocks() {
   if (quickFilters.rsiDBear) filtered = filtered.filter((s) => (s.rsi_daily_divergence || "").toLowerCase() === "bearish");
   if (quickFilters.rsiWBull) filtered = filtered.filter((s) => (s.rsi_weekly_divergence || "").toLowerCase() === "bullish");
   if (quickFilters.rsiWBear) filtered = filtered.filter((s) => (s.rsi_weekly_divergence || "").toLowerCase() === "bearish");
+  if (quickFilters.above20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct > 20);
+  if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
 
   if (currentSearch.trim() !== "") {
     const q = currentSearch.trim().toLowerCase();
@@ -1032,7 +1035,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false };
+  quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");

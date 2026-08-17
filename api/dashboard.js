@@ -199,23 +199,18 @@ module.exports = async (req, res) => {
       r.rsi_weekly_divergence = rsiDivBysymbol[r.symbol]?.weeklyDivergence || null;
       r.rsi_weekly_days_ago = rsiDivBysymbol[r.symbol]?.weeklyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.weeklyDaysAgo : null;
 
-      // Confluence score -- how many of the 9 tracked bullish signals are
-      // currently confirming this stock. Missing/absent data counts as
-      // not-satisfied (0), not excluded, so sparse data can't inflate a score.
-      const signalChecks = [
-        r.distance_pct !== undefined && r.distance_pct <= 0,                                              // Buy Zone
-        (r.harmonic_pattern || "").toLowerCase().includes("bullish"),                                     // Harmonic bullish
-        !!(r.wm_pattern && r.wm_pattern.trim().toUpperCase().startsWith("W") && r.wm_status === "Confirmed"), // WM bullish, confirmed
-        (r.rsi_daily_divergence || "").toLowerCase() === "bullish",                                        // RSI daily divergence
-        (r.rsi_weekly_divergence || "").toLowerCase() === "bullish",                                       // RSI weekly divergence
-        !!r.consolidating,                                                                                 // Squeeze (coiled setup)
-        !!r.high_dv,                                                                                       // High delivery value
-        r.buying_selling_verdict === "Heavy Buying",                                                       // Buying/selling verdict
-        r.signal_score !== null && r.signal_score >= 4,                                                    // Technical score (EMA/ADX/RSI/MACD/volume)
+      // Reversal confluence -- bottom-fishing signals that genuinely cluster
+      // together (unlike breakout signals, which conflict with each other
+      // and are already covered by the screeners). Missing data = not satisfied.
+      const reversalChecks = [
+        (r.harmonic_pattern || "").toLowerCase().includes("bullish"),   // Harmonic bullish
+        (r.rsi_daily_divergence || "").toLowerCase() === "bullish",     // RSI daily divergence
+        (r.rsi_weekly_divergence || "").toLowerCase() === "bullish",    // RSI weekly divergence
+        !!r.high_dv,                                                    // High delivery value (accumulation at the low)
       ];
-      r.confluence_score = signalChecks.filter(Boolean).length;
-      r.confluence_total = signalChecks.length;
-      r.confluence_pct = Math.round((r.confluence_score / r.confluence_total) * 100);
+      r.reversal_score = reversalChecks.filter(Boolean).length;
+      r.reversal_total = reversalChecks.length;
+      r.reversal_pct = Math.round((r.reversal_score / r.reversal_total) * 100);
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

@@ -702,7 +702,7 @@ LIVE
 <label class="chip-check" id="chip-rsiwbear"><input type="checkbox" data-quick="rsiWBear"><span>RSI W Bear</span></label>
 <label class="chip-check" id="chip-above20"><input type="checkbox" data-quick="above20"><span>&gt;20%</span></label>
 <label class="chip-check" id="chip-below20"><input type="checkbox" data-quick="below20"><span>&lt;20%</span></label>
-<label class="chip-check" id="chip-jackpot"><input type="checkbox" data-quick="jackpot"><span>★ &gt;90%</span></label>
+<label class="chip-check" id="chip-jackpot"><input type="checkbox" data-quick="jackpot"><span>★ Reversal</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 </div>
 
@@ -809,7 +809,7 @@ function renderRow(stock) {
 
   const tags = [];
   if (stock.archived) tags.push(`<span class="mini-tag archived" title="${stock.archived_reason || ""}">Archived</span>`);
-  if (stock.confluence_pct >= 85) tags.push(`<span class="mini-tag jackpot" title="${stock.confluence_score} of ${stock.confluence_total} tracked signals confirming">★ ${stock.confluence_pct}% Confluence</span>`);
+  if (stock.reversal_score >= 2) tags.push(`<span class="mini-tag jackpot" title="${stock.reversal_score} of ${stock.reversal_total} reversal signals confirming">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
   if (stock.consolidating) tags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
   if (stock.high_dv) tags.push(`<span class="mini-tag highdv">⬤ High DV</span>`);
   if (stock.harmonic_pattern) {
@@ -893,7 +893,7 @@ function computeFilteredStocks() {
   if (quickFilters.rsiWBear) filtered = filtered.filter((s) => (s.rsi_weekly_divergence || "").toLowerCase() === "bearish");
   if (quickFilters.above20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct > 20);
   if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
-  if (quickFilters.jackpot) filtered = filtered.filter((s) => s.confluence_pct >= 85);
+  if (quickFilters.jackpot) filtered = filtered.filter((s) => s.reversal_score >= 3);
 
   if (currentSearch.trim() !== "") {
     const q = currentSearch.trim().toLowerCase();

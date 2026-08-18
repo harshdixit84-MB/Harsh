@@ -1,16 +1,14 @@
 """
 Detects the latest RSI divergence (daily and weekly) for actively tracked
-stocks. Pivots are found on the RSI line itself (not price) -- matching how
-TradingView's common "Divergence for Many Indicators" style scripts work --
-then the price at those same bars is checked for the opposite structure:
+stocks. This is a direct port of TradingView's own official "RSI Divergence
+Indicator" (the built-in Pine script, not a community script) -- same RSI
+period (14, on Close), same pivot lookback (5 bars left, 5 bars right),
+same pivot source (the RSI line itself, not price), and the same 5-60 bar
+range gate between compared pivots. Only Regular divergence is implemented
+(Hidden divergence exists in the original but defaults to off there too):
 
   Regular bearish: RSI makes a lower pivot high, price makes a higher pivot high.
   Regular bullish: RSI makes a higher pivot low, price makes a lower pivot low.
-
-Two pivots only count as a divergence pair if they're between RANGE_LOWER and
-RANGE_UPPER bars apart (default 5-60), same default range used by that
-popular indicator, to avoid comparing pivots that are unrealistically close
-or too far apart to be a meaningful divergence.
 
 For each stock, reports only the MOST RECENT divergence on each timeframe
 (daily and weekly), the direction (Bullish/Bearish), and how many days ago
@@ -42,6 +40,8 @@ RANGE_LOWER = 5        # min bars between the two compared pivots
 RANGE_UPPER = 60        # max bars between the two compared pivots
 DAILY_HISTORY = "1y"         # yfinance period for daily data
 WEEKLY_HISTORY = "3y"        # yfinance period for weekly data
+DAILY_MAX_AGE_DAYS = 7        # ignore daily divergences older than this
+WEEKLY_MAX_AGE_DAYS = 14      # ignore weekly divergences older than this
 
 
 def get_client():
@@ -130,7 +130,7 @@ def detect_latest_divergence(df, rsi):
     return latest["type"], days_ago
 
 
-def check_timeframe(symbol, period, interval):
+def check_timeframe(symbol, period, interval, max_age_days):
     try:
         hist = yf.Ticker(f"{symbol}.NS").history(period=period, interval=interval)
         if hist.empty or len(hist) < RSI_PERIOD + RANGE_UPPER + PIVOT_LEFT + PIVOT_RIGHT:
@@ -140,7 +140,12 @@ def check_timeframe(symbol, period, interval):
         result = detect_latest_divergence(hist, rsi)
         if result is None:
             return None, None
-        return result  # (type, days_ago)
+
+        div_type, days_ago = result
+        if days_ago > max_age_days:
+            return None, None  # too stale to be worth showing
+
+        return div_type, days_ago
 
     except Exception as e:
         print(f"RSI divergence ({interval}) failed for {symbol}: {e}")
@@ -161,8 +166,8 @@ def main():
     rows = [header]
 
     for symbol in active_symbols:
-        daily_type, daily_days = check_timeframe(symbol, DAILY_HISTORY, "1d")
-        weekly_type, weekly_days = check_timeframe(symbol, WEEKLY_HISTORY, "1wk")
+        daily_type, daily_days = check_timeframe(symbol, DAILY_HISTORY, "1d", DAILY_MAX_AGE_DAYS)
+        weekly_type, weekly_days = check_timeframe(symbol, WEEKLY_HISTORY, "1wk", WEEKLY_MAX_AGE_DAYS)
 
         rows.append([
             symbol,

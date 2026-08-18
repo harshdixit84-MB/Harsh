@@ -1,15 +1,25 @@
 """
 Detects the latest RSI divergence (daily and weekly) for actively tracked
-stocks. A regular bearish divergence is price making a higher swing high
-while RSI makes a lower swing high; a regular bullish divergence is price
-making a lower swing low while RSI makes a higher swing low. Standard,
-well-documented divergence definition -- not tied to any proprietary
-indicator.
+stocks. Pivots are found on the RSI line itself (not price) -- matching how
+TradingView's common "Divergence for Many Indicators" style scripts work --
+then the price at those same bars is checked for the opposite structure:
+
+  Regular bearish: RSI makes a lower pivot high, price makes a higher pivot high.
+  Regular bullish: RSI makes a higher pivot low, price makes a lower pivot low.
+
+Two pivots only count as a divergence pair if they're between RANGE_LOWER and
+RANGE_UPPER bars apart (default 5-60), same default range used by that
+popular indicator, to avoid comparing pivots that are unrealistically close
+or too far apart to be a meaningful divergence.
 
 For each stock, reports only the MOST RECENT divergence on each timeframe
 (daily and weekly), the direction (Bullish/Bearish), and how many days ago
 it formed (counted from the bar where the divergence pivot confirmed, to
 today). Both timeframes are checked in a single run.
+
+Note: a pivot can only be confirmed once PIVOT_RIGHT bars have passed after
+it, same lag TradingView's indicator has in real time -- so very recent bars
+won't yet show a pivot even if one is about to form.
 
 Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY
 """
@@ -25,8 +35,11 @@ from google.oauth2.service_account import Credentials
 SHEET_NAME = "Monthly Breakout Scan"
 DIVERGENCE_SHEET = "RSI_Divergence"
 
-SWING_FRACTAL_BARS = 2       # bars on each side to confirm a swing pivot
 RSI_PERIOD = 14
+PIVOT_LEFT = 5        # bars to the left required to confirm an RSI pivot
+PIVOT_RIGHT = 5        # bars to the right required to confirm an RSI pivot
+RANGE_LOWER = 5        # min bars between the two compared pivots
+RANGE_UPPER = 60        # max bars between the two compared pivots
 DAILY_HISTORY = "1y"         # yfinance period for daily data
 WEEKLY_HISTORY = "3y"        # yfinance period for weekly data
 
@@ -64,65 +77,47 @@ def compute_rsi(close, period=RSI_PERIOD):
     return 100 - (100 / (1 + rs))
 
 
-def find_swing_pivots(df, k=SWING_FRACTAL_BARS):
-    "A bar is a swing high/low if it's the highest/lowest point within k bars on each side."
-    pivots = []
-    highs = df["High"].values
-    lows = df["Low"].values
-    n = len(df)
+def find_rsi_pivots(rsi, left=PIVOT_LEFT, right=PIVOT_RIGHT):
+    "Finds pivot highs/lows on the RSI line itself: a bar is a pivot if it's the max/min within `left` bars before and `right` bars after it."
+    vals = rsi.values
+    n = len(vals)
+    highs = []
+    lows = []
 
-    for i in range(k, n - k):
-        window_high = highs[i - k:i + k + 1]
-        window_low = lows[i - k:i + k + 1]
+    for i in range(left, n - right):
+        if pd.isna(vals[i]):
+            continue
+        window = vals[i - left:i + right + 1]
+        if any(pd.isna(w) for w in window):
+            continue
+        if vals[i] == max(window):
+            highs.append(i)
+        if vals[i] == min(window):
+            lows.append(i)
 
-        if highs[i] == max(window_high):
-            pivots.append((i, highs[i], "high"))
-        elif lows[i] == min(window_low):
-            pivots.append((i, lows[i], "low"))
-
-    return pivots
-
-
-def alternate_pivots(pivots):
-    "Keeps only alternating high/low pivots, collapsing consecutive same-type pivots down to whichever is more extreme."
-    if not pivots:
-        return []
-
-    cleaned = [pivots[0]]
-    for pt in pivots[1:]:
-        last = cleaned[-1]
-        if pt[2] == last[2]:
-            if pt[2] == "high" and pt[1] > last[1]:
-                cleaned[-1] = pt
-            elif pt[2] == "low" and pt[1] < last[1]:
-                cleaned[-1] = pt
-        else:
-            cleaned.append(pt)
-
-    return cleaned
+    return highs, lows
 
 
 def detect_latest_divergence(df, rsi):
-    "Compares the last two swing highs and the last two swing lows against RSI at the same bars; returns whichever divergence is most recent, or None."
-    pivots = alternate_pivots(find_swing_pivots(df))
-    highs = [p for p in pivots if p[2] == "high"]
-    lows = [p for p in pivots if p[2] == "low"]
-
+    "Compares the last two RSI pivot highs (and the last two RSI pivot lows) against price at those same bars, gated to pivots RANGE_LOWER-RANGE_UPPER bars apart."
+    highs, lows = find_rsi_pivots(rsi)
     candidates = []
 
     if len(highs) >= 2:
-        i1, price1, _ = highs[-2]
-        i2, price2, _ = highs[-1]
-        rsi1, rsi2 = rsi.iloc[i1], rsi.iloc[i2]
-        if pd.notna(rsi1) and pd.notna(rsi2) and price2 > price1 and rsi2 < rsi1:
-            candidates.append({"type": "Bearish", "index": i2})
+        i1, i2 = highs[-2], highs[-1]
+        if RANGE_LOWER <= (i2 - i1) <= RANGE_UPPER:
+            rsi1, rsi2 = rsi.iloc[i1], rsi.iloc[i2]
+            price1, price2 = df["High"].iloc[i1], df["High"].iloc[i2]
+            if price2 > price1 and rsi2 < rsi1:
+                candidates.append({"type": "Bearish", "index": i2})
 
     if len(lows) >= 2:
-        i1, price1, _ = lows[-2]
-        i2, price2, _ = lows[-1]
-        rsi1, rsi2 = rsi.iloc[i1], rsi.iloc[i2]
-        if pd.notna(rsi1) and pd.notna(rsi2) and price2 < price1 and rsi2 > rsi1:
-            candidates.append({"type": "Bullish", "index": i2})
+        i1, i2 = lows[-2], lows[-1]
+        if RANGE_LOWER <= (i2 - i1) <= RANGE_UPPER:
+            rsi1, rsi2 = rsi.iloc[i1], rsi.iloc[i2]
+            price1, price2 = df["Low"].iloc[i1], df["Low"].iloc[i2]
+            if price2 < price1 and rsi2 > rsi1:
+                candidates.append({"type": "Bullish", "index": i2})
 
     if not candidates:
         return None
@@ -138,7 +133,7 @@ def detect_latest_divergence(df, rsi):
 def check_timeframe(symbol, period, interval):
     try:
         hist = yf.Ticker(f"{symbol}.NS").history(period=period, interval=interval)
-        if hist.empty or len(hist) < RSI_PERIOD + 2 * SWING_FRACTAL_BARS + 2:
+        if hist.empty or len(hist) < RSI_PERIOD + RANGE_UPPER + PIVOT_LEFT + PIVOT_RIGHT:
             return None, None
 
         rsi = compute_rsi(hist["Close"])

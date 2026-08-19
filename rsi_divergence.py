@@ -61,9 +61,10 @@ def get_or_create_sheet(spreadsheet, title, header_row):
 
 
 def get_active_symbols(spreadsheet):
+    "Despite the name (kept for compatibility), this now returns EVERY tracked symbol, active or archived -- divergence detection should still run on archived stocks so a reversal signal can be caught even before sync_dashboard.py reactivates them."
     ws = spreadsheet.sheet1
     records = ws.get_all_records()
-    return sorted({r["symbol"] for r in records if r.get("status") == "active"})
+    return sorted({r["symbol"] for r in records if r.get("symbol")})
 
 
 def compute_rsi(close, period=RSI_PERIOD):

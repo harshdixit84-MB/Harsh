@@ -1,20 +1,32 @@
 """
-Checks every tracked stock (active AND archived -- some signals, like the
->20%/<20% filters, only apply to extreme movers) against the same 12 signal
-conditions used as quick-filter chips on the dashboard, and sends a Telegram
-message the moment a stock NEWLY starts matching one.
+Checks every tracked stock (active AND archived) against 5 signal filters --
+Near Target, Near Stoploss, Bullish Divergence, Bearish Divergence, and
+Reversal Confluence -- and sends ONE collective Telegram message per filter,
+listing every ticker that newly qualifies this run. No message is sent for
+a filter if nothing new qualifies.
 
-Dedup: a "Notify_State" tab tracks whether each (symbol, signal) pair was
-matching on the previous run. A message only goes out on a false->true
-transition -- so a stock sitting in "Near Target" for 3 days doesn't ping
-you every single run, only once when it first qualifies. If it later drops
-out and re-qualifies, that's treated as a fresh signal and pings again.
+Divergence signals are restricted to patterns that FORMED TODAY: RSI_Divergence
+already tracks daily_days_ago/weekly_days_ago per stock, so a divergence that
+formed 3 days ago (even if still within rsi_divergence.py's own 7/14-day
+display window) will NOT trigger a notification here -- only days_ago == 0
+counts. Reversal Confluence's own RSI sub-signals use the same same-day rule;
+its harmonic-pattern and high-DV sub-signals have no formation date available
+in the sheet, so those stay presence-based (can't be restricted to "today").
+Near Target / Near Stoploss are continuous price-relative conditions, not
+one-off pattern events -- they don't have a "formed today" concept, so they
+rely only on the state-transition dedup below (which already means "first
+run this condition became true").
+
+Dedup: a "Notify_State" tab tracks whether each (symbol, filter) pair was
+matching on the previous run. Only a false->true transition counts as "new"
+and gets included in that filter's message.
 
 Environment variables required:
   GOOGLE_SERVICE_ACCOUNT_KEY
   TELEGRAM_BOT_TOKEN
   TELEGRAM_CHAT_ID
 """
+import datetime
 import json
 import os
 
@@ -45,12 +57,18 @@ def read_tab_by_symbol(spreadsheet, tab_name):
     return {r["symbol"]: r for r in rows if r.get("symbol")}
 
 
+def _to_int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def build_merged_stocks(spreadsheet):
     "Mirrors the join logic in api/dashboard.js, in Python, so notify.py sees exactly what the dashboard sees."
     main_rows = spreadsheet.sheet1.get_all_records()
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
     harmonic_by_symbol = read_tab_by_symbol(spreadsheet, "Harmonic_Patterns")
-    wm_by_symbol = read_tab_by_symbol(spreadsheet, "WM_Patterns")
     rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
 
     stocks = []
@@ -82,40 +100,39 @@ def build_merged_stocks(spreadsheet):
 
         dv = dv_by_symbol.get(symbol, {})
         harmonic = harmonic_by_symbol.get(symbol, {})
-        wm = wm_by_symbol.get(symbol, {})
         rsi_div = rsi_by_symbol.get(symbol, {})
 
-        consolidating = str(r.get("consolidating", "")).strip().lower() == "true"
         high_dv = str(dv.get("high_dv_tag", "")).strip().lower() == "true"
-        buying_selling_verdict = dv.get("buying_selling_verdict", "") or ""
         harmonic_pattern = harmonic.get("pattern_name", "") or ""
-        wm_pattern = wm.get("pattern", "") or ""
-        wm_status = wm.get("status", "") or ""
         rsi_daily_div = rsi_div.get("daily_divergence", "") or ""
         rsi_weekly_div = rsi_div.get("weekly_divergence", "") or ""
+        rsi_daily_days_ago = _to_int_or_none(rsi_div.get("daily_days_ago"))
+        rsi_weekly_days_ago = _to_int_or_none(rsi_div.get("weekly_days_ago"))
 
+        daily_formed_today = rsi_daily_days_ago == 0
+        weekly_formed_today = rsi_weekly_days_ago == 0
+
+        # Reversal's RSI sub-signals also require same-day formation; harmonic
+        # pattern and high-DV have no formation date in the sheet, so they
+        # stay presence-based.
         reversal_score = sum([
             "bullish" in harmonic_pattern.lower(),
-            rsi_daily_div.lower() == "bullish",
-            rsi_weekly_div.lower() == "bullish",
+            rsi_daily_div.lower() == "bullish" and daily_formed_today,
+            rsi_weekly_div.lower() == "bullish" and weekly_formed_today,
             high_dv,
         ])
 
         stocks.append({
             "symbol": symbol,
-            "name": r.get("name", ""),
             "source": r.get("source", ""),
             "price": price,
             "buy_target": buy_target,
             "distance_pct": distance_pct,
             "distance_to_sl_pct": distance_to_sl_pct,
-            "consolidating": consolidating,
-            "high_dv": high_dv,
-            "buying_selling_verdict": buying_selling_verdict,
-            "wm_pattern": wm_pattern,
-            "wm_status": wm_status,
             "rsi_daily_divergence": rsi_daily_div,
             "rsi_weekly_divergence": rsi_weekly_div,
+            "daily_formed_today": daily_formed_today,
+            "weekly_formed_today": weekly_formed_today,
             "reversal_score": reversal_score,
         })
 
@@ -123,59 +140,49 @@ def build_merged_stocks(spreadsheet):
 
 
 def compute_signals(s):
-    "Returns {signal_key: (is_matching, display_name)} -- one entry per dashboard quick-filter chip."
-    wm_upper = (s["wm_pattern"] or "").strip().upper()
+    "Returns {filter_key: (is_matching, detail_suffix)} -- one entry per tracked filter."
+    daily = s["rsi_daily_divergence"].lower()
+    weekly = s["rsi_weekly_divergence"].lower()
+
+    daily_bull_today = daily == "bullish" and s["daily_formed_today"]
+    weekly_bull_today = weekly == "bullish" and s["weekly_formed_today"]
+    daily_bear_today = daily == "bearish" and s["daily_formed_today"]
+    weekly_bear_today = weekly == "bearish" and s["weekly_formed_today"]
+
+    bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else ""]))
+    bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else ""]))
 
     return {
         "near_target": (
             s["distance_pct"] is not None and 0 < s["distance_pct"] <= WATCH_THRESHOLD,
-            "Near Target",
+            "",
         ),
         "near_sl": (
             s["distance_to_sl_pct"] is not None and 0 <= s["distance_to_sl_pct"] <= WATCH_THRESHOLD,
-            "Near Stoploss",
+            "",
         ),
-        "w_breakout": (
-            wm_upper.startswith("W"),
-            '"W" Breakout',
+        "bullish_divergence": (
+            daily_bull_today or weekly_bull_today,
+            f" ({bullish_tf})" if bullish_tf else "",
         ),
-        "m_breakout": (
-            wm_upper.startswith("M"),
-            '"M" Breakout',
-        ),
-        "squeeze": (
-            s["consolidating"],
-            "Squeeze",
-        ),
-        "rsi_d_bull": (
-            s["rsi_daily_divergence"].lower() == "bullish",
-            "RSI Daily Bullish Divergence",
-        ),
-        "rsi_d_bear": (
-            s["rsi_daily_divergence"].lower() == "bearish",
-            "RSI Daily Bearish Divergence",
-        ),
-        "rsi_w_bull": (
-            s["rsi_weekly_divergence"].lower() == "bullish",
-            "RSI Weekly Bullish Divergence",
-        ),
-        "rsi_w_bear": (
-            s["rsi_weekly_divergence"].lower() == "bearish",
-            "RSI Weekly Bearish Divergence",
-        ),
-        "above20": (
-            s["distance_pct"] is not None and s["distance_pct"] > 20,
-            "Moved >20% Above Target",
-        ),
-        "below20": (
-            s["distance_pct"] is not None and s["distance_pct"] < -20,
-            "Dropped >20% Below Target",
+        "bearish_divergence": (
+            daily_bear_today or weekly_bear_today,
+            f" ({bearish_tf})" if bearish_tf else "",
         ),
         "reversal": (
             s["reversal_score"] >= 3,
-            "★ Reversal Confluence",
+            f" ({s['reversal_score']}/4)",
         ),
     }
+
+
+FILTER_DISPLAY_NAMES = {
+    "near_target": "Near Target",
+    "near_sl": "Near Stoploss",
+    "bullish_divergence": "Bullish Divergence (formed today)",
+    "bearish_divergence": "Bearish Divergence (formed today)",
+    "reversal": "★ Reversal Confluence",
+}
 
 
 def load_state(spreadsheet):
@@ -206,43 +213,49 @@ def send_telegram_message(text):
         print(f"Telegram send failed: {resp.status_code} {resp.text}")
 
 
-def format_message(stock, signal_name):
-    target_str = f"₹{stock['buy_target']}" if stock["buy_target"] not in (None, "", 0) else "not set"
-    return (
-        f"🔔 <b>{stock['symbol']}</b>\n"
-        f"Signal: {signal_name}\n"
-        f"Source: {stock['source'] or '-'}\n"
-        f"Price: ₹{stock['price']}\n"
-        f"Target: {target_str}"
-    )
+def format_ticker_line(stock, detail_suffix):
+    target_str = f"₹{stock['buy_target']}" if stock["buy_target"] not in (None, "", 0) else "target not set"
+    return f"<b>{stock['symbol']}</b>{detail_suffix} — ₹{stock['price']} — Target: {target_str} — {stock['source'] or '-'}"
+
+
+def format_group_message(filter_key, entries):
+    header = f"🔔 <b>{FILTER_DISPLAY_NAMES[filter_key]}</b> ({len(entries)} stock{'s' if len(entries) != 1 else ''})\n"
+    lines = [format_ticker_line(stock, detail_suffix) for stock, detail_suffix in entries]
+    return header + "\n".join(lines)
 
 
 def main():
-    import datetime
     today_str = str(datetime.date.today())
 
     client, spreadsheet = get_client_and_spreadsheet()
     stocks = build_merged_stocks(spreadsheet)
-    print(f"Checking {len(stocks)} tracked stocks across 12 signal types.")
+    print(f"Checking {len(stocks)} tracked stocks across {len(FILTER_DISPLAY_NAMES)} signal types.")
 
     state_ws, state = load_state(spreadsheet)
     new_state = {}
-    sent_count = 0
+    newly_matching_by_filter = {key: [] for key in FILTER_DISPLAY_NAMES}
 
     for stock in stocks:
         signals = compute_signals(stock)
-        for signal_key, (is_matching, display_name) in signals.items():
-            state_key = f"{stock['symbol']}|{signal_key}"
+        for filter_key, (is_matching, detail_suffix) in signals.items():
+            state_key = f"{stock['symbol']}|{filter_key}"
             was_matching = state.get(state_key, False)
             new_state[state_key] = is_matching
 
             if is_matching and not was_matching:
-                send_telegram_message(format_message(stock, display_name))
-                sent_count += 1
-                print(f"Notified: {stock['symbol']} -> {display_name}")
+                newly_matching_by_filter[filter_key].append((stock, detail_suffix))
+
+    sent_count = 0
+    for filter_key, entries in newly_matching_by_filter.items():
+        if not entries:
+            continue
+        send_telegram_message(format_group_message(filter_key, entries))
+        sent_count += 1
+        symbols = ", ".join(s["symbol"] for s, _ in entries)
+        print(f"Notified {FILTER_DISPLAY_NAMES[filter_key]}: {symbols}")
 
     save_state(state_ws, new_state, today_str)
-    print(f"Done. Sent {sent_count} new notification(s) this run.")
+    print(f"Done. Sent {sent_count} group notification(s) this run.")
 
 
 if __name__ == "__main__":

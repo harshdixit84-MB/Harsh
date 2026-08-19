@@ -175,7 +175,9 @@ def send_telegram_message(text):
 
 def format_ticker_line(stock, detail_suffix):
     target_str = f"₹{stock['buy_target']}" if stock["buy_target"] not in (None, "", 0) else "target not set"
-    return f"<b>{stock['symbol']}</b>{detail_suffix} — ₹{stock['price']} — Target: {target_str} — {stock['source'] or '-'}"
+    tv_url = f"https://www.tradingview.com/chart/?symbol=NSE:{stock['symbol']}"
+    symbol_link = f'<a href="{tv_url}"><b>{stock["symbol"]}</b></a>'
+    return f"{symbol_link}{detail_suffix} — ₹{stock['price']} — Target: {target_str} — {stock['source'] or '-'}"
 
 
 def format_group_message(filter_key, entries):

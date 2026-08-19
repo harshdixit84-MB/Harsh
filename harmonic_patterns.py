@@ -72,7 +72,7 @@ def get_or_create_sheet(spreadsheet, title, header_row):
 def get_active_symbols(spreadsheet):
     ws = spreadsheet.sheet1
     records = ws.get_all_records()
-    return sorted({r["symbol"] for r in records if r.get("status") == "active"})
+    return sorted({r["symbol"] for r in records if r.get("symbol")})
 
 
 def find_swing_pivots(df, k=SWING_FRACTAL_BARS):

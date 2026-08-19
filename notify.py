@@ -2,31 +2,29 @@
 Checks every tracked stock (active AND archived) against 5 signal filters --
 Near Target, Near Stoploss, Bullish Divergence, Bearish Divergence, and
 Reversal Confluence -- and sends ONE collective Telegram message per filter,
-listing every ticker that newly qualifies this run. No message is sent for
-a filter if nothing new qualifies.
+listing EVERY ticker currently matching that filter. Runs every scheduled
+hour during the day and resends the full current list each time (not just
+new entries) -- so whenever you check your phone, the latest message for
+each filter shows the complete, current picture for that day. A filter with
+zero matching stocks is simply skipped (no empty message sent).
 
 Divergence signals are restricted to patterns that FORMED TODAY: RSI_Divergence
 already tracks daily_days_ago/weekly_days_ago per stock, so a divergence that
 formed 3 days ago (even if still within rsi_divergence.py's own 7/14-day
-display window) will NOT trigger a notification here -- only days_ago == 0
-counts. Reversal Confluence's own RSI sub-signals use the same same-day rule;
-its harmonic-pattern and high-DV sub-signals have no formation date available
-in the sheet, so those stay presence-based (can't be restricted to "today").
-Near Target / Near Stoploss are continuous price-relative conditions, not
-one-off pattern events -- they don't have a "formed today" concept, so they
-rely only on the state-transition dedup below (which already means "first
-run this condition became true").
+display window) will NOT show up here -- only days_ago == 0 counts.
 
-Dedup: a "Notify_State" tab tracks whether each (symbol, filter) pair was
-matching on the previous run. Only a false->true transition counts as "new"
-and gets included in that filter's message.
+Reversal Confluence here is a STRICTER, same-day-only definition than the
+dashboard's 3-of-4 version: it requires BOTH daily AND weekly RSI bullish
+divergence to have formed on the same day. The dashboard's other two
+sub-signals (harmonic pattern, high delivery value) have no formation date
+anywhere in the sheet, so they can't be checked for "today" and were dropped
+here rather than left as a same-day/no-date inconsistency within one filter.
 
 Environment variables required:
   GOOGLE_SERVICE_ACCOUNT_KEY
   TELEGRAM_BOT_TOKEN
   TELEGRAM_CHAT_ID
 """
-import datetime
 import json
 import os
 
@@ -35,7 +33,6 @@ import requests
 from google.oauth2.service_account import Credentials
 
 SHEET_NAME = "Monthly Breakout Scan"
-STATE_SHEET = "Notify_State"
 WATCH_THRESHOLD = 2  # same 2% band used for Near Target / Near SL on the dashboard
 
 
@@ -65,10 +62,8 @@ def _to_int_or_none(value):
 
 
 def build_merged_stocks(spreadsheet):
-    "Mirrors the join logic in api/dashboard.js, in Python, so notify.py sees exactly what the dashboard sees."
+    "Mirrors the relevant parts of the join logic in api/dashboard.js, in Python. Only reads RSI_Divergence -- DV_Summary/Harmonic_Patterns aren't needed since Reversal here is RSI-only (see docstring)."
     main_rows = spreadsheet.sheet1.get_all_records()
-    dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
-    harmonic_by_symbol = read_tab_by_symbol(spreadsheet, "Harmonic_Patterns")
     rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
 
     stocks = []
@@ -98,12 +93,7 @@ def build_merged_stocks(spreadsheet):
             except (TypeError, ValueError):
                 pass
 
-        dv = dv_by_symbol.get(symbol, {})
-        harmonic = harmonic_by_symbol.get(symbol, {})
         rsi_div = rsi_by_symbol.get(symbol, {})
-
-        high_dv = str(dv.get("high_dv_tag", "")).strip().lower() == "true"
-        harmonic_pattern = harmonic.get("pattern_name", "") or ""
         rsi_daily_div = rsi_div.get("daily_divergence", "") or ""
         rsi_weekly_div = rsi_div.get("weekly_divergence", "") or ""
         rsi_daily_days_ago = _to_int_or_none(rsi_div.get("daily_days_ago"))
@@ -111,16 +101,6 @@ def build_merged_stocks(spreadsheet):
 
         daily_formed_today = rsi_daily_days_ago == 0
         weekly_formed_today = rsi_weekly_days_ago == 0
-
-        # Reversal's RSI sub-signals also require same-day formation; harmonic
-        # pattern and high-DV have no formation date in the sheet, so they
-        # stay presence-based.
-        reversal_score = sum([
-            "bullish" in harmonic_pattern.lower(),
-            rsi_daily_div.lower() == "bullish" and daily_formed_today,
-            rsi_weekly_div.lower() == "bullish" and weekly_formed_today,
-            high_dv,
-        ])
 
         stocks.append({
             "symbol": symbol,
@@ -133,7 +113,6 @@ def build_merged_stocks(spreadsheet):
             "rsi_weekly_divergence": rsi_weekly_div,
             "daily_formed_today": daily_formed_today,
             "weekly_formed_today": weekly_formed_today,
-            "reversal_score": reversal_score,
         })
 
     return stocks
@@ -170,8 +149,8 @@ def compute_signals(s):
             f" ({bearish_tf})" if bearish_tf else "",
         ),
         "reversal": (
-            s["reversal_score"] >= 3,
-            f" ({s['reversal_score']}/4)",
+            daily_bull_today and weekly_bull_today,
+            " (D+W same-day)",
         ),
     }
 
@@ -181,27 +160,8 @@ FILTER_DISPLAY_NAMES = {
     "near_sl": "Near Stoploss",
     "bullish_divergence": "Bullish Divergence (formed today)",
     "bearish_divergence": "Bearish Divergence (formed today)",
-    "reversal": "★ Reversal Confluence",
+    "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
 }
-
-
-def load_state(spreadsheet):
-    try:
-        ws = spreadsheet.worksheet(STATE_SHEET)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=STATE_SHEET, rows=1000, cols=3)
-        ws.update([["key", "state", "last_updated"]], "A1")
-        return ws, {}
-
-    rows = ws.get_all_records()
-    state = {r["key"]: str(r.get("state", "")).strip().lower() == "true" for r in rows if r.get("key")}
-    return ws, state
-
-
-def save_state(ws, state, today_str):
-    header = ["key", "state", "last_updated"]
-    rows = [[key, str(is_on), today_str] for key, is_on in sorted(state.items())]
-    ws.update([header] + rows, "A1")
 
 
 def send_telegram_message(text):
@@ -225,37 +185,29 @@ def format_group_message(filter_key, entries):
 
 
 def main():
-    today_str = str(datetime.date.today())
-
     client, spreadsheet = get_client_and_spreadsheet()
     stocks = build_merged_stocks(spreadsheet)
     print(f"Checking {len(stocks)} tracked stocks across {len(FILTER_DISPLAY_NAMES)} signal types.")
 
-    state_ws, state = load_state(spreadsheet)
-    new_state = {}
-    newly_matching_by_filter = {key: [] for key in FILTER_DISPLAY_NAMES}
+    matching_by_filter = {key: [] for key in FILTER_DISPLAY_NAMES}
 
     for stock in stocks:
         signals = compute_signals(stock)
         for filter_key, (is_matching, detail_suffix) in signals.items():
-            state_key = f"{stock['symbol']}|{filter_key}"
-            was_matching = state.get(state_key, False)
-            new_state[state_key] = is_matching
-
-            if is_matching and not was_matching:
-                newly_matching_by_filter[filter_key].append((stock, detail_suffix))
+            if is_matching:
+                matching_by_filter[filter_key].append((stock, detail_suffix))
 
     sent_count = 0
-    for filter_key, entries in newly_matching_by_filter.items():
+    for filter_key, entries in matching_by_filter.items():
         if not entries:
+            print(f"{FILTER_DISPLAY_NAMES[filter_key]}: 0 stocks, skipping message.")
             continue
         send_telegram_message(format_group_message(filter_key, entries))
         sent_count += 1
         symbols = ", ".join(s["symbol"] for s, _ in entries)
-        print(f"Notified {FILTER_DISPLAY_NAMES[filter_key]}: {symbols}")
+        print(f"Sent {FILTER_DISPLAY_NAMES[filter_key]} ({len(entries)}): {symbols}")
 
-    save_state(state_ws, new_state, today_str)
-    print(f"Done. Sent {sent_count} group notification(s) this run.")
+    print(f"Done. Sent {sent_count} message(s) this run.")
 
 
 if __name__ == "__main__":

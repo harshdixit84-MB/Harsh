@@ -180,6 +180,11 @@ module.exports = async (req, res) => {
       r.rsi = r.rsi !== "" ? parseFloat(r.rsi) : null;
       r.adx = r.adx !== "" ? parseFloat(r.adx) : null;
       r.stop_loss = r.stop_loss !== "" ? parseFloat(r.stop_loss) : null;
+      if (r.stop_loss && r.stop_loss > 0) {
+        r.distance_to_sl_pct = Math.round(((price - r.stop_loss) / r.stop_loss) * 10000) / 100;
+      } else {
+        r.distance_to_sl_pct = undefined;
+      }
       r.signal_score = r.signal_score !== "" ? parseInt(r.signal_score) : null;
       r.signal_label = r.signal_label || null;
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";

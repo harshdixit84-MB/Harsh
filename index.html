@@ -544,6 +544,23 @@ table.stock-table {
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
 
+.decision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.decision-badge.confirmed-buy { background: #198754; color: #ffffff; }
+.decision-badge.confirmed-sell { background: #c0392b; color: #ffffff; }
+.decision-badge.early-buy { background: rgba(25,135,84,0.14); color: #3ddc8a; border: 1px solid rgba(61,220,138,0.4); }
+.decision-badge.early-sell { background: rgba(192,57,43,0.14); color: #e5626b; border: 1px solid rgba(229,98,107,0.4); }
+
 .mono-cell {
   font-family: "IBM Plex Mono", monospace;
   white-space: nowrap;
@@ -698,8 +715,7 @@ LIVE
 <div class="quick-row">
 <label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
 <label class="chip-check" id="chip-needtarget"><input type="checkbox" data-quick="needtarget"><span>Need Target</span></label>
-<label class="chip-check" id="chip-wbreakout"><input type="checkbox" data-quick="wbreakout"><span>"W" Breakout</span></label>
-<label class="chip-check" id="chip-mbreakout"><input type="checkbox" data-quick="mbreakout"><span>"M" Breakout</span></label>
+<label class="chip-check" id="chip-confirmedbuy"><input type="checkbox" data-quick="confirmedBuy"><span>✔ Confirmed Buy</span></label>
 <label class="chip-check" id="chip-squeeze"><input type="checkbox" data-quick="squeeze"><span>◆ Squeeze</span></label>
 <label class="chip-check" id="chip-rsidbull"><input type="checkbox" data-quick="rsiDBull"><span>RSI D Bull</span></label>
 <label class="chip-check" id="chip-rsidbear"><input type="checkbox" data-quick="rsiDBear"><span>RSI D Bear</span></label>
@@ -778,7 +794,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
+let quickFilters = { neartarget: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -802,6 +818,19 @@ function buySell(stock) {
 
 function decision(stock) {
   return classify(stock) === "buyzone" ? "Confirmed" : "Watching";
+}
+
+function decisionBadge(stock) {
+  const map = {
+    "Confirmed Buy": { cls: "confirmed-buy", label: "Confirmed Buy" },
+    "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" },
+    "Early Buy Signal": { cls: "early-buy", label: "Early Buy" },
+    "Early Sell Signal": { cls: "early-sell", label: "Early Sell" },
+  };
+  const entry = map[stock.dv_decision];
+  if (!entry) return "";
+  const title = `Crossover held ${stock.adp_crossover_age ?? "?"}d · last ${stock.adp_recent_bias ? "10d leaning " + stock.adp_recent_bias : "10d mixed"}`;
+  return `<span class="decision-badge ${entry.cls}" title="${title}">${entry.label}</span>`;
 }
 
 function renderRow(stock) {
@@ -848,6 +877,7 @@ function renderRow(stock) {
       <td class="cell-symbol">
         <div class="symbol-line">
           <span class="symbol">${stock.symbol}</span>
+          ${decisionBadge(stock)}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
         </div>
         <div class="name">${stock.name || ""}</div>
@@ -896,8 +926,7 @@ function computeFilteredStocks() {
 
   if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");
   if (quickFilters.needtarget) filtered = filtered.filter((s) => classify(s) === "needtarget");
-  if (quickFilters.wbreakout) filtered = filtered.filter((s) => (s.wm_pattern || "").trim().toUpperCase().startsWith("W"));
-  if (quickFilters.mbreakout) filtered = filtered.filter((s) => (s.wm_pattern || "").trim().toUpperCase().startsWith("M"));
+  if (quickFilters.confirmedBuy) filtered = filtered.filter((s) => s.dv_decision === "Confirmed Buy");
   if (quickFilters.squeeze) filtered = filtered.filter((s) => !!s.consolidating);
   if (quickFilters.rsiDBull) filtered = filtered.filter((s) => (s.rsi_daily_divergence || "").toLowerCase() === "bullish");
   if (quickFilters.rsiDBear) filtered = filtered.filter((s) => (s.rsi_daily_divergence || "").toLowerCase() === "bearish");
@@ -1056,7 +1085,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, needtarget: false, wbreakout: false, mbreakout: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
+  quickFilters = { neartarget: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");

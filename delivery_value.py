@@ -82,8 +82,8 @@ HISTORY_HEADER = [
 ]
 SUMMARY_HEADER = [
     "symbol", "adp_5", "adp_20", "adp5_trend", "adp20_trend",
-    "crossover", "crossover_age", "recent_bias", "buying_selling_verdict",
-    "decision", "last_updated",
+    "crossover", "cross_state", "crossover_age", "recent_bias",
+    "buying_selling_verdict", "decision", "last_updated",
 ]
 
 HEADERS = {
@@ -462,6 +462,7 @@ def compute_summary(symbol_history):
         "adp5_trend": adp5_trend,
         "adp20_trend": adp20_trend,
         "crossover": crossover,
+        "cross_state": cross_state,
         "crossover_age": crossover_age,
         "recent_bias": recent_bias,
         "buying_selling_verdict": buying_selling_verdict,
@@ -508,11 +509,12 @@ def main():
             summary_rows.append([
                 symbol, result["adp_5"], result["adp_20"],
                 result["adp5_trend"], result["adp20_trend"],
-                result["crossover"], result["crossover_age"], result["recent_bias"],
-                result["buying_selling_verdict"], result["decision"], today_str,
+                result["crossover"], result["cross_state"], result["crossover_age"],
+                result["recent_bias"], result["buying_selling_verdict"],
+                result["decision"], today_str,
             ])
         else:
-            summary_rows.append([symbol, "", "", "insufficient history", "", "", "", "", "", "", today_str])
+            summary_rows.append([symbol, "", "", "insufficient history", "", "", "", "", "", "", "", today_str])
 
     summary_ws.clear()
     summary_ws.update(summary_rows, "A1")

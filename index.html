@@ -510,7 +510,8 @@ table.stock-table {
   color: var(--text-secondary);
 }
 .mini-tag.squeeze { color: #f28ab4; border-color: rgba(242,138,180,0.4); }
-.mini-tag.highdv { color: #5fd8ec; border-color: rgba(95,216,236,0.4); }
+.mini-tag.adp-rising { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
+.mini-tag.adp-falling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 .mini-tag.harmonic-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
 .mini-tag.harmonic-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 .mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
@@ -811,7 +812,10 @@ function renderRow(stock) {
   if (stock.archived) tags.push(`<span class="mini-tag archived" title="${stock.archived_reason || ""}">Archived</span>`);
   if (stock.reversal_score >= 2) tags.push(`<span class="mini-tag jackpot" title="${stock.reversal_score} of ${stock.reversal_total} reversal signals confirming">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
   if (stock.consolidating) tags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
-  if (stock.high_dv) tags.push(`<span class="mini-tag highdv">⬤ High DV</span>`);
+  if (stock.adp5_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
+  if (stock.adp5_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
+  if (stock.adp20_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
+  if (stock.adp20_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
   if (stock.harmonic_pattern) {
     const hc = stock.harmonic_pattern.toLowerCase().includes("bullish") ? "harmonic-bull" : "harmonic-bear";
     tags.push(`<span class="mini-tag ${hc}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}%">${stock.harmonic_pattern}</span>`);

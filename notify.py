@@ -137,11 +137,6 @@ def compute_signals(s):
     bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else ""]))
     bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else ""]))
 
-    dv_detail = ""
-    if s["dv_decision"] == "Confirmed Buy":
-        age = s["dv_crossover_age"]
-        dv_detail = f" (cross held {age}d, last 10d {s['dv_recent_bias'] or 'mixed'})"
-
     return {
         "near_target": (
             s["distance_pct"] is not None and 0 < s["distance_pct"] <= WATCH_THRESHOLD,
@@ -165,7 +160,7 @@ def compute_signals(s):
         ),
         "confirmed_buy": (
             s["dv_decision"] == "Confirmed Buy",
-            dv_detail,
+            "",
         ),
     }
 
@@ -189,11 +184,24 @@ def send_telegram_message(text):
         print(f"Telegram send failed: {resp.status_code} {resp.text}")
 
 
+def format_dv_context(stock):
+    "Delivery-based decision + crossover age, appended to every ticker line so it's visible in every message, not just the Confirmed Buy one."
+    decision = stock["dv_decision"]
+    if not decision:
+        return ""
+    age = stock["dv_crossover_age"]
+    age_str = f"{age}d" if age not in (None, "") else "?d"
+    return f" · DV: {decision} ({age_str})"
+
+
 def format_ticker_line(stock, detail_suffix):
     target_str = f"₹{stock['buy_target']}" if stock["buy_target"] not in (None, "", 0) else "target not set"
     tv_url = f"https://www.tradingview.com/chart/?symbol=NSE:{stock['symbol']}"
     symbol_link = f'<a href="{tv_url}"><b>{stock["symbol"]}</b></a>'
-    return f"{symbol_link}{detail_suffix} — ₹{stock['price']} — Target: {target_str} — {stock['source'] or '-'}"
+    return (
+        f"{symbol_link}{detail_suffix} — ₹{stock['price']} — Target: {target_str} — "
+        f"{stock['source'] or '-'}{format_dv_context(stock)}"
+    )
 
 
 def format_group_message(filter_key, entries):

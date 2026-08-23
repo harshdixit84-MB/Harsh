@@ -117,6 +117,7 @@ def build_merged_stocks(spreadsheet):
             "daily_formed_today": daily_formed_today,
             "weekly_formed_today": weekly_formed_today,
             "dv_decision": dv.get("decision", "") or "",
+            "dv_cross_state": dv.get("cross_state", "") or "",
             "dv_crossover_age": dv.get("crossover_age", ""),
             "dv_recent_bias": dv.get("recent_bias", "") or "",
         })
@@ -185,13 +186,14 @@ def send_telegram_message(text):
 
 
 def format_dv_context(stock):
-    "Delivery-based decision + crossover age, appended to every ticker line so it's visible in every message, not just the Confirmed Buy one."
-    decision = stock["dv_decision"]
-    if not decision:
+    "Raw ADP_5-vs-ADP_20 crossover state + how many days it has held -- kept deliberately separate from the Confirmed Buy/Sell decision, which is its own multi-condition signal. Appended to every ticker line in every message."
+    state = stock["dv_cross_state"]
+    if not state:
         return ""
     age = stock["dv_crossover_age"]
     age_str = f"{age}d" if age not in (None, "") else "?d"
-    return f" · DV: {decision} ({age_str})"
+    arrow = "5D↗20D ADP" if state == "Bullish" else "5D↘20D ADP"
+    return f" · {arrow} ({age_str})"
 
 
 def format_ticker_line(stock, detail_suffix):

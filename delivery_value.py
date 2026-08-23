@@ -1,21 +1,33 @@
 """
-Builds and maintains 120-day Delivery Value history for actively tracked
-stocks, using NSE's official daily bhavcopy archive.
+Builds and maintains Delivery % history for actively tracked stocks,
+using NSE's official daily bhavcopy archive.
 
-Delivery Value = DELIV_QTY x CLOSE_PRICE, stored in crores.
+Delivery % = DELIV_QTY / TTL_TRD_QNTY * 100
 
-Fixes applied after reviewing real data:
-1. NSE's archive sometimes serves stale/duplicate data for non-trading
-   days instead of a clean 404 (identical deliv_qty + close_price
-   repeated across dates). These are detected and skipped so they don't
-   pollute the history or dilute the trading-day count.
-2. The 120-day baseline uses the MEDIAN instead of the mean, since a
-   plain average gets dragged upward by the very spikes we're trying to
-   detect (Delivery Value can range 10x-20x within the same stock).
-3. "High DV" is no longer a simple day-count -- it requires CLUSTERING:
-   at least 3 elevated days within any 5-trading-day window in the last
-   30 days. A single huge spike (often just one block deal) no longer
-   triggers the tag on its own; sustained accumulation does.
+New logic (replaces the old Delivery-Value / median-baseline approach):
+1. Track Delivery % per day (not raw Delivery Value in crores).
+2. Maintain two rolling averages of Delivery %:
+     - ADP_5  (5-day)  -- "what's happening right now"
+     - ADP_20 (20-day) -- "what's normal for this stock"
+3. Flag a day when Delivery % > 1.3x ADP_20:
+     - price change that day positive -> "Potential Buying"
+     - price change that day negative -> "Potential Selling"
+4. Track ADP_5 vs ADP_20 the same way you'd track a moving-average
+   crossover on price:
+     - ADP_5 crossing above ADP_20 -> "Bullish Cross"
+     - ADP_5 crossing below ADP_20 -> "Bearish Cross"
+   and separately track whether each average is Rising/Falling/Flat
+   day-over-day (used directly by the dashboard).
+
+Fixes carried over from the previous version:
+- NSE's archive sometimes serves stale/duplicate data for non-trading
+  days instead of a clean 404 (identical deliv_qty + close_price
+  repeated across dates). These are detected and skipped so they don't
+  pollute the history or dilute the trading-day count.
+- Old history rows written by the previous (Delivery-Value) schema
+  don't have TTL_TRD_QNTY, so they can't produce a Delivery %. Those
+  rows are dropped on load and transparently re-fetched from the NSE
+  archive under the new schema.
 
 Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY
 """
@@ -24,7 +36,6 @@ import csv
 import io
 import json
 import os
-import statistics
 from datetime import date, datetime, timedelta
 
 import gspread
@@ -36,12 +47,21 @@ HISTORY_SHEET = "DV_History"
 SUMMARY_SHEET = "DV_Summary"
 
 TARGET_DAYS = 120
-HIGHLIGHT_MULTIPLIER = 2
-LOOKBACK_WINDOW = 75
-CLUSTER_WINDOW_SIZE = 5
-CLUSTER_MIN_ELEVATED_DAYS = 3
+SHORT_WINDOW = 5
+LONG_WINDOW = 20
+THRESHOLD_MULTIPLIER = 1.3
 MAX_CALENDAR_LOOKBACK = 350
 VERDICT_LOOKBACK_DAYS = 30
+
+HISTORY_HEADER = [
+    "symbol", "date", "deliv_qty", "ttl_trd_qnty", "close_price",
+    "high_price", "low_price", "delivery_pct", "adp_5", "adp_20",
+    "change_in_price", "verdict",
+]
+SUMMARY_HEADER = [
+    "symbol", "adp_5", "adp_20", "adp5_trend", "adp20_trend",
+    "crossover", "buying_selling_verdict", "last_updated",
+]
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
@@ -101,16 +121,16 @@ def parse_bhavcopy_for_symbols(csv_text, symbols_wanted):
         if symbol in symbols_wanted and series == "EQ":
             try:
                 deliv_qty = float(row["DELIV_QTY"])
+                ttl_trd_qnty = float(row["TTL_TRD_QNTY"])
                 close_price = float(row["CLOSE_PRICE"])
                 high_price = float(row["HIGH_PRICE"])
                 low_price = float(row["LOW_PRICE"])
-                delivery_value_cr = round((deliv_qty * close_price) / 1_00_00_000, 4)
                 results[symbol] = {
                     "deliv_qty": deliv_qty,
+                    "ttl_trd_qnty": ttl_trd_qnty,
                     "close_price": close_price,
                     "high_price": high_price,
                     "low_price": low_price,
-                    "delivery_value": delivery_value_cr,
                 }
             except (ValueError, KeyError):
                 continue
@@ -118,17 +138,23 @@ def parse_bhavcopy_for_symbols(csv_text, symbols_wanted):
 
 
 def load_existing_history(history_ws):
+    """Loads previously-saved history. Rows written under the old
+    (Delivery-Value) schema won't have ttl_trd_qnty -- those are
+    dropped here so backfill_history re-fetches them fresh from the
+    NSE archive under the new schema."""
     records = history_ws.get_all_records()
     history = {}
     for r in records:
+        if not r.get("ttl_trd_qnty"):
+            continue  # old-schema row, force a re-fetch
         symbol = r["symbol"]
         close_price = float(r["close_price"])
         history.setdefault(symbol, {})[r["date"]] = {
             "deliv_qty": float(r["deliv_qty"]),
+            "ttl_trd_qnty": float(r["ttl_trd_qnty"]),
             "close_price": close_price,
             "high_price": float(r["high_price"]) if r.get("high_price") not in (None, "") else close_price,
             "low_price": float(r["low_price"]) if r.get("low_price") not in (None, "") else close_price,
-            "delivery_value": float(r["delivery_value"]),
         }
     return history
 
@@ -227,46 +253,59 @@ def backfill_history(active_symbols, history):
     return history
 
 
-def compute_range_position(high, low, close):
-    if high == low:
-        return 0.5  # no intraday range (e.g. circuit-locked day) -- treat as neutral
-    return (close - low) / (high - low)
+def rolling_average(values, window):
+    """values: list of floats (or None) in chronological order.
+    Returns a same-length list where index i is the average of the
+    trailing `window` values ending at i, or None if there aren't
+    enough prior values yet (or a None sits in that window)."""
+    result = []
+    for i in range(len(values)):
+        if i + 1 < window:
+            result.append(None)
+            continue
+        window_vals = values[i - window + 1:i + 1]
+        if any(v is None for v in window_vals):
+            result.append(None)
+        else:
+            result.append(round(sum(window_vals) / window, 4))
+    return result
 
 
-def determine_daily_verdict(is_dv_high, price_change_pct, range_position):
-    if not is_dv_high or price_change_pct is None:
+def determine_daily_verdict(delivery_pct, adp_20, price_change_pct):
+    if delivery_pct is None or adp_20 is None or price_change_pct is None:
         return ""
-
-    if -2 <= price_change_pct <= 2:
-        if range_position >= 0.6:
-            return "Accumulation"
-        elif range_position <= 0.4:
-            return "Distribution"
-        return ""
-    elif price_change_pct > 2:
-        if range_position >= 0.8:
-            return "Fresh Entry"
-        return ""
-    elif price_change_pct < -2:
-        if range_position <= 0.2:
-            return "Fresh Selling"
-        return ""
+    if delivery_pct > THRESHOLD_MULTIPLIER * adp_20:
+        if price_change_pct > 0:
+            return "Potential Buying"
+        elif price_change_pct < 0:
+            return "Potential Selling"
     return ""
 
 
-def enrich_history_with_verdicts(symbol_history):
-    """Adds change_in_price and verdict to every day in a symbol's history.
-    Requires the full history to compute the 120-day median baseline."""
+def enrich_history(symbol_history):
+    """Adds delivery_pct, adp_5, adp_20, adp_diff, change_in_price and
+    verdict to every day in a symbol's history."""
     dates_sorted = sorted(symbol_history.keys())
-    values = [symbol_history[d]["delivery_value"] for d in dates_sorted]
 
-    if len(values) < TARGET_DAYS:
-        median_dv_120 = None
-    else:
-        median_dv_120 = statistics.median(values)
+    delivery_pcts = []
+    for d in dates_sorted:
+        day = symbol_history[d]
+        pct = round((day["deliv_qty"] / day["ttl_trd_qnty"]) * 100, 4) if day.get("ttl_trd_qnty") else None
+        day["delivery_pct"] = pct
+        delivery_pcts.append(pct)
+
+    adp5_list = rolling_average(delivery_pcts, SHORT_WINDOW)
+    adp20_list = rolling_average(delivery_pcts, LONG_WINDOW)
 
     for i, d in enumerate(dates_sorted):
         day = symbol_history[d]
+        day["adp_5"] = adp5_list[i]
+        day["adp_20"] = adp20_list[i]
+        day["adp_diff"] = (
+            round(adp5_list[i] - adp20_list[i], 4)
+            if adp5_list[i] is not None and adp20_list[i] is not None
+            else None
+        )
 
         if i == 0:
             day["change_in_price"] = None
@@ -275,71 +314,63 @@ def enrich_history_with_verdicts(symbol_history):
 
         prev_close = symbol_history[dates_sorted[i - 1]]["close_price"]
         price_change_pct = ((day["close_price"] - prev_close) / prev_close) * 100 if prev_close else None
-        range_position = compute_range_position(day["high_price"], day["low_price"], day["close_price"])
-
-        is_dv_high = (
-            median_dv_120 is not None
-            and day["delivery_value"] >= HIGHLIGHT_MULTIPLIER * median_dv_120
-        )
-
         day["change_in_price"] = round(price_change_pct, 2) if price_change_pct is not None else None
-        day["verdict"] = determine_daily_verdict(is_dv_high, price_change_pct, range_position)
+        day["verdict"] = determine_daily_verdict(day["delivery_pct"], day["adp_20"], price_change_pct)
 
     return symbol_history
 
 
-def compute_summary(symbol, symbol_history):
+def trend_label(curr, prev_val):
+    if curr is None or prev_val is None:
+        return ""
+    if curr > prev_val:
+        return "Rising"
+    if curr < prev_val:
+        return "Falling"
+    return "Flat"
+
+
+def compute_summary(symbol_history):
     dates_sorted = sorted(symbol_history.keys())
-    values = [symbol_history[d]["delivery_value"] for d in dates_sorted]
+    if len(dates_sorted) < LONG_WINDOW + 1:
+        return None  # not enough history yet for a 20-day average plus a day-over-day comparison
 
-    if len(values) < TARGET_DAYS:
-        return None
+    latest = symbol_history[dates_sorted[-1]]
+    prev = symbol_history[dates_sorted[-2]]
 
-    median_dv_120 = statistics.median(values)
+    adp_5 = latest.get("adp_5")
+    adp_20 = latest.get("adp_20")
 
-    start_idx = len(dates_sorted) - LOOKBACK_WINDOW
-    last_N_dates = dates_sorted[start_idx:]
-    last_N_values = [symbol_history[d]["delivery_value"] for d in last_N_dates]
+    adp5_trend = trend_label(adp_5, prev.get("adp_5"))
+    adp20_trend = trend_label(adp_20, prev.get("adp_20"))
 
-    days_above_baseline = sum(1 for v in last_N_values if v > median_dv_120)
-    highlighted_days = [
-        d for d in last_N_dates
-        if symbol_history[d]["delivery_value"] >= HIGHLIGHT_MULTIPLIER * median_dv_120
-    ]
+    crossover = ""
+    curr_diff = latest.get("adp_diff")
+    prev_diff = prev.get("adp_diff")
+    if curr_diff is not None and prev_diff is not None:
+        if prev_diff <= 0 and curr_diff > 0:
+            crossover = "Bullish Cross"
+        elif prev_diff >= 0 and curr_diff < 0:
+            crossover = "Bearish Cross"
 
-    # Day-over-day price change for each day in the window, using the
-    # previous trading day's close (from full history, not just the window)
-    price_changes = []
-    for i, d in enumerate(last_N_dates):
-        idx_in_full = start_idx + i
-        if idx_in_full == 0:
-            price_changes.append(None)
-            continue
-        prev_close = symbol_history[dates_sorted[idx_in_full - 1]]["close_price"]
-        curr_close = symbol_history[d]["close_price"]
-        price_changes.append(((curr_close - prev_close) / prev_close) * 100 if prev_close else None)
-
-    # Clustering check: any 5-trading-day window with at least 3 days that
-    # are both genuinely elevated (2x median) AND quiet on price (<2% move)
-    # -- the classic "big volume, flat price" signature of quiet
-    # accumulation. Note: this pattern is directionally ambiguous on its
-    # own -- it can also reflect quiet distribution, not just buying.
-    elevated_flags = [
-        (v >= HIGHLIGHT_MULTIPLIER * median_dv_120) and (pc is not None and abs(pc) < 2)
-        for v, pc in zip(last_N_values, price_changes)
-    ]
-    has_cluster = False
-    for i in range(len(elevated_flags) - CLUSTER_WINDOW_SIZE + 1):
-        window = elevated_flags[i:i + CLUSTER_WINDOW_SIZE]
-        if sum(window) >= CLUSTER_MIN_ELEVATED_DAYS:
-            has_cluster = True
-            break
+    last_30_dates = dates_sorted[-VERDICT_LOOKBACK_DAYS:]
+    verdicts = [symbol_history[d].get("verdict", "") for d in last_30_dates]
+    buying_count = verdicts.count("Potential Buying")
+    selling_count = verdicts.count("Potential Selling")
+    if buying_count > selling_count:
+        buying_selling_verdict = "Heavy Buying"
+    elif selling_count > buying_count:
+        buying_selling_verdict = "Heavy Selling"
+    else:
+        buying_selling_verdict = ""
 
     return {
-        "median_dv_120": round(median_dv_120, 2),
-        "high_dv_tag": has_cluster,
-        "days_above_baseline_last30": days_above_baseline,
-        "highlighted_days_count": len(highlighted_days),
+        "adp_5": adp_5,
+        "adp_20": adp_20,
+        "adp5_trend": adp5_trend,
+        "adp20_trend": adp20_trend,
+        "crossover": crossover,
+        "buying_selling_verdict": buying_selling_verdict,
     }
 
 
@@ -348,30 +379,24 @@ def main():
     spreadsheet = client.open(SHEET_NAME)
 
     active_symbols = get_active_symbols(spreadsheet)
-    print(f"Tracking Delivery Value for {len(active_symbols)} active symbols.")
+    print(f"Tracking Delivery % for {len(active_symbols)} active symbols.")
 
-    history_ws = get_or_create_sheet(
-        spreadsheet, HISTORY_SHEET,
-        ["symbol", "date", "deliv_qty", "close_price", "high_price", "low_price", "delivery_value", "change_in_price", "verdict"]
-    )
-    summary_ws = get_or_create_sheet(
-        spreadsheet, SUMMARY_SHEET,
-        ["symbol", "median_dv_120", "high_dv_tag", "days_above_baseline_last30",
-         "highlighted_days_count", "buying_selling_verdict", "last_updated"]
-    )
+    history_ws = get_or_create_sheet(spreadsheet, HISTORY_SHEET, HISTORY_HEADER)
+    summary_ws = get_or_create_sheet(spreadsheet, SUMMARY_SHEET, SUMMARY_HEADER)
 
     history = load_existing_history(history_ws)
     history = backfill_history(active_symbols, history)
 
-    # Enrich every symbol's history with change_in_price and verdict per day
     for symbol in history:
-        history[symbol] = enrich_history_with_verdicts(history[symbol])
+        history[symbol] = enrich_history(history[symbol])
 
-    history_rows = [["symbol", "date", "deliv_qty", "close_price", "delivery_value", "change_in_price", "verdict"]]
+    history_rows = [HISTORY_HEADER]
     for symbol, days in history.items():
         for d, v in days.items():
             history_rows.append([
-                symbol, d, v["deliv_qty"], v["close_price"], v["delivery_value"],
+                symbol, d, v["deliv_qty"], v["ttl_trd_qnty"], v["close_price"],
+                v["high_price"], v["low_price"], v.get("delivery_pct", ""),
+                v.get("adp_5", ""), v.get("adp_20", ""),
                 v.get("change_in_price", ""), v.get("verdict", ""),
             ])
     history_ws.clear()
@@ -379,33 +404,19 @@ def main():
     print(f"Wrote {len(history_rows) - 1} history rows (after deduplication).")
 
     today_str = str(date.today())
-    summary_rows = [["symbol", "median_dv_120", "high_dv_tag", "days_above_baseline_last30",
-                      "highlighted_days_count", "buying_selling_verdict", "last_updated"]]
+    summary_rows = [SUMMARY_HEADER]
     for symbol in active_symbols:
         symbol_history = history.get(symbol, {})
-        result = compute_summary(symbol, symbol_history)
+        result = compute_summary(symbol_history)
 
         if result:
-            dates_sorted = sorted(symbol_history.keys())
-            last_30_dates = dates_sorted[-VERDICT_LOOKBACK_DAYS:]
-            verdicts = [symbol_history[d].get("verdict", "") for d in last_30_dates]
-            accumulation_count = verdicts.count("Accumulation")
-            distribution_count = verdicts.count("Distribution")
-
-            if accumulation_count > distribution_count:
-                buying_selling_verdict = "Heavy Buying"
-            elif distribution_count > accumulation_count:
-                buying_selling_verdict = "Heavy Selling"
-            else:
-                buying_selling_verdict = ""
-
             summary_rows.append([
-                symbol, result["median_dv_120"], result["high_dv_tag"],
-                result["days_above_baseline_last30"], result["highlighted_days_count"],
-                buying_selling_verdict, today_str,
+                symbol, result["adp_5"], result["adp_20"],
+                result["adp5_trend"], result["adp20_trend"],
+                result["crossover"], result["buying_selling_verdict"], today_str,
             ])
         else:
-            summary_rows.append([symbol, "", "insufficient history", "", "", "", today_str])
+            summary_rows.append([symbol, "", "", "insufficient history", "", "", "", today_str])
 
     summary_ws.clear()
     summary_ws.update(summary_rows, "A1")

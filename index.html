@@ -516,6 +516,65 @@ table.stock-table {
 .mini-tag.dv-selling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 .mini-tag.cross-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); font-weight: 700; }
 .mini-tag.cross-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); font-weight: 700; }
+
+.notes-toggle {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.notes-toggle:hover { color: var(--text-primary); border-color: var(--text-primary); }
+.notes-toggle.has-notes { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
+
+.notes-row td { background: var(--surface-2); padding: 12px 14px; }
+.notes-panel { display: flex; flex-direction: column; gap: 10px; }
+.notes-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+.note-entry {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+.note-date { flex-shrink: 0; color: var(--text-secondary); font-size: 10px; white-space: nowrap; }
+.note-text { color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+.note-empty { font-size: 12px; color: var(--text-secondary); padding: 4px 0; }
+.notes-add { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.notes-input {
+  flex: 1;
+  min-width: 200px;
+  min-height: 54px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  resize: vertical;
+}
+.notes-input:focus { outline: none; border-color: var(--accent-tracking); }
+.notes-save-btn {
+  background: var(--accent-buy);
+  border: none;
+  color: white;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.notes-save-btn:hover { opacity: 0.9; }
+.notes-save-btn.saving { opacity: 0.5; pointer-events: none; }
 .mini-tag.harmonic-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
 .mini-tag.harmonic-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 .mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
@@ -749,8 +808,8 @@ LIVE
 
 <select class="dd-select" id="sel-crossage">
 <option value="all">Cross Age: All</option>
-<option value="1">Cross Age: 1+ d (just crossed)</option>
-<option value="3">Cross Age: 3+ d (confirmed threshold)</option>
+<option value="1">Cross Age: 1+ d</option>
+<option value="3">Cross Age: 3+ d</option>
 <option value="5">Cross Age: 5+ d</option>
 <option value="10">Cross Age: 10+ d</option>
 </select>
@@ -809,6 +868,11 @@ let sourceFilter = "all";
 let crossAgeFilter = "all";
 let cmpSortDir = null; // null | "asc" | "desc"
 let latestStocks = [];
+let expandedNotes = new Set();
+
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 function classify(stock) {
   if (stock.distance_pct === undefined) return "needtarget";
@@ -844,6 +908,27 @@ function decisionBadge(stock) {
   return `<span class="decision-badge ${entry.cls}" title="${title}">${entry.label}${ageStr}</span>`;
 }
 
+function renderNotesRow(stock) {
+  const comments = (stock.comments || []).slice().sort((a, b) => (b.created_at || b.date || "").localeCompare(a.created_at || a.date || ""));
+  const list = comments.length
+    ? comments.map((c) => `<div class="note-entry"><span class="note-date">${escapeHtml(c.date)}</span><span class="note-text">${escapeHtml(c.comment)}</span></div>`).join("")
+    : `<div class="note-empty">No notes yet for ${stock.symbol}.</div>`;
+
+  return `
+    <tr class="notes-row" data-notes-for="${stock.symbol}">
+      <td colspan="6">
+        <div class="notes-panel">
+          <div class="notes-list">${list}</div>
+          <div class="notes-add">
+            <textarea class="notes-input" placeholder="Add an observation for ${stock.symbol}…" data-symbol="${stock.symbol}"></textarea>
+            <button class="notes-save-btn" data-symbol="${stock.symbol}">Save Note</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 function renderRow(stock) {
   const cls = classify(stock);
   const bs = buySell(stock);
@@ -862,8 +947,16 @@ function renderRow(stock) {
   if (stock.adp20_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
   if (stock.buying_selling_verdict === "Heavy Buying") tags.push(`<span class="mini-tag dv-buying" title="Delivery % exceeded 1.3x its 20-day baseline on more up-days than down-days, last 30 sessions">Heavy Buying</span>`);
   if (stock.buying_selling_verdict === "Heavy Selling") tags.push(`<span class="mini-tag dv-selling" title="Delivery % exceeded 1.3x its 20-day baseline on more down-days than up-days, last 30 sessions">Heavy Selling</span>`);
-  if (stock.adp_crossover === "Bullish Cross") tags.push(`<span class="mini-tag cross-bull" title="5-day avg delivery % just crossed above the 20-day avg">5D↗20D ADP</span>`);
-  if (stock.adp_crossover === "Bearish Cross") tags.push(`<span class="mini-tag cross-bear" title="5-day avg delivery % just crossed below the 20-day avg">5D↘20D ADP</span>`);
+  if (stock.adp_cross_state === "Bullish") {
+    const age = stock.adp_crossover_age;
+    const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
+    tags.push(`<span class="mini-tag cross-bull" title="5-day avg delivery % is currently above the 20-day avg">5D↗20D ADP${ageStr}</span>`);
+  }
+  if (stock.adp_cross_state === "Bearish") {
+    const age = stock.adp_crossover_age;
+    const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
+    tags.push(`<span class="mini-tag cross-bear" title="5-day avg delivery % is currently below the 20-day avg">5D↘20D ADP${ageStr}</span>`);
+  }
   if (stock.harmonic_pattern) {
     const hc = stock.harmonic_pattern.toLowerCase().includes("bullish") ? "harmonic-bull" : "harmonic-bear";
     tags.push(`<span class="mini-tag ${hc}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}%">${stock.harmonic_pattern}</span>`);
@@ -890,6 +983,7 @@ function renderRow(stock) {
           <span class="symbol">${stock.symbol}</span>
           ${decisionBadge(stock)}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
+          <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
         <div class="name">${stock.name || ""}</div>
         <div class="tag-row">${tags.join("")}</div>
@@ -915,6 +1009,7 @@ function renderRow(stock) {
         </div>
       </td>
     </tr>
+    ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
   `;
 }
 
@@ -1024,6 +1119,53 @@ async function loadDashboard() {
 }
 
 document.getElementById("rows").addEventListener("click", async (e) => {
+  if (e.target.classList.contains("notes-toggle")) {
+    const symbol = e.target.dataset.symbol;
+    if (expandedNotes.has(symbol)) {
+      expandedNotes.delete(symbol);
+    } else {
+      expandedNotes.add(symbol);
+    }
+    render();
+    return;
+  }
+
+  if (e.target.classList.contains("notes-save-btn")) {
+    const btn = e.target;
+    const symbol = btn.dataset.symbol;
+    const textarea = document.querySelector(`.notes-input[data-symbol="${symbol}"]`);
+    const comment = textarea.value.trim();
+
+    if (!comment) {
+      textarea.style.borderColor = "var(--accent-loss)";
+      return;
+    }
+
+    btn.classList.add("saving");
+    btn.textContent = "…";
+
+    try {
+      const res = await fetch("/api/add-comment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, comment }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to save note");
+      }
+
+      expandedNotes.add(symbol); // keep the panel open after saving
+      await loadDashboard();
+    } catch (err) {
+      btn.classList.remove("saving");
+      btn.textContent = "Save Note";
+      alert("Could not save note: " + err.message);
+    }
+    return;
+  }
+
   if (e.target.classList.contains("save-btn")) {
     const btn = e.target;
     const symbol = btn.dataset.symbol;

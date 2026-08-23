@@ -19,22 +19,28 @@ module.exports = async (req, res) => {
     try {
       const dvResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "DV_Summary!A1:G1000",
+        range: "DV_Summary!A1:H1000",
       });
       const dvRows = dvResponse.data.values || [];
       if (dvRows.length > 0) {
         const dvHeaders = dvRows[0];
         const symbolIdx = dvHeaders.indexOf("symbol");
-        const tagIdx = dvHeaders.indexOf("high_dv_tag");
+        const adp5Idx = dvHeaders.indexOf("adp_5");
+        const adp20Idx = dvHeaders.indexOf("adp_20");
+        const adp5TrendIdx = dvHeaders.indexOf("adp5_trend");
+        const adp20TrendIdx = dvHeaders.indexOf("adp20_trend");
+        const crossoverIdx = dvHeaders.indexOf("crossover");
         const verdictIdx = dvHeaders.indexOf("buying_selling_verdict");
         dvRows.slice(1).forEach((row) => {
           const symbol = row[symbolIdx];
-          const tag = row[tagIdx];
-          const verdict = verdictIdx !== -1 ? row[verdictIdx] : "";
           if (symbol) {
             dvSummaryBysymbol[symbol] = {
-              highDv: tag === "TRUE" || tag === "true" || tag === true,
-              buyingSellingVerdict: verdict || "",
+              adp5: adp5Idx !== -1 ? row[adp5Idx] : "",
+              adp20: adp20Idx !== -1 ? row[adp20Idx] : "",
+              adp5Trend: adp5TrendIdx !== -1 ? row[adp5TrendIdx] || "" : "",
+              adp20Trend: adp20TrendIdx !== -1 ? row[adp20TrendIdx] || "" : "",
+              crossover: crossoverIdx !== -1 ? row[crossoverIdx] || "" : "",
+              buyingSellingVerdict: verdictIdx !== -1 ? row[verdictIdx] || "" : "",
             };
           }
         });
@@ -188,8 +194,14 @@ module.exports = async (req, res) => {
       r.signal_score = r.signal_score !== "" ? parseInt(r.signal_score) : null;
       r.signal_label = r.signal_label || null;
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";
-      r.high_dv = dvSummaryBysymbol[r.symbol]?.highDv || false;
-      r.buying_selling_verdict = dvSummaryBysymbol[r.symbol]?.buyingSellingVerdict || "";
+
+      const dv = dvSummaryBysymbol[r.symbol];
+      r.adp_5 = dv && dv.adp5 !== "" ? parseFloat(dv.adp5) : null;
+      r.adp_20 = dv && dv.adp20 !== "" ? parseFloat(dv.adp20) : null;
+      r.adp5_trend = dv?.adp5Trend || "";
+      r.adp20_trend = dv?.adp20Trend || "";
+      r.adp_crossover = dv?.crossover || "";
+      r.buying_selling_verdict = dv?.buyingSellingVerdict || "";
       r.harmonic_pattern = harmonicBysymbol[r.symbol]?.pattern || null;
       r.harmonic_status = harmonicBysymbol[r.symbol]?.status || "";
       r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
@@ -207,11 +219,14 @@ module.exports = async (req, res) => {
       // Reversal confluence -- bottom-fishing signals that genuinely cluster
       // together (unlike breakout signals, which conflict with each other
       // and are already covered by the screeners). Missing data = not satisfied.
+      // Delivery-based leg now uses "Heavy Buying" (accumulation over the
+      // last 30 days per the new ADP-threshold flag) in place of the old
+      // one-off high_dv tag.
       const reversalChecks = [
         (r.harmonic_pattern || "").toLowerCase().includes("bullish"),   // Harmonic bullish
         (r.rsi_daily_divergence || "").toLowerCase() === "bullish",     // RSI daily divergence
         (r.rsi_weekly_divergence || "").toLowerCase() === "bullish",    // RSI weekly divergence
-        !!r.high_dv,                                                    // High delivery value (accumulation at the low)
+        r.buying_selling_verdict === "Heavy Buying",                    // Sustained delivery accumulation
       ];
       r.reversal_score = reversalChecks.filter(Boolean).length;
       r.reversal_total = reversalChecks.length;

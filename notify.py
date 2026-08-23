@@ -62,9 +62,10 @@ def _to_int_or_none(value):
 
 
 def build_merged_stocks(spreadsheet):
-    "Mirrors the relevant parts of the join logic in api/dashboard.js, in Python. Only reads RSI_Divergence -- DV_Summary/Harmonic_Patterns aren't needed since Reversal here is RSI-only (see docstring)."
+    "Mirrors the relevant parts of the join logic in api/dashboard.js, in Python."
     main_rows = spreadsheet.sheet1.get_all_records()
     rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
+    dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
 
     stocks = []
     for r in main_rows:
@@ -102,6 +103,8 @@ def build_merged_stocks(spreadsheet):
         daily_formed_today = rsi_daily_days_ago == 0
         weekly_formed_today = rsi_weekly_days_ago == 0
 
+        dv = dv_by_symbol.get(symbol, {})
+
         stocks.append({
             "symbol": symbol,
             "source": r.get("source", ""),
@@ -113,6 +116,9 @@ def build_merged_stocks(spreadsheet):
             "rsi_weekly_divergence": rsi_weekly_div,
             "daily_formed_today": daily_formed_today,
             "weekly_formed_today": weekly_formed_today,
+            "dv_decision": dv.get("decision", "") or "",
+            "dv_crossover_age": dv.get("crossover_age", ""),
+            "dv_recent_bias": dv.get("recent_bias", "") or "",
         })
 
     return stocks
@@ -130,6 +136,11 @@ def compute_signals(s):
 
     bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else ""]))
     bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else ""]))
+
+    dv_detail = ""
+    if s["dv_decision"] == "Confirmed Buy":
+        age = s["dv_crossover_age"]
+        dv_detail = f" (cross held {age}d, last 10d {s['dv_recent_bias'] or 'mixed'})"
 
     return {
         "near_target": (
@@ -152,6 +163,10 @@ def compute_signals(s):
             daily_bull_today and weekly_bull_today,
             " (D+W same-day)",
         ),
+        "confirmed_buy": (
+            s["dv_decision"] == "Confirmed Buy",
+            dv_detail,
+        ),
     }
 
 
@@ -161,6 +176,7 @@ FILTER_DISPLAY_NAMES = {
     "bullish_divergence": "Bullish Divergence (formed today)",
     "bearish_divergence": "Bearish Divergence (formed today)",
     "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
+    "confirmed_buy": "✅ Confirmed Buy (Delivery %)",
 }
 
 

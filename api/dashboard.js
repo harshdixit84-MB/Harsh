@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
     try {
       const dvResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "DV_Summary!A1:H1000",
+        range: "DV_Summary!A1:L1000",
       });
       const dvRows = dvResponse.data.values || [];
       if (dvRows.length > 0) {
@@ -30,7 +30,11 @@ module.exports = async (req, res) => {
         const adp5TrendIdx = dvHeaders.indexOf("adp5_trend");
         const adp20TrendIdx = dvHeaders.indexOf("adp20_trend");
         const crossoverIdx = dvHeaders.indexOf("crossover");
+        const crossStateIdx = dvHeaders.indexOf("cross_state");
+        const crossoverAgeIdx = dvHeaders.indexOf("crossover_age");
+        const recentBiasIdx = dvHeaders.indexOf("recent_bias");
         const verdictIdx = dvHeaders.indexOf("buying_selling_verdict");
+        const decisionIdx = dvHeaders.indexOf("decision");
         dvRows.slice(1).forEach((row) => {
           const symbol = row[symbolIdx];
           if (symbol) {
@@ -40,7 +44,11 @@ module.exports = async (req, res) => {
               adp5Trend: adp5TrendIdx !== -1 ? row[adp5TrendIdx] || "" : "",
               adp20Trend: adp20TrendIdx !== -1 ? row[adp20TrendIdx] || "" : "",
               crossover: crossoverIdx !== -1 ? row[crossoverIdx] || "" : "",
+              crossState: crossStateIdx !== -1 ? row[crossStateIdx] || "" : "",
+              crossoverAge: crossoverAgeIdx !== -1 ? row[crossoverAgeIdx] || "" : "",
+              recentBias: recentBiasIdx !== -1 ? row[recentBiasIdx] || "" : "",
               buyingSellingVerdict: verdictIdx !== -1 ? row[verdictIdx] || "" : "",
+              decision: decisionIdx !== -1 ? row[decisionIdx] || "" : "",
             };
           }
         });
@@ -143,6 +151,36 @@ module.exports = async (req, res) => {
       // RSI_Divergence tab may not exist yet -- proceed without it
     }
 
+    let notesBysymbol = {};
+    try {
+      const notesResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Ticker_Notes!A1:E20000",
+      });
+      const notesRows = notesResponse.data.values || [];
+      if (notesRows.length > 0) {
+        const notesHeaders = notesRows[0];
+        const idIdx = notesHeaders.indexOf("id");
+        const symbolIdx = notesHeaders.indexOf("symbol");
+        const dateIdx = notesHeaders.indexOf("date");
+        const commentIdx = notesHeaders.indexOf("comment");
+        const createdIdx = notesHeaders.indexOf("created_at");
+        notesRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (!symbol) return;
+          if (!notesBysymbol[symbol]) notesBysymbol[symbol] = [];
+          notesBysymbol[symbol].push({
+            id: idIdx !== -1 ? row[idIdx] || "" : "",
+            date: dateIdx !== -1 ? row[dateIdx] || "" : "",
+            comment: commentIdx !== -1 ? row[commentIdx] || "" : "",
+            created_at: createdIdx !== -1 ? row[createdIdx] || "" : "",
+          });
+        });
+      }
+    } catch (e) {
+      // Ticker_Notes tab may not exist yet -- proceed without it (created on first note added)
+    }
+
     const rows = response.data.values || [];
     if (rows.length === 0) {
       res.status(200).json({ stocks: [], syncedAt: new Date().toISOString() });
@@ -201,7 +239,11 @@ module.exports = async (req, res) => {
       r.adp5_trend = dv?.adp5Trend || "";
       r.adp20_trend = dv?.adp20Trend || "";
       r.adp_crossover = dv?.crossover || "";
+      r.adp_cross_state = dv?.crossState || "";
+      r.adp_crossover_age = dv && dv.crossoverAge !== "" ? parseInt(dv.crossoverAge) : null;
+      r.adp_recent_bias = dv?.recentBias || "";
       r.buying_selling_verdict = dv?.buyingSellingVerdict || "";
+      r.dv_decision = dv?.decision || "";
       r.harmonic_pattern = harmonicBysymbol[r.symbol]?.pattern || null;
       r.harmonic_status = harmonicBysymbol[r.symbol]?.status || "";
       r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
@@ -215,6 +257,7 @@ module.exports = async (req, res) => {
       r.rsi_daily_days_ago = rsiDivBysymbol[r.symbol]?.dailyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.dailyDaysAgo : null;
       r.rsi_weekly_divergence = rsiDivBysymbol[r.symbol]?.weeklyDivergence || null;
       r.rsi_weekly_days_ago = rsiDivBysymbol[r.symbol]?.weeklyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.weeklyDaysAgo : null;
+      r.comments = notesBysymbol[r.symbol] || [];
 
       // Reversal confluence -- bottom-fishing signals that genuinely cluster
       // together (unlike breakout signals, which conflict with each other

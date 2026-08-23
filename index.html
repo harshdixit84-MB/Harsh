@@ -746,6 +746,14 @@ LIVE
 <option value="Consolidation">Source: Consolidation</option>
 <option value="Near52WLow">Source: Near 52W Low</option>
 </select>
+
+<select class="dd-select" id="sel-crossage">
+<option value="all">Cross Age: All</option>
+<option value="1">Cross Age: 1+ d (just crossed)</option>
+<option value="3">Cross Age: 3+ d (confirmed threshold)</option>
+<option value="5">Cross Age: 5+ d</option>
+<option value="10">Cross Age: 10+ d</option>
+</select>
 </div>
 </div>
 
@@ -798,6 +806,7 @@ let quickFilters = { neartarget: false, needtarget: false, confirmedBuy: false, 
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
+let crossAgeFilter = "all";
 let cmpSortDir = null; // null | "asc" | "desc"
 let latestStocks = [];
 
@@ -829,8 +838,10 @@ function decisionBadge(stock) {
   };
   const entry = map[stock.dv_decision];
   if (!entry) return "";
-  const title = `Crossover held ${stock.adp_crossover_age ?? "?"}d · last ${stock.adp_recent_bias ? "10d leaning " + stock.adp_recent_bias : "10d mixed"}`;
-  return `<span class="decision-badge ${entry.cls}" title="${title}">${entry.label}</span>`;
+  const age = stock.adp_crossover_age;
+  const ageStr = age !== null && age !== undefined && age !== "" ? ` · ${age}d` : "";
+  const title = `Crossover held ${age ?? "?"}d · last 10d leaning ${stock.adp_recent_bias || "mixed"}`;
+  return `<span class="decision-badge ${entry.cls}" title="${title}">${entry.label}${ageStr}</span>`;
 }
 
 function renderRow(stock) {
@@ -922,6 +933,11 @@ function computeFilteredStocks() {
 
   if (sourceFilter !== "all") {
     filtered = filtered.filter((s) => (s.source || "").split(",").includes(sourceFilter));
+  }
+
+  if (crossAgeFilter !== "all") {
+    const minAge = parseInt(crossAgeFilter, 10);
+    filtered = filtered.filter((s) => s.adp_crossover_age !== null && s.adp_crossover_age !== undefined && Number(s.adp_crossover_age) >= minAge);
   }
 
   if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");
@@ -1077,6 +1093,11 @@ document.getElementById("sel-source").addEventListener("change", (e) => {
   render();
 });
 
+document.getElementById("sel-crossage").addEventListener("change", (e) => {
+  crossAgeFilter = e.target.value;
+  render();
+});
+
 document.getElementById("th-cmp").addEventListener("click", () => {
   cmpSortDir = cmpSortDir === "asc" ? "desc" : cmpSortDir === "desc" ? null : "asc";
   render();
@@ -1093,6 +1114,7 @@ document.getElementById("reset-filters").addEventListener("click", () => {
   buysellFilter = "all"; document.getElementById("sel-buysell").value = "all";
   decisionFilter = "all"; document.getElementById("sel-decision").value = "all";
   sourceFilter = "all"; document.getElementById("sel-source").value = "all";
+  crossAgeFilter = "all"; document.getElementById("sel-crossage").value = "all";
   cmpSortDir = null;
   render();
 });

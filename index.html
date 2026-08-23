@@ -512,6 +512,10 @@ table.stock-table {
 .mini-tag.squeeze { color: #f28ab4; border-color: rgba(242,138,180,0.4); }
 .mini-tag.adp-rising { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
 .mini-tag.adp-falling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
+.mini-tag.dv-buying { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
+.mini-tag.dv-selling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
+.mini-tag.cross-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); font-weight: 700; }
+.mini-tag.cross-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); font-weight: 700; }
 .mini-tag.harmonic-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
 .mini-tag.harmonic-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
 .mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
@@ -816,6 +820,10 @@ function renderRow(stock) {
   if (stock.adp5_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
   if (stock.adp20_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
   if (stock.adp20_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
+  if (stock.buying_selling_verdict === "Heavy Buying") tags.push(`<span class="mini-tag dv-buying" title="Delivery % exceeded 1.3x its 20-day baseline on more up-days than down-days, last 30 sessions">Heavy Buying</span>`);
+  if (stock.buying_selling_verdict === "Heavy Selling") tags.push(`<span class="mini-tag dv-selling" title="Delivery % exceeded 1.3x its 20-day baseline on more down-days than up-days, last 30 sessions">Heavy Selling</span>`);
+  if (stock.adp_crossover === "Bullish Cross") tags.push(`<span class="mini-tag cross-bull" title="5-day avg delivery % just crossed above the 20-day avg">5D↗20D ADP</span>`);
+  if (stock.adp_crossover === "Bearish Cross") tags.push(`<span class="mini-tag cross-bear" title="5-day avg delivery % just crossed below the 20-day avg">5D↘20D ADP</span>`);
   if (stock.harmonic_pattern) {
     const hc = stock.harmonic_pattern.toLowerCase().includes("bullish") ? "harmonic-bull" : "harmonic-bear";
     tags.push(`<span class="mini-tag ${hc}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}%">${stock.harmonic_pattern}</span>`);

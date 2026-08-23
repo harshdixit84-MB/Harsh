@@ -18,6 +18,26 @@ New logic (replaces the old Delivery-Value / median-baseline approach):
      - ADP_5 crossing below ADP_20 -> "Bearish Cross"
    and separately track whether each average is Rising/Falling/Flat
    day-over-day (used directly by the dashboard).
+5. A single day's crossover or a rising ADP average does NOT by itself
+   tell you whether buying or selling is happening -- rising delivery
+   can just as easily mean accelerating distribution. Two extra pieces
+   close that gap:
+     - crossover_age: how many consecutive days the current ADP_5 vs
+       ADP_20 relationship has held since it last flipped. A 1-day-old
+       cross is noise-prone (one block deal can cause it); a cross that
+       has held for CROSS_CONFIRM_DAYS+ is more trustworthy.
+     - recent_bias: same idea as buying_selling_verdict but over a
+       short, current window (RECENT_LOOKBACK_DAYS) instead of 30 days,
+       so it reflects what's happening *now*, not last month.
+   These combine into a single `decision` field meant to actually be
+   decision-usable:
+     - "Confirmed Buy"  : Bullish Cross held >= CROSS_CONFIRM_DAYS days,
+       recent_bias is "Buying", and both ADP_5 and ADP_20 are Rising.
+     - "Confirmed Sell" : mirror image, for exiting/avoiding.
+     - "Early Buy Signal" / "Early Sell Signal": the cross points that
+       way but hasn't met the full bar yet -- worth watching, not
+       acting on.
+     - "" : no clear or persistent signal either way.
 
 Fixes carried over from the previous version:
 - NSE's archive sometimes serves stale/duplicate data for non-trading
@@ -52,6 +72,8 @@ LONG_WINDOW = 20
 THRESHOLD_MULTIPLIER = 1.3
 MAX_CALENDAR_LOOKBACK = 350
 VERDICT_LOOKBACK_DAYS = 30
+RECENT_LOOKBACK_DAYS = 10
+CROSS_CONFIRM_DAYS = 3
 
 HISTORY_HEADER = [
     "symbol", "date", "deliv_qty", "ttl_trd_qnty", "close_price",
@@ -60,7 +82,8 @@ HISTORY_HEADER = [
 ]
 SUMMARY_HEADER = [
     "symbol", "adp_5", "adp_20", "adp5_trend", "adp20_trend",
-    "crossover", "buying_selling_verdict", "last_updated",
+    "crossover", "crossover_age", "recent_bias", "buying_selling_verdict",
+    "decision", "last_updated",
 ]
 
 HEADERS = {
@@ -297,6 +320,9 @@ def enrich_history(symbol_history):
     adp5_list = rolling_average(delivery_pcts, SHORT_WINDOW)
     adp20_list = rolling_average(delivery_pcts, LONG_WINDOW)
 
+    running_state = None   # "Bullish" | "Bearish" | None, carried across days
+    running_age = 0
+
     for i, d in enumerate(dates_sorted):
         day = symbol_history[d]
         day["adp_5"] = adp5_list[i]
@@ -306,6 +332,30 @@ def enrich_history(symbol_history):
             if adp5_list[i] is not None and adp20_list[i] is not None
             else None
         )
+
+        # crossover_age: consecutive days the ADP_5-vs-ADP_20 relationship
+        # has held since it last flipped. Resets to 1 on a flip, grows by
+        # 1 each day the same side persists, stays 0 while diff is unknown.
+        diff = day["adp_diff"]
+        if diff is None:
+            state = None
+        elif diff > 0:
+            state = "Bullish"
+        elif diff < 0:
+            state = "Bearish"
+        else:
+            state = running_state  # exactly flat -- treat as continuation
+
+        if state is None:
+            running_age = 0
+        elif state == running_state:
+            running_age += 1
+        else:
+            running_age = 1
+        running_state = state
+
+        day["cross_state"] = state or ""
+        day["crossover_age"] = running_age
 
         if i == 0:
             day["change_in_price"] = None
@@ -353,10 +403,13 @@ def compute_summary(symbol_history):
         elif prev_diff >= 0 and curr_diff < 0:
             crossover = "Bearish Cross"
 
+    cross_state = latest.get("cross_state", "")
+    crossover_age = latest.get("crossover_age", 0)
+
     last_30_dates = dates_sorted[-VERDICT_LOOKBACK_DAYS:]
-    verdicts = [symbol_history[d].get("verdict", "") for d in last_30_dates]
-    buying_count = verdicts.count("Potential Buying")
-    selling_count = verdicts.count("Potential Selling")
+    verdicts_30 = [symbol_history[d].get("verdict", "") for d in last_30_dates]
+    buying_count = verdicts_30.count("Potential Buying")
+    selling_count = verdicts_30.count("Potential Selling")
     if buying_count > selling_count:
         buying_selling_verdict = "Heavy Buying"
     elif selling_count > buying_count:
@@ -364,13 +417,55 @@ def compute_summary(symbol_history):
     else:
         buying_selling_verdict = ""
 
+    # recent_bias: same idea, but over a short/current window so it
+    # reflects what's happening now rather than summarizing last month.
+    last_recent_dates = dates_sorted[-RECENT_LOOKBACK_DAYS:]
+    verdicts_recent = [symbol_history[d].get("verdict", "") for d in last_recent_dates]
+    recent_buy = verdicts_recent.count("Potential Buying")
+    recent_sell = verdicts_recent.count("Potential Selling")
+    if recent_buy > recent_sell:
+        recent_bias = "Buying"
+    elif recent_sell > recent_buy:
+        recent_bias = "Selling"
+    else:
+        recent_bias = ""
+
+    # decision: only call it "Confirmed" when the crossover has actually
+    # persisted, the near-term flags agree with it, and both averages are
+    # still moving that direction. Anything less becomes an "Early" signal
+    # rather than something to act on.
+    decision = ""
+    if cross_state == "Bullish":
+        if (
+            crossover_age >= CROSS_CONFIRM_DAYS
+            and recent_bias == "Buying"
+            and adp5_trend == "Rising"
+            and adp20_trend == "Rising"
+        ):
+            decision = "Confirmed Buy"
+        else:
+            decision = "Early Buy Signal"
+    elif cross_state == "Bearish":
+        if (
+            crossover_age >= CROSS_CONFIRM_DAYS
+            and recent_bias == "Selling"
+            and adp5_trend == "Falling"
+            and adp20_trend == "Falling"
+        ):
+            decision = "Confirmed Sell"
+        else:
+            decision = "Early Sell Signal"
+
     return {
         "adp_5": adp_5,
         "adp_20": adp_20,
         "adp5_trend": adp5_trend,
         "adp20_trend": adp20_trend,
         "crossover": crossover,
+        "crossover_age": crossover_age,
+        "recent_bias": recent_bias,
         "buying_selling_verdict": buying_selling_verdict,
+        "decision": decision,
     }
 
 
@@ -413,10 +508,11 @@ def main():
             summary_rows.append([
                 symbol, result["adp_5"], result["adp_20"],
                 result["adp5_trend"], result["adp20_trend"],
-                result["crossover"], result["buying_selling_verdict"], today_str,
+                result["crossover"], result["crossover_age"], result["recent_bias"],
+                result["buying_selling_verdict"], result["decision"], today_str,
             ])
         else:
-            summary_rows.append([symbol, "", "", "insufficient history", "", "", "", today_str])
+            summary_rows.append([symbol, "", "", "insufficient history", "", "", "", "", "", "", today_str])
 
     summary_ws.clear()
     summary_ws.update(summary_rows, "A1")

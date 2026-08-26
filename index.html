@@ -808,10 +808,10 @@ LIVE
 
 <select class="dd-select" id="sel-crossage">
 <option value="all">Cross Age: All</option>
-<option value="3">Cross Age: 3+ d</option>
-<option value="5">Cross Age: 5+ d</option>
-<option value="7">Cross Age: 7+ d</option>
-<option value="10">Cross Age: 10+ d</option>
+<option value="3">Cross Age: 3 day old</option>
+<option value="5">Cross Age: 5 day old</option>
+<option value="7">Cross Age: 7 day old</option>
+<option value="10">Cross Age: 10 day old</option>
 </select>
 </div>
 </div>
@@ -1031,8 +1031,8 @@ function computeFilteredStocks() {
   }
 
   if (crossAgeFilter !== "all") {
-    const minAge = parseInt(crossAgeFilter, 10);
-    filtered = filtered.filter((s) => s.adp_crossover_age !== null && s.adp_crossover_age !== undefined && Number(s.adp_crossover_age) >= minAge);
+    const exactAge = parseInt(crossAgeFilter, 10);
+    filtered = filtered.filter((s) => s.adp_crossover_age !== null && s.adp_crossover_age !== undefined && Number(s.adp_crossover_age) === exactAge);
   }
 
   if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");

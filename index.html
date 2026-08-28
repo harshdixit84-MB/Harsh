@@ -1,4 +1,4 @@
-p<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
@@ -501,7 +501,7 @@ table.stock-table {
 
 .mini-tag {
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 2px 6px;
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
@@ -510,12 +510,32 @@ table.stock-table {
   color: var(--text-secondary);
 }
 .mini-tag.squeeze { color: #f28ab4; border-color: rgba(242,138,180,0.4); }
-.mini-tag.adp-rising { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.adp-falling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.dv-buying { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.dv-selling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.cross-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); font-weight: 700; }
-.mini-tag.cross-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); font-weight: 700; }
+.mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
+.mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
+.mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
+
+/* HARDENED & BOLD GREEN / RED TAGS */
+.mini-tag.adp-rising, 
+.mini-tag.dv-buying, 
+.mini-tag.cross-bull, 
+.mini-tag.rsi-bull, 
+.mini-tag.harmonic-bull {
+  color: #ffffff !important;
+  background: #0d6e38 !important;
+  border: 1px solid #064220 !important;
+  font-weight: 800 !important;
+}
+
+.mini-tag.adp-falling, 
+.mini-tag.dv-selling, 
+.mini-tag.cross-bear, 
+.mini-tag.rsi-bear, 
+.mini-tag.harmonic-bear {
+  color: #ffffff !important;
+  background: #b91c1c !important;
+  border: 1px solid #7f1d1d !important;
+  font-weight: 800 !important;
+}
 
 .notes-toggle {
   font-size: 10px;
@@ -575,18 +595,11 @@ table.stock-table {
 }
 .notes-save-btn:hover { opacity: 0.9; }
 .notes-save-btn.saving { opacity: 0.5; pointer-events: none; }
-.mini-tag.harmonic-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.harmonic-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
-.mini-tag.rsi-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.rsi-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
-.mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 
 .tag-row {
   display: flex;
-  gap: 3px;
-  margin-top: 3px;
+  gap: 4px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }
 
@@ -603,37 +616,30 @@ table.stock-table {
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
 
+/* HARDENED & BOLD CONFIRMED BADGES */
 .decision-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 4px 9px;
   border-radius: 6px;
   white-space: nowrap;
 }
-.decision-badge.confirmed-buy {
-  background: #008000 !important;
-  color: #ffffff !important;
+.decision-badge.confirmed-buy { 
+  background: #008000 !important; 
+  color: #ffffff !important; 
   font-weight: 800 !important;
   border: 2px solid #004d00 !important;
-  text-transform: uppercase;
-  padding: 4px 10px !important;
 }
-
-.decision-badge.confirmed-sell {
-  background: #cc0000 !important;
-  color: #ffffff !important;
+.decision-badge.confirmed-sell { 
+  background: #cc0000 !important; 
+  color: #ffffff !important; 
   font-weight: 800 !important;
   border: 2px solid #800000 !important;
-  text-transform: uppercase;
-  padding: 4px 10px !important;
 }
-.decision-badge.early-buy { background: rgba(25,135,84,0.14); color: #3ddc8a; border: 1px solid rgba(61,220,138,0.4); }
-.decision-badge.early-sell { background: rgba(192,57,43,0.14); color: #e5626b; border: 1px solid rgba(229,98,107,0.4); }
 
 .mono-cell {
   font-family: "IBM Plex Mono", monospace;
@@ -785,19 +791,6 @@ body { background:#ffffff; color:#000000; }
 .yellow { border-left:4px solid #8b6508; }
 .blue { border-left:4px solid #000000; }
 
-.mini-tag.adp-rising, .mini-tag.dv-buying, .mini-tag.cross-bull,
-.mini-tag.harmonic-bull, .mini-tag.rsi-bull {
-  color:#145a32;
-  border-color:#145a32;
-  font-weight:700;
-}
-.mini-tag.adp-falling, .mini-tag.dv-selling, .mini-tag.cross-bear,
-.mini-tag.harmonic-bear, .mini-tag.rsi-bear {
-  color:#8b0000;
-  border-color:#8b0000;
-  font-weight:700;
-}
-
 .bs-pill.buy {
   background:#eaf4ee;
   color:#145a32;
@@ -806,29 +799,6 @@ body { background:#ffffff; color:#000000; }
 .bs-pill.sell {
   background:#f9eaea;
   color:#8b0000;
-  font-weight:700;
-}
-
-.decision-badge.confirmed-buy {
-  background:#145a32;
-  color:#ffffff;
-  font-weight:700;
-}
-.decision-badge.confirmed-sell {
-  background:#8b0000;
-  color:#ffffff;
-  font-weight:700;
-}
-.decision-badge.early-buy {
-  background:#eaf4ee;
-  color:#145a32;
-  border:2px solid #145a32;
-  font-weight:700;
-}
-.decision-badge.early-sell {
-  background:#f9eaea;
-  color:#8b0000;
-  border:2px solid #8b0000;
   font-weight:700;
 }
 
@@ -852,7 +822,6 @@ body { background:#ffffff; color:#000000; }
   color:#8b0000;
   font-weight:700;
 }
-
 
 /* ===== Attractive Light Theme ===== */
 :root {
@@ -889,10 +858,10 @@ body{background:var(--bg);color:var(--text-primary);}
 #stock-search:focus,.news-search-input:focus,.notes-input:focus,.value-input:focus{border-color:#1d4ed8;}
 .quick-row,.dropdown-row{border-top:3px solid #166534;}
 .chip-check.on,.news-filter-chip.on{color:#111827;border-color:#334155;background:#e2e8f0;}
-.ticker-chip.up,.mini-tag.adp-rising,.mini-tag.dv-buying,.mini-tag.cross-bull,.mini-tag.rsi-bull,.mini-tag.harmonic-bull{color:#166534;border-color:#166534;background:#ecfdf5;font-weight:700;}
-.ticker-chip.down,.mini-tag.adp-falling,.mini-tag.dv-selling,.mini-tag.cross-bear,.mini-tag.rsi-bear,.mini-tag.harmonic-bear{color:#991b1b;border-color:#991b1b;background:#fef2f2;font-weight:700;}
-.bs-pill.buy,.decision-pill.confirmed,.decision-badge.confirmed-buy,.decision-badge.early-buy,.news-flag.good{background:#dcfce7;color:#166534;font-weight:700;}
-.bs-pill.sell,.decision-badge.confirmed-sell,.decision-badge.early-sell,.news-flag.bad{background:#fee2e2;color:#991b1b;font-weight:700;}
+.ticker-chip.up{color:#166534;border-color:#166534;background:#ecfdf5;font-weight:700;}
+.ticker-chip.down{color:#991b1b;border-color:#991b1b;background:#fef2f2;font-weight:700;}
+.bs-pill.buy,.decision-pill.confirmed,.news-flag.good{background:#dcfce7;color:#166534;font-weight:700;}
+.bs-pill.sell,.news-flag.bad{background:#fee2e2;color:#991b1b;font-weight:700;}
 .notes-save-btn{background:#166534;color:#fff;}
 .stat-card.green{border-left:6px solid #166534;}
 .stat-card.yellow{border-left:6px solid #a16207;}
@@ -1123,7 +1092,7 @@ function decision(stock) {
 }
 
 function decisionBadge(stock) {
-  // Only display Confirmed Buy and Confirmed Sell with the ticker name
+  // Only keep confirmed buy/sell and attach the ticker name directly
   const map = {
     "Confirmed Buy": { cls: "confirmed-buy", label: "Confirmed Buy" },
     "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" }
@@ -1134,6 +1103,27 @@ function decisionBadge(stock) {
   return `<span class="decision-badge ${entry.cls}">${stock.symbol} ${entry.label}</span>`;
 }
 
+function renderNotesRow(stock) {
+  const comments = (stock.comments || []).slice().sort((a, b) => (b.created_at || b.date || "").localeCompare(a.created_at || a.date || ""));
+  const list = comments.length
+    ? comments.map((c) => `<div class="note-entry"><span class="note-date">${escapeHtml(c.date)}</span><span class="note-text">${escapeHtml(c.comment)}</span></div>`).join("")
+    : `<div class="note-empty">No notes yet for ${stock.symbol}.</div>`;
+
+  return `
+    <tr class="notes-row" data-notes-for="${stock.symbol}">
+      <td colspan="6">
+        <div class="notes-panel">
+          <div class="notes-list">${list}</div>
+          <div class="notes-add">
+            <textarea class="notes-input" placeholder="Add an observation for ${stock.symbol}…" data-symbol="${stock.symbol}"></textarea>
+            <button class="notes-save-btn" data-symbol="${stock.symbol}">Save Note</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 function renderRow(stock) {
   const cls = classify(stock);
   const bs = buySell(stock);
@@ -1142,7 +1132,7 @@ function renderRow(stock) {
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
-  // 1. Group all GREEN elements (bullish/positive tags)
+  // 1. Group Green Elements
   const greenTags = [];
   if (stock.adp5_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
   if (stock.adp20_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
@@ -1162,7 +1152,7 @@ function renderRow(stock) {
     greenTags.push(`<span class="mini-tag rsi-bull">RSI W: ${stock.rsi_weekly_divergence}</span>`);
   }
 
-  // 2. Group all RED elements (bearish/negative tags)
+  // 2. Group Red Elements
   const redTags = [];
   if (stock.adp5_trend === "Falling") redTags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
   if (stock.adp20_trend === "Falling") redTags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
@@ -1182,7 +1172,7 @@ function renderRow(stock) {
     redTags.push(`<span class="mini-tag rsi-bear">RSI W: ${stock.rsi_weekly_divergence}</span>`);
   }
 
-  // 3. Neutral / Other tags (Squeeze, Reversal, Source, Archived)
+  // 3. Neutral / Other Tags
   const neutralTags = [];
   if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
   if (stock.reversal_score >= 2) neutralTags.push(`<span class="mini-tag jackpot">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
@@ -1192,7 +1182,6 @@ function renderRow(stock) {
     neutralTags.push(`<span class="mini-tag">${s}</span>`);
   });
 
-  // Combine tags so Green boxes are grouped together first, then Red boxes together
   const allGroupedTags = [...greenTags, ...redTags, ...neutralTags].join("");
 
   return `
@@ -1292,7 +1281,7 @@ function render() {
     container.innerHTML = filtered.map(renderRow).join("");
   }
 
-  renderNewsList(); // keep the news panel in sync with whatever the table is currently showing
+  renderNewsList(); 
 }
 
 function renderTickerBand(filtered) {
@@ -1375,7 +1364,7 @@ document.getElementById("rows").addEventListener("click", async (e) => {
         throw new Error(data.error || "Failed to save note");
       }
 
-      expandedNotes.add(symbol); // keep the panel open after saving
+      expandedNotes.add(symbol); 
       await loadDashboard();
     } catch (err) {
       btn.classList.remove("saving");
@@ -1513,12 +1502,10 @@ function renderNewsList() {
 
   const q = newsSearchQuery.trim().toLowerCase();
   if (q !== "") {
-    // Explicit search overrides the table-filter restriction -- look up any stock's news.
     base = latestNews.filter((item) =>
       (item.symbol || "").toLowerCase().includes(q) || (item.headline || "").toLowerCase().includes(q)
     );
   } else {
-    // Default: only news for stocks currently visible in the table above.
     const visibleSymbols = new Set(computeFilteredStocks().map((s) => s.symbol));
     base = latestNews.filter((item) => visibleSymbols.has(item.symbol));
   }

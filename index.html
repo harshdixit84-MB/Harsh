@@ -514,6 +514,7 @@ table.stock-table {
 .mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
 .mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 
+/* HARDENED & BOLD GREEN / RED TAGS */
 .mini-tag.adp-rising, 
 .mini-tag.dv-buying, 
 .mini-tag.cross-bull, 
@@ -613,6 +614,7 @@ table.stock-table {
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
 
+/* HARDENED & BOLD CONFIRMED BADGES */
 .decision-badge {
   display: inline-flex;
   align-items: center;
@@ -710,7 +712,116 @@ footer {
   .cell-symbol { min-width: 160px; }
 }
 
-/* Light Theme Overrides */
+/* ===== LIGHT DASHBOARD THEME ===== */
+:root {
+  --bg:#ffffff;
+  --surface-1:#ffffff;
+  --surface-2:#f5f5f5;
+  --border:#000000;
+  --text-primary:#000000;
+  --text-secondary:#333333;
+  --accent-buy:#145a32;
+  --accent-loss:#8b0000;
+}
+
+body { background:#ffffff; color:#000000; }
+.dashboard-title { color:#000000; }
+.header-btn { background:#ffffff; color:#000000; border:2px solid #000000; }
+.header-btn:hover { background:#f2f2f2; }
+.live-box { background:#ffffff; border:2px solid #145a32; color:#145a32; }
+.live-dot { background:#145a32; }
+
+.stat-card { background:#ffffff; border:2px solid #000000; }
+.stat-value { color:#000000; }
+.stat-label, .dashboard-subtitle { color:#333333; }
+
+.toolbar, .ticker-band, .dashboard-header { border-color:#000000; }
+.quick-row, .dropdown-row { border-top-color:#145a32; }
+
+#stock-search, .chip-check, .reset-btn, .dd-select,
+.news-search-input, .news-filter-chip, .news-dismiss,
+.value-input, .save-btn, .notes-input, .notes-toggle, .tv-link {
+  background:#ffffff;
+  color:#000000;
+  border:2px solid #000000;
+}
+
+.chip-check.on, .reset-btn:hover, .news-filter-chip:hover,
+.news-filter-chip.on, .notes-toggle:hover {
+  color:#000000;
+  border-color:#000000;
+}
+
+.ticker-chip.up {
+  color:#145a32;
+  border-color:#145a32;
+  background:#eaf4ee;
+  font-weight:700;
+}
+.ticker-chip.down {
+  color:#8b0000;
+  border-color:#8b0000;
+  background:#f9eaea;
+  font-weight:700;
+}
+
+.news-panel, .table-scroll { background:#ffffff; border:2px solid #000000; }
+.news-panel { border-top:3px solid #145a32; }
+.news-panel-header-row { border-bottom:2px solid #000000; }
+.news-item { border-bottom:2px solid #000000; }
+.news-item:hover, .stock-row:hover, .notes-row td { background:#f5f5f5; }
+
+.news-panel-header, .news-date, .news-reason,
+.ticker-label, .ticker-empty, .name, .tv-link,
+.stat-label, .empty, .loading, footer { color:#333333; }
+
+.news-symbol, .news-headline, .symbol, .note-text,
+.stock-table thead th, .stock-row td { color:#000000; }
+
+.stock-table thead th { border-bottom:2px solid #000000; }
+.stock-row td { border-bottom:2px solid #000000; }
+
+.stock-row.buyzone { box-shadow:inset 4px 0 0 #145a32; }
+.stock-row.watch { box-shadow:inset 4px 0 0 #8b6508; }
+.stock-row.needtarget { box-shadow:inset 4px 0 0 #145a32; }
+
+.green { border-left:4px solid #145a32; }
+.yellow { border-left:4px solid #8b6508; }
+.blue { border-left:4px solid #000000; }
+
+.bs-pill.buy {
+  background:#eaf4ee;
+  color:#145a32;
+  font-weight:700;
+}
+.bs-pill.sell {
+  background:#f9eaea;
+  color:#8b0000;
+  font-weight:700;
+}
+
+.decision-pill.confirmed {
+  background:#eaf4ee;
+  color:#145a32;
+  font-weight:700;
+}
+.notes-save-btn {
+  background:#145a32;
+  color:#ffffff;
+  font-weight:700;
+}
+.news-flag.good {
+  background:#eaf4ee;
+  color:#145a32;
+  font-weight:700;
+}
+.news-flag.bad {
+  background:#f9eaea;
+  color:#8b0000;
+  font-weight:700;
+}
+
+/* ===== Attractive Light Theme ===== */
 :root {
   --bg:#ffffff;
   --surface-1:#ffffff;
@@ -767,7 +878,7 @@ body{background:var(--bg);color:var(--text-primary);}
 .minimize-btn::before{content:'−';}
 .section.minimized .minimize-btn::before{content:'+';}
 
-/* Collapsible Dashboard Sections */
+/* ===== Collapsible Dashboard Sections ===== */
 .section{background:transparent;margin-bottom:16px;}
 .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;background:#e8eef5;border:2px solid #334155;border-bottom:0;border-radius:9px 9px 0 0;color:#0f172a;font-family:"Space Grotesk",sans-serif;font-size:13px;font-weight:700;letter-spacing:.02em;}
 .section-body{min-width:0;}
@@ -782,36 +893,75 @@ body{background:var(--bg);color:var(--text-primary);}
 <body>
 <div class="wrap">
 <header class="dashboard-header">
+
 <div class="header-left">
-<div class="dashboard-title">Monthly Breakout Scan</div>
-<div class="dashboard-subtitle" id="synced-at">Loading last sync...</div>
+
+<div class="dashboard-title">
+Monthly Breakout Scan
+</div>
+
+<div class="dashboard-subtitle" id="synced-at">
+Loading last sync...
+</div>
+
 <div class="header-links">
-<a href="/pl.html" class="header-btn">📊 P/L Tracker</a>
+
+<a href="/pl.html" class="header-btn">
+📊 P/L Tracker
+</a>
+
 </div>
+
 </div>
+
 <div class="header-right">
+
 <div class="live-box">
-<span class="live-dot"></span> LIVE
+
+<span class="live-dot"></span>
+
+LIVE
+
 </div>
+
 <div class="stats-grid">
+
 <div class="stat-card">
+
 <div class="stat-value" id="stat-total">0</div>
+
 <div class="stat-label">Tracked</div>
+
 </div>
+
 <div class="stat-card green">
+
 <div class="stat-value" id="stat-buyzone">0</div>
+
 <div class="stat-label">Buy Zone</div>
+
 </div>
+
 <div class="stat-card yellow">
+
 <div class="stat-value" id="stat-neartarget">0</div>
+
 <div class="stat-label">Near Target</div>
+
 </div>
+
 <div class="stat-card blue">
+
 <div class="stat-value" id="stat-needtarget">0</div>
+
 <div class="stat-label">Need Target</div>
+
 </div>
+
 </div>
+
 </div>
+
 </header>
 
 <div class="toolbar">
@@ -936,6 +1086,7 @@ function decision(stock) {
 }
 
 function decisionBadge(stock) {
+  // Only keep confirmed buy/sell and attach the ticker name directly
   const map = {
     "Confirmed Buy": { cls: "confirmed-buy", label: "Confirmed Buy" },
     "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" }
@@ -975,6 +1126,7 @@ function renderRow(stock) {
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
+  // 1. Group Green Elements
   const greenTags = [];
   if (stock.adp5_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
   if (stock.adp20_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);

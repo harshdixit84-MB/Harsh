@@ -907,6 +907,52 @@ body{background:var(--bg);color:var(--text-primary);}
 .minimize-btn::before{content:'−';}
 .section.minimized .minimize-btn::before{content:'+';}
 </style>
+
+<style id="section-minimize-css">
+.section-minimize-btn{
+  float:right;
+  margin-left:8px;
+  width:30px;
+  height:30px;
+  border:2px solid #111827;
+  border-radius:6px;
+  background:#ffffff;
+  color:#111827;
+  font-size:20px;
+  font-weight:800;
+  line-height:24px;
+  cursor:pointer;
+  padding:0;
+}
+.section-minimize-btn:hover{
+  background:#eef2f7;
+}
+.section-hidden{
+  display:none !important;
+}
+.section-restore-bar{
+  display:none;
+  margin:8px 0 14px;
+  padding:8px 10px;
+  border:2px solid #111827;
+  border-radius:8px;
+  background:#f8fafc;
+  align-items:center;
+  justify-content:space-between;
+  font-weight:800;
+}
+.section-restore-bar.visible{display:flex;}
+.section-restore-btn{
+  border:2px solid #111827;
+  border-radius:6px;
+  background:#ffffff;
+  color:#111827;
+  font-weight:800;
+  cursor:pointer;
+  padding:5px 12px;
+}
+</style>
+
 </head>
 <body>
 <div class="wrap">
@@ -1644,5 +1690,109 @@ loadDashboard();
 loadNews();
 setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
 </script>
+
+<script id="section-minimize-js">
+(function(){
+  const SELECTORS = [
+    '.dashboard-overview',
+    '.overview',
+    '.filters',
+    '.filter-section',
+    '.matching-stocks',
+    '.stocks-section',
+    '.news-section',
+    '.news',
+    '.scanner-section',
+    '.scanner',
+    '.section',
+    'section',
+    '.card'
+  ];
+
+  function titleFor(el, index){
+    const h = el.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > .section-title, :scope > .card-title');
+    if (h && h.textContent.trim()) return h.textContent.trim().replace(/\s+/g,' ');
+    return 'Section ' + (index + 1);
+  }
+
+  function addControls(){
+    const seen = new Set();
+    const candidates = [];
+    SELECTORS.forEach(sel => {
+      try { document.querySelectorAll(sel).forEach(el => candidates.push(el)); } catch(e){}
+    });
+
+    let index = 0;
+    candidates.forEach(el => {
+      if (seen.has(el)) return;
+      seen.add(el);
+
+      // Don't add controls to tiny nested cards; only substantial containers.
+      if (el.closest('[data-minimize-skip]')) return;
+      if (el.textContent.trim().length < 40) return;
+      if (el.dataset.minimizeReady === '1') return;
+
+      // Avoid making the outermost app wrapper collapsible.
+      const cls = String(el.className || '').toLowerCase();
+      if (cls.includes('container') && !cls.includes('section')) return;
+
+      const heading = el.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > .section-title, :scope > .card-title');
+      if (!heading) return;
+
+      el.dataset.minimizeReady = '1';
+      el.dataset.minimizeKey = 'dashboard-section-' + index;
+      const key = el.dataset.minimizeKey;
+      const label = titleFor(el, index);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'section-minimize-btn';
+      btn.setAttribute('aria-label','Minimize ' + label);
+      btn.title = 'Minimize section';
+      btn.textContent = '−';
+
+      heading.appendChild(btn);
+
+      const restore = document.createElement('div');
+      restore.className = 'section-restore-bar';
+      restore.dataset.restoreFor = key;
+      restore.innerHTML = '<span>' + label.replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+        '</span><button type="button" class="section-restore-btn">＋ Restore</button>';
+
+      el.parentNode.insertBefore(restore, el.nextSibling);
+
+      btn.addEventListener('click', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.add('section-hidden');
+        restore.classList.add('visible');
+        try{ localStorage.setItem(key,'1'); }catch(_){}
+      });
+
+      restore.querySelector('.section-restore-btn').addEventListener('click', function(){
+        el.classList.remove('section-hidden');
+        restore.classList.remove('visible');
+        try{ localStorage.removeItem(key); }catch(_){}
+      });
+
+      try{
+        if(localStorage.getItem(key)==='1'){
+          el.classList.add('section-hidden');
+          restore.classList.add('visible');
+        }
+      }catch(_){}
+
+      index++;
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', addControls);
+  } else {
+    addControls();
+  }
+})();
+</script>
+
 </body>
 </html>

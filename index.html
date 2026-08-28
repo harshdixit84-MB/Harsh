@@ -838,6 +838,74 @@ body { background:#ffffff; color:#000000; }
   font-weight:700;
 }
 
+
+/* ===== Attractive Light Theme ===== */
+:root {
+  --bg:#f4f7fb;
+  --surface-1:#ffffff;
+  --surface-2:#f8fafc;
+  --border:#cbd5e1;
+  --text-primary:#111827;
+  --text-secondary:#475569;
+  --accent-buy:#166534;
+  --accent-buy-dim:rgba(22,101,52,.10);
+  --accent-watch:#a16207;
+  --accent-watch-dim:rgba(161,98,7,.10);
+  --accent-tracking:#1d4ed8;
+  --accent-tracking-dim:rgba(29,78,216,.10);
+  --accent-needtarget:#0f766e;
+  --accent-loss:#991b1b;
+  --accent-magenta:#be185d;
+}
+body{background:var(--bg);color:var(--text-primary);}
+.dashboard-header,.toolbar,.ticker-band{border-color:#94a3b8;}
+.dashboard-title{color:#0f172a;}
+.dashboard-subtitle,.stat-label,.ticker-label,footer,.news-panel-header,.news-date,.news-reason,.ticker-empty,.empty,.loading,.name{color:#475569;}
+.header-btn{background:#ffffff;color:#111827;border:2px solid #334155;box-shadow:0 2px 5px rgba(15,23,42,.08);}
+.header-btn:hover{background:#eef2f7;}
+.live-box{background:#ecfdf5;border:2px solid #166534;color:#166534;}
+.live-dot{background:#166534;}
+.stat-card,.news-panel,.table-scroll{background:#fff;border:2px solid #334155;box-shadow:0 3px 10px rgba(15,23,42,.06);}
+.stat-value,.symbol,.price,.news-symbol,.news-headline,.note-text{color:#111827;}
+.stock-table thead th{color:#334155;border-bottom:2px solid #334155;}
+.stock-row td,.news-item{border-bottom:1px solid #cbd5e1;}
+.stock-row:hover,.news-item:hover{background:#f1f5f9;}
+#stock-search,.chip-check,.dd-select,.news-search-input,.news-filter-chip,.reset-btn,.value-input,.save-btn,.notes-input,.notes-toggle,.tv-link,.mini-tag,.note-entry,.news-dismiss{background:#fff;color:#334155;border:2px solid #94a3b8;}
+#stock-search:focus,.news-search-input:focus,.notes-input:focus,.value-input:focus{border-color:#1d4ed8;}
+.quick-row,.dropdown-row{border-top:3px solid #166534;}
+.chip-check.on,.news-filter-chip.on{color:#111827;border-color:#334155;background:#e2e8f0;}
+.ticker-chip.up,.mini-tag.adp-rising,.mini-tag.dv-buying,.mini-tag.cross-bull,.mini-tag.rsi-bull,.mini-tag.harmonic-bull{color:#166534;border-color:#166534;background:#ecfdf5;font-weight:700;}
+.ticker-chip.down,.mini-tag.adp-falling,.mini-tag.dv-selling,.mini-tag.cross-bear,.mini-tag.rsi-bear,.mini-tag.harmonic-bear{color:#991b1b;border-color:#991b1b;background:#fef2f2;font-weight:700;}
+.bs-pill.buy,.decision-pill.confirmed,.decision-badge.confirmed-buy,.decision-badge.early-buy,.news-flag.good{background:#dcfce7;color:#166534;font-weight:700;}
+.bs-pill.sell,.decision-badge.confirmed-sell,.decision-badge.early-sell,.news-flag.bad{background:#fee2e2;color:#991b1b;font-weight:700;}
+.notes-save-btn{background:#166534;color:#fff;}
+.stat-card.green{border-left:6px solid #166534;}
+.stat-card.yellow{border-left:6px solid #a16207;}
+.stat-card.blue{border-left:6px solid #1d4ed8;}
+.stock-row.buyzone{box-shadow:inset 5px 0 0 #166534;}
+.stock-row.watch{box-shadow:inset 5px 0 0 #a16207;}
+.stock-row.needtarget{box-shadow:inset 5px 0 0 #0f766e;}
+.news-panel{border-top:5px solid #166534;}
+
+/* Section minimize buttons */
+.section-title-wrap{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;}
+.minimize-btn{border:2px solid #334155;background:#fff;color:#334155;border-radius:6px;width:28px;height:28px;line-height:22px;font-weight:700;cursor:pointer;padding:0;}
+.minimize-btn:hover{background:#e2e8f0;}
+.section.minimized .section-body{display:none;}
+.section.minimized .minimize-btn{transform:none;}
+.minimize-btn::before{content:'−';}
+.section.minimized .minimize-btn::before{content:'+';}
+
+/* ===== Collapsible Dashboard Sections ===== */
+.section{background:transparent;margin-bottom:16px;}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;background:#e8eef5;border:2px solid #334155;border-bottom:0;border-radius:9px 9px 0 0;color:#0f172a;font-family:"Space Grotesk",sans-serif;font-size:13px;font-weight:700;letter-spacing:.02em;}
+.section-body{min-width:0;}
+.section.minimized .section-head{border-bottom:2px solid #334155;border-radius:9px;}
+.section.minimized .section-body{display:none;}
+.minimize-btn{border:2px solid #475569;background:#fff;color:#0f172a;border-radius:6px;width:28px;height:26px;line-height:18px;font-size:17px;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+.minimize-btn:hover{background:#dbe4ee;}
+.minimize-btn::before{content:'−';}
+.section.minimized .minimize-btn::before{content:'+';}
 </style>
 </head>
 <body>
@@ -1303,7 +1371,57 @@ document.getElementById("rows").addEventListener("click", async (e) => {
       }
 
       expandedNotes.add(symbol); // keep the panel open after saving
-      await loadDashboard();
+      await 
+function setupCollapsibleSections() {
+  const targets = [
+    ['dashboard-overview', document.querySelector('.dashboard-header'), 'Dashboard Overview'],
+    ['filters', document.querySelector('.toolbar'), 'Filters'],
+    ['matching-stocks', document.querySelector('.ticker-band'), 'Matching Stocks'],
+    ['news', document.querySelector('.news-panel'), 'News'],
+    ['stock-scanner', document.querySelector('.table-scroll'), 'Stock Scanner']
+  ];
+
+  targets.forEach(([id, target, title]) => {
+    if (!target || target.closest('.section')) return;
+    const section = document.createElement('section');
+    section.className = 'section';
+    section.id = 'section-' + id;
+
+    const head = document.createElement('div');
+    head.className = 'section-head';
+    const label = document.createElement('span');
+    label.textContent = title;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'minimize-btn';
+    btn.title = 'Minimize ' + title;
+    btn.setAttribute('aria-label', 'Minimize ' + title);
+    head.append(label, btn);
+
+    const body = document.createElement('div');
+    body.className = 'section-body';
+    target.parentNode.insertBefore(section, target);
+    body.appendChild(target);
+    section.append(head, body);
+
+    btn.addEventListener('click', () => {
+      const minimized = section.classList.toggle('minimized');
+      btn.title = minimized ? 'Restore ' + title : 'Minimize ' + title;
+      btn.setAttribute('aria-label', btn.title);
+      localStorage.setItem('dashboard-section-' + id, minimized ? 'minimized' : 'open');
+    });
+
+    if (localStorage.getItem('dashboard-section-' + id) === 'minimized') {
+      section.classList.add('minimized');
+      btn.title = 'Restore ' + title;
+      btn.setAttribute('aria-label', btn.title);
+    }
+  });
+}
+
+setupCollapsibleSections();
+
+loadDashboard();
     } catch (err) {
       btn.classList.remove("saving");
       btn.textContent = "Save Note";

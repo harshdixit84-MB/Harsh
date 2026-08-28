@@ -841,7 +841,7 @@ body { background:#ffffff; color:#000000; }
 
 /* ===== Attractive Light Theme ===== */
 :root {
-  --bg:#f4f7fb;
+  --bg:#ffffff;
   --surface-1:#ffffff;
   --surface-2:#f8fafc;
   --border:#cbd5e1;
@@ -907,52 +907,6 @@ body{background:var(--bg);color:var(--text-primary);}
 .minimize-btn::before{content:'−';}
 .section.minimized .minimize-btn::before{content:'+';}
 </style>
-
-<style id="section-minimize-css">
-.section-minimize-btn{
-  float:right;
-  margin-left:8px;
-  width:30px;
-  height:30px;
-  border:2px solid #111827;
-  border-radius:6px;
-  background:#ffffff;
-  color:#111827;
-  font-size:20px;
-  font-weight:800;
-  line-height:24px;
-  cursor:pointer;
-  padding:0;
-}
-.section-minimize-btn:hover{
-  background:#eef2f7;
-}
-.section-hidden{
-  display:none !important;
-}
-.section-restore-bar{
-  display:none;
-  margin:8px 0 14px;
-  padding:8px 10px;
-  border:2px solid #111827;
-  border-radius:8px;
-  background:#f8fafc;
-  align-items:center;
-  justify-content:space-between;
-  font-weight:800;
-}
-.section-restore-bar.visible{display:flex;}
-.section-restore-btn{
-  border:2px solid #111827;
-  border-radius:6px;
-  background:#ffffff;
-  color:#111827;
-  font-weight:800;
-  cursor:pointer;
-  padding:5px 12px;
-}
-</style>
-
 </head>
 <body>
 <div class="wrap">
@@ -1417,57 +1371,7 @@ document.getElementById("rows").addEventListener("click", async (e) => {
       }
 
       expandedNotes.add(symbol); // keep the panel open after saving
-      await 
-function setupCollapsibleSections() {
-  const targets = [
-    ['dashboard-overview', document.querySelector('.dashboard-header'), 'Dashboard Overview'],
-    ['filters', document.querySelector('.toolbar'), 'Filters'],
-    ['matching-stocks', document.querySelector('.ticker-band'), 'Matching Stocks'],
-    ['news', document.querySelector('.news-panel'), 'News'],
-    ['stock-scanner', document.querySelector('.table-scroll'), 'Stock Scanner']
-  ];
-
-  targets.forEach(([id, target, title]) => {
-    if (!target || target.closest('.section')) return;
-    const section = document.createElement('section');
-    section.className = 'section';
-    section.id = 'section-' + id;
-
-    const head = document.createElement('div');
-    head.className = 'section-head';
-    const label = document.createElement('span');
-    label.textContent = title;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'minimize-btn';
-    btn.title = 'Minimize ' + title;
-    btn.setAttribute('aria-label', 'Minimize ' + title);
-    head.append(label, btn);
-
-    const body = document.createElement('div');
-    body.className = 'section-body';
-    target.parentNode.insertBefore(section, target);
-    body.appendChild(target);
-    section.append(head, body);
-
-    btn.addEventListener('click', () => {
-      const minimized = section.classList.toggle('minimized');
-      btn.title = minimized ? 'Restore ' + title : 'Minimize ' + title;
-      btn.setAttribute('aria-label', btn.title);
-      localStorage.setItem('dashboard-section-' + id, minimized ? 'minimized' : 'open');
-    });
-
-    if (localStorage.getItem('dashboard-section-' + id) === 'minimized') {
-      section.classList.add('minimized');
-      btn.title = 'Restore ' + title;
-      btn.setAttribute('aria-label', btn.title);
-    }
-  });
-}
-
-setupCollapsibleSections();
-
-loadDashboard();
+      await loadDashboard();
     } catch (err) {
       btn.classList.remove("saving");
       btn.textContent = "Save Note";
@@ -1691,106 +1595,73 @@ loadNews();
 setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
 </script>
 
-<script id="section-minimize-js">
+<style id="collapsible-sections-v3">
+  .dash-section{margin:0 0 18px 0;}
+  .dash-section-head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:10px 14px;background:#eef3f8;border:2px solid #334155;
+    border-radius:9px 9px 0 0;color:#0f172a;font-family:"Space Grotesk",sans-serif;
+    font-size:14px;font-weight:700;letter-spacing:.02em;
+  }
+  .dash-section-body{border-left:2px solid #334155;border-right:2px solid #334155;border-bottom:2px solid #334155;border-radius:0 0 9px 9px;padding:0;background:#fff;}
+  .dash-section.minimized .dash-section-head{border-radius:9px;border-bottom:2px solid #334155;}
+  .dash-section.minimized .dash-section-body{display:none;}
+  .dash-min-btn{
+    flex:0 0 auto;width:32px;height:30px;border:2px solid #0f172a;border-radius:6px;
+    background:#fff;color:#0f172a;font-size:20px;font-weight:900;line-height:24px;
+    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  }
+  .dash-min-btn:hover{background:#dbeafe;border-color:#1d4ed8;color:#1d4ed8;}
+  .dash-min-btn .dash-icon{display:block;transform:translateY(-1px);}
+</style>
+<script id="collapsible-sections-v3-js">
 (function(){
-  const SELECTORS = [
-    '.dashboard-overview',
-    '.overview',
-    '.filters',
-    '.filter-section',
-    '.matching-stocks',
-    '.stocks-section',
-    '.news-section',
-    '.news',
-    '.scanner-section',
-    '.scanner',
-    '.section',
-    'section',
-    '.card'
-  ];
+  function makeSection(id, title, target){
+    if(!target || target.dataset.collapsibleWrapped === '1') return;
+    target.dataset.collapsibleWrapped = '1';
+    var section=document.createElement('div');
+    section.className='dash-section';
+    section.id='dash-section-'+id;
 
-  function titleFor(el, index){
-    const h = el.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > .section-title, :scope > .card-title');
-    if (h && h.textContent.trim()) return h.textContent.trim().replace(/\s+/g,' ');
-    return 'Section ' + (index + 1);
+    var head=document.createElement('div');
+    head.className='dash-section-head';
+    var label=document.createElement('span');
+    label.textContent=title;
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.className='dash-min-btn';
+    btn.innerHTML='<span class="dash-icon">−</span>';
+    btn.title='Minimize '+title;
+    btn.setAttribute('aria-label','Minimize '+title);
+
+    var body=document.createElement('div');
+    body.className='dash-section-body';
+
+    target.parentNode.insertBefore(section,target);
+    section.appendChild(head);
+    section.appendChild(body);
+    head.appendChild(label);
+    head.appendChild(btn);
+    body.appendChild(target);
+
+    function setState(minimized){
+      section.classList.toggle('minimized',minimized);
+      btn.querySelector('.dash-icon').textContent=minimized?'+':'−';
+      btn.title=(minimized?'Restore ':'Minimize ')+title;
+      btn.setAttribute('aria-label',btn.title);
+      try{localStorage.setItem('dash-min-'+id,minimized?'1':'0');}catch(e){}
+    }
+    btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();setState(!section.classList.contains('minimized'));});
+    try{if(localStorage.getItem('dash-min-'+id)==='1') setState(true);}catch(e){}
   }
 
-  function addControls(){
-    const seen = new Set();
-    const candidates = [];
-    SELECTORS.forEach(sel => {
-      try { document.querySelectorAll(sel).forEach(el => candidates.push(el)); } catch(e){}
-    });
-
-    let index = 0;
-    candidates.forEach(el => {
-      if (seen.has(el)) return;
-      seen.add(el);
-
-      // Don't add controls to tiny nested cards; only substantial containers.
-      if (el.closest('[data-minimize-skip]')) return;
-      if (el.textContent.trim().length < 40) return;
-      if (el.dataset.minimizeReady === '1') return;
-
-      // Avoid making the outermost app wrapper collapsible.
-      const cls = String(el.className || '').toLowerCase();
-      if (cls.includes('container') && !cls.includes('section')) return;
-
-      const heading = el.querySelector(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > .section-title, :scope > .card-title');
-      if (!heading) return;
-
-      el.dataset.minimizeReady = '1';
-      el.dataset.minimizeKey = 'dashboard-section-' + index;
-      const key = el.dataset.minimizeKey;
-      const label = titleFor(el, index);
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'section-minimize-btn';
-      btn.setAttribute('aria-label','Minimize ' + label);
-      btn.title = 'Minimize section';
-      btn.textContent = '−';
-
-      heading.appendChild(btn);
-
-      const restore = document.createElement('div');
-      restore.className = 'section-restore-bar';
-      restore.dataset.restoreFor = key;
-      restore.innerHTML = '<span>' + label.replace(/</g,'&lt;').replace(/>/g,'&gt;') +
-        '</span><button type="button" class="section-restore-btn">＋ Restore</button>';
-
-      el.parentNode.insertBefore(restore, el.nextSibling);
-
-      btn.addEventListener('click', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        el.classList.add('section-hidden');
-        restore.classList.add('visible');
-        try{ localStorage.setItem(key,'1'); }catch(_){}
-      });
-
-      restore.querySelector('.section-restore-btn').addEventListener('click', function(){
-        el.classList.remove('section-hidden');
-        restore.classList.remove('visible');
-        try{ localStorage.removeItem(key); }catch(_){}
-      });
-
-      try{
-        if(localStorage.getItem(key)==='1'){
-          el.classList.add('section-hidden');
-          restore.classList.add('visible');
-        }
-      }catch(_){}
-
-      index++;
-    });
+  function init(){
+    makeSection('filters','FILTERS',document.querySelector('.toolbar'));
+    makeSection('matching-stocks','MATCHING STOCKS',document.querySelector('.ticker-band'));
+    makeSection('news','NEWS',document.querySelector('.news-panel'));
+    makeSection('stock-scanner','STOCK SCANNER',document.querySelector('.table-scroll'));
   }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', addControls);
-  } else {
-    addControls();
-  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
 </script>
 

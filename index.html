@@ -501,7 +501,7 @@ table.stock-table {
 
 .mini-tag {
   font-size: 10px;
-  padding: 1px 6px;
+  padding: 2px 6px;
   border-radius: 4px;
   display: inline-flex;
   align-items: center;
@@ -510,12 +510,30 @@ table.stock-table {
   color: var(--text-secondary);
 }
 .mini-tag.squeeze { color: #f28ab4; border-color: rgba(242,138,180,0.4); }
-.mini-tag.adp-rising { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.adp-falling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.dv-buying { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.dv-selling { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.cross-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); font-weight: 700; }
-.mini-tag.cross-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); font-weight: 700; }
+.mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
+.mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
+.mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
+
+/* HARDENED & BOLD GREEN / RED TAGS */
+.mini-tag.adp-rising, 
+.mini-tag.dv-buying, 
+.mini-tag.cross-bull, 
+.mini-tag.harmonic-bull {
+  color: #ffffff !important;
+  background: #0d6e38 !important;
+  border: 1px solid #064220 !important;
+  font-weight: 800 !important;
+}
+
+.mini-tag.adp-falling, 
+.mini-tag.dv-selling, 
+.mini-tag.cross-bear, 
+.mini-tag.harmonic-bear {
+  color: #ffffff !important;
+  background: #b91c1c !important;
+  border: 1px solid #7f1d1d !important;
+  font-weight: 800 !important;
+}
 
 .notes-toggle {
   font-size: 10px;
@@ -575,16 +593,11 @@ table.stock-table {
 }
 .notes-save-btn:hover { opacity: 0.9; }
 .notes-save-btn.saving { opacity: 0.5; pointer-events: none; }
-.mini-tag.harmonic-bull { color: #3ddc8a; border-color: rgba(61,220,138,0.4); }
-.mini-tag.harmonic-bear { color: #e5626b; border-color: rgba(229,98,107,0.4); }
-.mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
-.mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
-.mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 
 .tag-row {
   display: flex;
-  gap: 3px;
-  margin-top: 3px;
+  gap: 4px;
+  margin-top: 4px;
   flex-wrap: wrap;
 }
 
@@ -601,22 +614,30 @@ table.stock-table {
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
 
+/* HARDENED & BOLD CONFIRMED BADGES */
 .decision-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 10px;
-  font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 4px 9px;
   border-radius: 6px;
   white-space: nowrap;
 }
-.decision-badge.confirmed-buy { background: #198754; color: #ffffff; }
-.decision-badge.confirmed-sell { background: #c0392b; color: #ffffff; }
-.decision-badge.early-buy { background: rgba(25,135,84,0.14); color: #3ddc8a; border: 1px solid rgba(61,220,138,0.4); }
-.decision-badge.early-sell { background: rgba(192,57,43,0.14); color: #e5626b; border: 1px solid rgba(229,98,107,0.4); }
+.decision-badge.confirmed-buy { 
+  background: #008000 !important; 
+  color: #ffffff !important; 
+  font-weight: 800 !important;
+  border: 2px solid #004d00 !important;
+}
+.decision-badge.confirmed-sell { 
+  background: #cc0000 !important; 
+  color: #ffffff !important; 
+  font-weight: 800 !important;
+  border: 2px solid #800000 !important;
+}
 
 .mono-cell {
   font-family: "IBM Plex Mono", monospace;
@@ -768,19 +789,6 @@ body { background:#ffffff; color:#000000; }
 .yellow { border-left:4px solid #8b6508; }
 .blue { border-left:4px solid #000000; }
 
-.mini-tag.adp-rising, .mini-tag.dv-buying, .mini-tag.cross-bull,
-.mini-tag.harmonic-bull {
-  color:#145a32;
-  border-color:#145a32;
-  font-weight:700;
-}
-.mini-tag.adp-falling, .mini-tag.dv-selling, .mini-tag.cross-bear,
-.mini-tag.harmonic-bear {
-  color:#8b0000;
-  border-color:#8b0000;
-  font-weight:700;
-}
-
 .bs-pill.buy {
   background:#eaf4ee;
   color:#145a32;
@@ -789,29 +797,6 @@ body { background:#ffffff; color:#000000; }
 .bs-pill.sell {
   background:#f9eaea;
   color:#8b0000;
-  font-weight:700;
-}
-
-.decision-badge.confirmed-buy {
-  background:#145a32;
-  color:#ffffff;
-  font-weight:700;
-}
-.decision-badge.confirmed-sell {
-  background:#8b0000;
-  color:#ffffff;
-  font-weight:700;
-}
-.decision-badge.early-buy {
-  background:#eaf4ee;
-  color:#145a32;
-  border:2px solid #145a32;
-  font-weight:700;
-}
-.decision-badge.early-sell {
-  background:#f9eaea;
-  color:#8b0000;
-  border:2px solid #8b0000;
   font-weight:700;
 }
 
@@ -835,7 +820,6 @@ body { background:#ffffff; color:#000000; }
   color:#8b0000;
   font-weight:700;
 }
-
 
 /* ===== Attractive Light Theme ===== */
 :root {
@@ -872,10 +856,10 @@ body{background:var(--bg);color:var(--text-primary);}
 #stock-search:focus,.news-search-input:focus,.notes-input:focus,.value-input:focus{border-color:#1d4ed8;}
 .quick-row,.dropdown-row{border-top:3px solid #166534;}
 .chip-check.on,.news-filter-chip.on{color:#111827;border-color:#334155;background:#e2e8f0;}
-.ticker-chip.up,.mini-tag.adp-rising,.mini-tag.dv-buying,.mini-tag.cross-bull,.mini-tag.harmonic-bull{color:#166534;border-color:#166534;background:#ecfdf5;font-weight:700;}
-.ticker-chip.down,.mini-tag.adp-falling,.mini-tag.dv-selling,.mini-tag.cross-bear,.mini-tag.harmonic-bear{color:#991b1b;border-color:#991b1b;background:#fef2f2;font-weight:700;}
-.bs-pill.buy,.decision-pill.confirmed,.decision-badge.confirmed-buy,.decision-badge.early-buy,.news-flag.good{background:#dcfce7;color:#166534;font-weight:700;}
-.bs-pill.sell,.decision-badge.confirmed-sell,.decision-badge.early-sell,.news-flag.bad{background:#fee2e2;color:#991b1b;font-weight:700;}
+.ticker-chip.up{color:#166534;border-color:#166534;background:#ecfdf5;font-weight:700;}
+.ticker-chip.down{color:#991b1b;border-color:#991b1b;background:#fef2f2;font-weight:700;}
+.bs-pill.buy,.decision-pill.confirmed,.news-flag.good{background:#dcfce7;color:#166534;font-weight:700;}
+.bs-pill.sell,.news-flag.bad{background:#fee2e2;color:#991b1b;font-weight:700;}
 .notes-save-btn{background:#166534;color:#fff;}
 .stat-card.green{border-left:6px solid #166534;}
 .stat-card.yellow{border-left:6px solid #a16207;}
@@ -1102,18 +1086,15 @@ function decision(stock) {
 }
 
 function decisionBadge(stock) {
+  // Only keep confirmed buy/sell and attach the ticker name directly
   const map = {
     "Confirmed Buy": { cls: "confirmed-buy", label: "Confirmed Buy" },
-    "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" },
-    "Early Buy Signal": { cls: "early-buy", label: "Early Buy" },
-    "Early Sell Signal": { cls: "early-sell", label: "Early Sell" },
+    "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" }
   };
   const entry = map[stock.dv_decision];
   if (!entry) return "";
-  const age = stock.adp_crossover_age;
-  const ageStr = age !== null && age !== undefined && age !== "" ? ` · ${age}d` : "";
-  const title = `Crossover held ${age ?? "?"}d · last 10d leaning ${stock.adp_recent_bias || "mixed"}`;
-  return `<span class="decision-badge ${entry.cls}" title="${title}">${entry.label}${ageStr}</span>`;
+  
+  return `<span class="decision-badge ${entry.cls}">${stock.symbol} ${entry.label}</span>`;
 }
 
 function renderNotesRow(stock) {
@@ -1145,507 +1126,38 @@ function renderRow(stock) {
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
-  const tags = [];
-  if (stock.archived) tags.push(`<span class="mini-tag archived" title="${stock.archived_reason || ""}">Archived</span>`);
-  if (stock.reversal_score >= 2) tags.push(`<span class="mini-tag jackpot" title="${stock.reversal_score} of ${stock.reversal_total} reversal signals confirming">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
-  if (stock.consolidating) tags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
-  if (stock.adp5_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
-  if (stock.adp5_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
-  if (stock.adp20_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
-  if (stock.adp20_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
-  if (stock.buying_selling_verdict === "Heavy Buying") tags.push(`<span class="mini-tag dv-buying" title="Delivery % exceeded 1.3x its 20-day baseline on more up-days than down-days, last 30 sessions">Heavy Buying</span>`);
-  if (stock.buying_selling_verdict === "Heavy Selling") tags.push(`<span class="mini-tag dv-selling" title="Delivery % exceeded 1.3x its 20-day baseline on more down-days than up-days, last 30 sessions">Heavy Selling</span>`);
-  if (stock.adp_cross_state === "Bullish") {
-    const age = stock.adp_crossover_age;
-    const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
-    tags.push(`<span class="mini-tag cross-bull" title="5-day avg delivery % is currently above the 20-day avg">5D↗20D ADP${ageStr}</span>`);
-  }
-  if (stock.adp_cross_state === "Bearish") {
-    const age = stock.adp_crossover_age;
-    const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
-    tags.push(`<span class="mini-tag cross-bear" title="5-day avg delivery % is currently below the 20-day avg">5D↘20D ADP${ageStr}</span>`);
-  }
-  if (stock.harmonic_pattern) {
-    const hc = stock.harmonic_pattern.toLowerCase().includes("bullish") ? "harmonic-bull" : "harmonic-bear";
-    tags.push(`<span class="mini-tag ${hc}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}%">${stock.harmonic_pattern}</span>`);
-  }
-  if (stock.wm_pattern) {
-    tags.push(`<span class="mini-tag wm" title="Neckline ₹${stock.wm_breakout_level} · ${stock.wm_distance_pct}% away · ${stock.wm_status}">"${stock.wm_pattern}" · ${stock.wm_status}</span>`);
-  }
-  (stock.source || "").split(",").filter(Boolean).forEach((s) => {
-    tags.push(`<span class="mini-tag">${s}</span>`);
-  });
+  // 1. Group Green Elements
+  const greenTags = [];
+  if (stock.adp5_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
+  if (stock.adp20_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
 
   return `
-    <tr class="stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
+    <tr class="stock-row ${cls}">
       <td class="cell-symbol">
         <div class="symbol-line">
           <span class="symbol">${stock.symbol}</span>
-          ${decisionBadge(stock)}
-          <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
-          <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
+          <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" class="tv-link">TV</a>
         </div>
-        <div class="name">${stock.name || ""}</div>
-        <div class="tag-row">${tags.join("")}</div>
-      </td>
-      <td><span class="bs-pill ${bs}">${bs === "buy" ? "▲ B" : "▼ S"}</span></td>
-      <td class="mono-cell">
-        <div class="value-edit">
-          <input type="number" step="0.01" class="value-input" value="${stock.buy_target || ""}" placeholder="entry" data-symbol="${stock.symbol}" data-field="target" />
-          <button class="save-btn" data-symbol="${stock.symbol}" data-field="target">Save</button>
+        <div class="name">${escapeHtml(stock.name || "")}</div>
+        <div class="tag-row">
+          ${greenTags.join("")}
         </div>
       </td>
-      <td class="mono-cell">
-        <div class="price-cell">
-          <span class="price">₹${Number(stock.price).toFixed(2)}</span>
-          <span class="day-change" style="color:${dayChangeColor};"><span class="trend-arrow">${trendArrow}</span>${dayChange >= 0 ? "+" : ""}${dayChange}%</span>
-        </div>
+      <td>
+        <span class="bs-pill ${bs}">${bs.toUpperCase()}</span>
       </td>
-      <td class="mono-cell">${(stock.source || "").split(",").filter(Boolean).join(", ") || "-"}</td>
-      <td class="mono-cell">
-        <div class="value-edit">
-          <input type="number" step="0.01" class="value-input sl-input" value="${stock.stop_loss || ""}" placeholder="SL" data-symbol="${stock.symbol}" data-field="stop_loss" />
-          <button class="save-btn sl-save" data-symbol="${stock.symbol}" data-field="stop_loss">Save</button>
-        </div>
+      <td class="mono-cell">${stock.entry !== undefined ? stock.entry : "-"}</td>
+      <td class="mono-cell price-cell">
+        <span class="price">${stock.cmp !== undefined ? stock.cmp : "-"}</span>
+        <span class="day-change" style="color:${dayChangeColor}">
+          <span class="trend-arrow">${trendArrow}</span>${dayChange.toFixed(2)}%
+        </span>
       </td>
+      <td>${escapeHtml(stock.source || "-")}</td>
+      <td class="mono-cell">${stock.sl !== undefined ? stock.sl : "-"}</td>
     </tr>
-    ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
   `;
 }
-
-function computeFilteredStocks() {
-  const showExtreme = quickFilters.above20 || quickFilters.below20;
-  const isExtreme = (s) => s.archived || (s.distance_pct !== undefined && Math.abs(s.distance_pct) > 20);
-  let filtered = showExtreme ? latestStocks.slice() : latestStocks.filter((s) => !isExtreme(s));
-
-  if (buysellFilter !== "all") {
-    filtered = filtered.filter((s) => buySell(s) === buysellFilter);
-  }
-
-  if (decisionFilter !== "all") {
-    filtered = filtered.filter((s) => decision(s) === decisionFilter);
-  }
-
-  if (sourceFilter !== "all") {
-    filtered = filtered.filter((s) => (s.source || "").split(",").includes(sourceFilter));
-  }
-
-  if (crossAgeFilter !== "all") {
-    const exactAge = parseInt(crossAgeFilter, 10);
-    filtered = filtered.filter((s) => s.adp_crossover_age !== null && s.adp_crossover_age !== undefined && Number(s.adp_crossover_age) === exactAge);
-  }
-
-  if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");
-  if (quickFilters.needtarget) filtered = filtered.filter((s) => classify(s) === "needtarget");
-  if (quickFilters.confirmedBuy) filtered = filtered.filter((s) => s.dv_decision === "Confirmed Buy");
-  if (quickFilters.squeeze) filtered = filtered.filter((s) => !!s.consolidating);
-  if (quickFilters.above20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct > 20);
-  if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
-  if (quickFilters.jackpot) filtered = filtered.filter((s) => s.reversal_score >= 3);
-
-  if (currentSearch.trim() !== "") {
-    const q = currentSearch.trim().toLowerCase();
-    filtered = filtered.filter((s) =>
-      (s.symbol || "").toLowerCase().includes(q) || (s.name || "").toLowerCase().includes(q)
-    );
-  }
-
-  if (cmpSortDir) {
-    filtered.sort((a, b) => cmpSortDir === "asc" ? a.price - b.price : b.price - a.price);
-  }
-
-  return filtered;
-}
-
-function render() {
-  const container = document.getElementById("rows");
-  const filtered = computeFilteredStocks();
-
-  renderTickerBand(filtered);
-
-  if (filtered.length === 0) {
-    container.innerHTML = '<tr><td colspan="6" class="empty">Nothing matches this filter right now.</td></tr>';
-  } else {
-    container.innerHTML = filtered.map(renderRow).join("");
-  }
-
-  renderNewsList(); // keep the news panel in sync with whatever the table is currently showing
-}
-
-function renderTickerBand(filtered) {
-  const list = document.getElementById("ticker-list");
-  if (filtered.length === 0) {
-    list.innerHTML = '<span class="ticker-empty">No symbols match the current filter.</span>';
-    return;
-  }
-  list.innerHTML = filtered.map((s) => {
-    const change = s.percent_change || 0;
-    const dir = change >= 0 ? "up" : "down";
-    const arrow = change >= 0 ? "▲" : "▼";
-    return `<span class="ticker-chip ${dir}">${arrow} ${s.symbol}</span>`;
-  }).join("");
-}
-
-function updateStats() {
-  document.getElementById("stat-total").textContent = latestStocks.length;
-  document.getElementById("stat-buyzone").textContent = latestStocks.filter((s) => classify(s) === "buyzone").length;
-  document.getElementById("stat-neartarget").textContent = latestStocks.filter((s) => classify(s) === "watch").length;
-  document.getElementById("stat-needtarget").textContent = latestStocks.filter((s) => classify(s) === "needtarget").length;
-}
-
-async function loadDashboard() {
-  try {
-    const res = await fetch("/api/dashboard?t=" + Date.now(), { cache: "no-store" });
-    const data = await res.json();
-
-    if (data.error) {
-      document.getElementById("rows").innerHTML = `<tr><td colspan="6" class="empty">Error loading data: ${data.error}</td></tr>`;
-      return;
-    }
-
-    latestStocks = data.stocks || [];
-    updateStats();
-    render();
-
-    const syncedDate = new Date(data.syncedAt);
-    document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
-  } catch (e) {
-    document.getElementById("rows").innerHTML = `<tr><td colspan="6" class="empty">Could not reach the dashboard API.</td></tr>`;
-  }
-}
-
-document.getElementById("rows").addEventListener("click", async (e) => {
-  if (e.target.classList.contains("notes-toggle")) {
-    const symbol = e.target.dataset.symbol;
-    if (expandedNotes.has(symbol)) {
-      expandedNotes.delete(symbol);
-    } else {
-      expandedNotes.add(symbol);
-    }
-    render();
-    return;
-  }
-
-  if (e.target.classList.contains("notes-save-btn")) {
-    const btn = e.target;
-    const symbol = btn.dataset.symbol;
-    const textarea = document.querySelector(`.notes-input[data-symbol="${symbol}"]`);
-    const comment = textarea.value.trim();
-
-    if (!comment) {
-      textarea.style.borderColor = "var(--accent-loss)";
-      return;
-    }
-
-    btn.classList.add("saving");
-    btn.textContent = "…";
-
-    try {
-      const res = await fetch("/api/add-comment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, comment }),
-      });
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to save note");
-      }
-
-      expandedNotes.add(symbol); // keep the panel open after saving
-      await loadDashboard();
-    } catch (err) {
-      btn.classList.remove("saving");
-      btn.textContent = "Save Note";
-      alert("Could not save note: " + err.message);
-    }
-    return;
-  }
-
-  if (e.target.classList.contains("save-btn")) {
-    const btn = e.target;
-    const symbol = btn.dataset.symbol;
-    const field = btn.dataset.field;
-    const input = document.querySelector(`.value-input[data-symbol="${symbol}"][data-field="${field}"]`);
-    const value = parseFloat(input.value);
-
-    if (!value || value <= 0) {
-      input.style.borderColor = "var(--accent-loss)";
-      return;
-    }
-
-    const endpoint = field === "stop_loss" ? "/api/set-stoploss" : "/api/set-target";
-    const payload = field === "stop_loss" ? { symbol, stop_loss: value } : { symbol, target: value };
-    const label = field === "stop_loss" ? "stop loss" : "target";
-
-    btn.classList.add("saving");
-    btn.textContent = "…";
-
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to save");
-      }
-
-      await loadDashboard();
-    } catch (err) {
-      btn.classList.remove("saving");
-      btn.textContent = "Retry";
-      alert(`Could not save ${label}: ` + err.message);
-    }
-    return;
-  }
-});
-
-document.getElementById("stock-search").addEventListener("input", (e) => {
-  currentSearch = e.target.value;
-  render();
-});
-
-document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
-  cb.addEventListener("change", () => {
-    quickFilters[cb.dataset.quick] = cb.checked;
-    cb.closest(".chip-check").classList.toggle("on", cb.checked);
-    render();
-  });
-});
-
-document.getElementById("sel-buysell").addEventListener("change", (e) => {
-  buysellFilter = e.target.value;
-  render();
-});
-
-document.getElementById("sel-decision").addEventListener("change", (e) => {
-  decisionFilter = e.target.value;
-  render();
-});
-
-document.getElementById("sel-source").addEventListener("change", (e) => {
-  sourceFilter = e.target.value;
-  render();
-});
-
-document.getElementById("sel-crossage").addEventListener("change", (e) => {
-  crossAgeFilter = e.target.value;
-  render();
-});
-
-document.getElementById("th-cmp").addEventListener("click", () => {
-  cmpSortDir = cmpSortDir === "asc" ? "desc" : cmpSortDir === "desc" ? null : "asc";
-  render();
-});
-
-document.getElementById("reset-filters").addEventListener("click", () => {
-  currentSearch = "";
-  document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, needtarget: false, confirmedBuy: false, squeeze: false, above20: false, below20: false, jackpot: false };
-  document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
-    cb.checked = false;
-    cb.closest(".chip-check").classList.remove("on");
-  });
-  buysellFilter = "all"; document.getElementById("sel-buysell").value = "all";
-  decisionFilter = "all"; document.getElementById("sel-decision").value = "all";
-  sourceFilter = "all"; document.getElementById("sel-source").value = "all";
-  crossAgeFilter = "all"; document.getElementById("sel-crossage").value = "all";
-  cmpSortDir = null;
-  render();
-});
-
-let newsSentimentFilter = "all";
-let newsSearchQuery = "";
-let latestNews = [];
-
-function flagClass(sentiment) {
-  if (sentiment === "Good") return "good";
-  if (sentiment === "Bad") return "bad";
-  return "neutral";
-}
-
-function renderNewsItem(item) {
-  return `
-    <div class="news-item" data-id="${item.id}">
-      <span class="news-flag ${flagClass(item.sentiment)}">${item.sentiment}</span>
-      <div class="news-body">
-        <div class="news-top-row">
-          <span class="news-symbol">${item.symbol}</span>
-          <span class="news-date">${item.date}${item.source ? " · " + item.source : ""}</span>
-        </div>
-        <div class="news-headline"><a href="${item.link}" target="_blank" rel="noopener">${item.headline}</a></div>
-        ${item.reason ? `<div class="news-reason">${item.reason}</div>` : ""}
-      </div>
-      <button class="news-dismiss" data-id="${item.id}" title="Dismiss">✕</button>
-    </div>
-  `;
-}
-
-function renderNewsList() {
-  const container = document.getElementById("news-list");
-  let base;
-
-  const q = newsSearchQuery.trim().toLowerCase();
-  if (q !== "") {
-    // Explicit search overrides the table-filter restriction -- look up any stock's news.
-    base = latestNews.filter((item) =>
-      (item.symbol || "").toLowerCase().includes(q) || (item.headline || "").toLowerCase().includes(q)
-    );
-  } else {
-    // Default: only news for stocks currently visible in the table above.
-    const visibleSymbols = new Set(computeFilteredStocks().map((s) => s.symbol));
-    base = latestNews.filter((item) => visibleSymbols.has(item.symbol));
-  }
-
-  const filtered = newsSentimentFilter === "all"
-    ? base
-    : base.filter((item) => item.sentiment === newsSentimentFilter);
-
-  if (filtered.length === 0) {
-    if (latestNews.length === 0) {
-      container.innerHTML = '<div class="news-empty">No news yet.</div>';
-    } else if (q !== "") {
-      container.innerHTML = '<div class="news-empty">No news found for that search.</div>';
-    } else {
-      container.innerHTML = '<div class="news-empty">No news for the currently filtered stocks.</div>';
-    }
-    return;
-  }
-
-  container.innerHTML = filtered.map(renderNewsItem).join("");
-}
-
-async function loadNews() {
-  const container = document.getElementById("news-list");
-  try {
-    const res = await fetch("/api/news?t=" + Date.now(), { cache: "no-store" });
-    const data = await res.json();
-    latestNews = data.news || [];
-    renderNewsList();
-  } catch (e) {
-    container.innerHTML = '<div class="news-empty">Could not reach the news API.</div>';
-  }
-}
-
-document.getElementById("news-search").addEventListener("input", (e) => {
-  newsSearchQuery = e.target.value;
-  renderNewsList();
-});
-
-document.getElementById("news-filter-row").addEventListener("click", (e) => {
-  if (!e.target.classList.contains("news-filter-chip")) return;
-  newsSentimentFilter = e.target.dataset.filter;
-  document.querySelectorAll(".news-filter-chip").forEach((chip) => {
-    chip.classList.toggle("on", chip.dataset.filter === newsSentimentFilter);
-  });
-  renderNewsList();
-});
-
-document.addEventListener("click", async (e) => {
-  if (!e.target.classList.contains("news-dismiss")) return;
-
-  const btn = e.target;
-  const id = btn.dataset.id;
-  btn.disabled = true;
-
-  try {
-    const res = await fetch("/api/news", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || "Failed to dismiss");
-
-    btn.closest(".news-item").remove();
-    latestNews = latestNews.filter((item) => item.id !== id);
-    const container = document.getElementById("news-list");
-    if (!container.querySelector(".news-item")) {
-      renderNewsList();
-    }
-  } catch (err) {
-    btn.disabled = false;
-    alert("Could not dismiss: " + err.message);
-  }
-});
-
-loadDashboard();
-loadNews();
-setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
 </script>
-
-<style id="collapsible-sections-v3">
-  .dash-section{margin:0 0 18px 0;}
-  .dash-section-head{
-    display:flex;align-items:center;justify-content:space-between;gap:12px;
-    padding:10px 14px;background:#eef3f8;border:2px solid #334155;
-    border-radius:9px 9px 0 0;color:#0f172a;font-family:"Space Grotesk",sans-serif;
-    font-size:14px;font-weight:700;letter-spacing:.02em;
-  }
-  .dash-section-body{border-left:2px solid #334155;border-right:2px solid #334155;border-bottom:2px solid #334155;border-radius:0 0 9px 9px;padding:0;background:#fff;}
-  .dash-section.minimized .dash-section-head{border-radius:9px;border-bottom:2px solid #334155;}
-  .dash-section.minimized .dash-section-body{display:none;}
-  .dash-min-btn{
-    flex:0 0 auto;width:32px;height:30px;border:2px solid #0f172a;border-radius:6px;
-    background:#fff;color:#0f172a;font-size:20px;font-weight:900;line-height:24px;
-    cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
-  }
-  .dash-min-btn:hover{background:#dbeafe;border-color:#1d4ed8;color:#1d4ed8;}
-  .dash-min-btn .dash-icon{display:block;transform:translateY(-1px);}
-</style>
-<script id="collapsible-sections-v3-js">
-(function(){
-  function makeSection(id, title, target){
-    if(!target || target.dataset.collapsibleWrapped === '1') return;
-    target.dataset.collapsibleWrapped = '1';
-    var section=document.createElement('div');
-    section.className='dash-section';
-    section.id='dash-section-'+id;
-
-    var head=document.createElement('div');
-    head.className='dash-section-head';
-    var label=document.createElement('span');
-    label.textContent=title;
-    var btn=document.createElement('button');
-    btn.type='button';
-    btn.className='dash-min-btn';
-    btn.innerHTML='<span class="dash-icon">−</span>';
-    btn.title='Minimize '+title;
-    btn.setAttribute('aria-label','Minimize '+title);
-
-    var body=document.createElement('div');
-    body.className='dash-section-body';
-
-    target.parentNode.insertBefore(section,target);
-    section.appendChild(head);
-    section.appendChild(body);
-    head.appendChild(label);
-    head.appendChild(btn);
-    body.appendChild(target);
-
-    function setState(minimized){
-      section.classList.toggle('minimized',minimized);
-      btn.querySelector('.dash-icon').textContent=minimized?'+':'−';
-      btn.title=(minimized?'Restore ':'Minimize ')+title;
-      btn.setAttribute('aria-label',btn.title);
-      try{localStorage.setItem('dash-min-'+id,minimized?'1':'0');}catch(e){}
-    }
-    btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();setState(!section.classList.contains('minimized'));});
-    try{if(localStorage.getItem('dash-min-'+id)==='1') setState(true);}catch(e){}
-  }
-
-  function init(){
-    makeSection('filters','FILTERS',document.querySelector('.toolbar'));
-    makeSection('matching-stocks','MATCHING STOCKS',document.querySelector('.ticker-band'));
-    makeSection('news','NEWS',document.querySelector('.news-panel'));
-    makeSection('stock-scanner','STOCK SCANNER',document.querySelector('.table-scroll'));
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
-})();
-</script>
-
 </body>
 </html>

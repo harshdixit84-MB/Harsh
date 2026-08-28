@@ -615,8 +615,23 @@ table.stock-table {
   border-radius: 6px;
   white-space: nowrap;
 }
-.decision-badge.confirmed-buy { background: #198754; color: #ffffff; }
-.decision-badge.confirmed-sell { background: #c0392b; color: #ffffff; }
+.decision-badge.confirmed-buy {
+  background: #008000 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: 2px solid #004d00 !important;
+  text-transform: uppercase;
+  padding: 4px 10px !important;
+}
+
+.decision-badge.confirmed-sell {
+  background: #cc0000 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: 2px solid #800000 !important;
+  text-transform: uppercase;
+  padding: 4px 10px !important;
+}
 .decision-badge.early-buy { background: rgba(25,135,84,0.14); color: #3ddc8a; border: 1px solid rgba(61,220,138,0.4); }
 .decision-badge.early-sell { background: rgba(192,57,43,0.14); color: #e5626b; border: 1px solid rgba(229,98,107,0.4); }
 
@@ -1108,39 +1123,15 @@ function decision(stock) {
 }
 
 function decisionBadge(stock) {
+  // Only display Confirmed Buy and Confirmed Sell with the ticker name
   const map = {
     "Confirmed Buy": { cls: "confirmed-buy", label: "Confirmed Buy" },
-    "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" },
-    "Early Buy Signal": { cls: "early-buy", label: "Early Buy" },
-    "Early Sell Signal": { cls: "early-sell", label: "Early Sell" },
+    "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" }
   };
   const entry = map[stock.dv_decision];
   if (!entry) return "";
-  const age = stock.adp_crossover_age;
-  const ageStr = age !== null && age !== undefined && age !== "" ? ` · ${age}d` : "";
-  const title = `Crossover held ${age ?? "?"}d · last 10d leaning ${stock.adp_recent_bias || "mixed"}`;
-  return `<span class="decision-badge ${entry.cls}" title="${title}">${entry.label}${ageStr}</span>`;
-}
-
-function renderNotesRow(stock) {
-  const comments = (stock.comments || []).slice().sort((a, b) => (b.created_at || b.date || "").localeCompare(a.created_at || a.date || ""));
-  const list = comments.length
-    ? comments.map((c) => `<div class="note-entry"><span class="note-date">${escapeHtml(c.date)}</span><span class="note-text">${escapeHtml(c.comment)}</span></div>`).join("")
-    : `<div class="note-empty">No notes yet for ${stock.symbol}.</div>`;
-
-  return `
-    <tr class="notes-row" data-notes-for="${stock.symbol}">
-      <td colspan="6">
-        <div class="notes-panel">
-          <div class="notes-list">${list}</div>
-          <div class="notes-add">
-            <textarea class="notes-input" placeholder="Add an observation for ${stock.symbol}…" data-symbol="${stock.symbol}"></textarea>
-            <button class="notes-save-btn" data-symbol="${stock.symbol}">Save Note</button>
-          </div>
-        </div>
-      </td>
-    </tr>
-  `;
+  
+  return `<span class="decision-badge ${entry.cls}">${stock.symbol} ${entry.label}</span>`;
 }
 
 function renderRow(stock) {
@@ -1151,44 +1142,58 @@ function renderRow(stock) {
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
-  const tags = [];
-  if (stock.archived) tags.push(`<span class="mini-tag archived" title="${stock.archived_reason || ""}">Archived</span>`);
-  if (stock.reversal_score >= 2) tags.push(`<span class="mini-tag jackpot" title="${stock.reversal_score} of ${stock.reversal_total} reversal signals confirming">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
-  if (stock.consolidating) tags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
-  if (stock.adp5_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
-  if (stock.adp5_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
-  if (stock.adp20_trend === "Rising") tags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
-  if (stock.adp20_trend === "Falling") tags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
-  if (stock.buying_selling_verdict === "Heavy Buying") tags.push(`<span class="mini-tag dv-buying" title="Delivery % exceeded 1.3x its 20-day baseline on more up-days than down-days, last 30 sessions">Heavy Buying</span>`);
-  if (stock.buying_selling_verdict === "Heavy Selling") tags.push(`<span class="mini-tag dv-selling" title="Delivery % exceeded 1.3x its 20-day baseline on more down-days than up-days, last 30 sessions">Heavy Selling</span>`);
+  // 1. Group all GREEN elements (bullish/positive tags)
+  const greenTags = [];
+  if (stock.adp5_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
+  if (stock.adp20_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
+  if (stock.buying_selling_verdict === "Heavy Buying") greenTags.push(`<span class="mini-tag dv-buying" title="Heavy Buying">Heavy Buying</span>`);
   if (stock.adp_cross_state === "Bullish") {
     const age = stock.adp_crossover_age;
     const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
-    tags.push(`<span class="mini-tag cross-bull" title="5-day avg delivery % is currently above the 20-day avg">5D↗20D ADP${ageStr}</span>`);
+    greenTags.push(`<span class="mini-tag cross-bull">5D↗20D ADP${ageStr}</span>`);
   }
+  if (stock.harmonic_pattern && stock.harmonic_pattern.toLowerCase().includes("bullish")) {
+    greenTags.push(`<span class="mini-tag harmonic-bull">${stock.harmonic_pattern}</span>`);
+  }
+  if (stock.rsi_daily_divergence && stock.rsi_daily_divergence.toLowerCase() === "bullish") {
+    greenTags.push(`<span class="mini-tag rsi-bull">RSI D: ${stock.rsi_daily_divergence}</span>`);
+  }
+  if (stock.rsi_weekly_divergence && stock.rsi_weekly_divergence.toLowerCase() === "bullish") {
+    greenTags.push(`<span class="mini-tag rsi-bull">RSI W: ${stock.rsi_weekly_divergence}</span>`);
+  }
+
+  // 2. Group all RED elements (bearish/negative tags)
+  const redTags = [];
+  if (stock.adp5_trend === "Falling") redTags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
+  if (stock.adp20_trend === "Falling") redTags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
+  if (stock.buying_selling_verdict === "Heavy Selling") redTags.push(`<span class="mini-tag dv-selling" title="Heavy Selling">Heavy Selling</span>`);
   if (stock.adp_cross_state === "Bearish") {
     const age = stock.adp_crossover_age;
     const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
-    tags.push(`<span class="mini-tag cross-bear" title="5-day avg delivery % is currently below the 20-day avg">5D↘20D ADP${ageStr}</span>`);
+    redTags.push(`<span class="mini-tag cross-bear">5D↘20D ADP${ageStr}</span>`);
   }
-  if (stock.harmonic_pattern) {
-    const hc = stock.harmonic_pattern.toLowerCase().includes("bullish") ? "harmonic-bull" : "harmonic-bear";
-    tags.push(`<span class="mini-tag ${hc}" title="${stock.harmonic_status} · D: ₹${stock.harmonic_d_price} · Confidence ${stock.harmonic_confidence}%">${stock.harmonic_pattern}</span>`);
+  if (stock.harmonic_pattern && stock.harmonic_pattern.toLowerCase().includes("bearish")) {
+    redTags.push(`<span class="mini-tag harmonic-bear">${stock.harmonic_pattern}</span>`);
   }
-  if (stock.wm_pattern) {
-    tags.push(`<span class="mini-tag wm" title="Neckline ₹${stock.wm_breakout_level} · ${stock.wm_distance_pct}% away · ${stock.wm_status}">"${stock.wm_pattern}" · ${stock.wm_status}</span>`);
+  if (stock.rsi_daily_divergence && stock.rsi_daily_divergence.toLowerCase() === "bearish") {
+    redTags.push(`<span class="mini-tag rsi-bear">RSI D: ${stock.rsi_daily_divergence}</span>`);
   }
-  if (stock.rsi_daily_divergence) {
-    const rc = stock.rsi_daily_divergence.toLowerCase() === "bullish" ? "rsi-bull" : "rsi-bear";
-    tags.push(`<span class="mini-tag ${rc}" title="Latest daily RSI divergence">RSI D: ${stock.rsi_daily_divergence} · ${stock.rsi_daily_days_ago}d</span>`);
+  if (stock.rsi_weekly_divergence && stock.rsi_weekly_divergence.toLowerCase() === "bearish") {
+    redTags.push(`<span class="mini-tag rsi-bear">RSI W: ${stock.rsi_weekly_divergence}</span>`);
   }
-  if (stock.rsi_weekly_divergence) {
-    const rc = stock.rsi_weekly_divergence.toLowerCase() === "bullish" ? "rsi-bull" : "rsi-bear";
-    tags.push(`<span class="mini-tag ${rc}" title="Latest weekly RSI divergence">RSI W: ${stock.rsi_weekly_divergence} · ${stock.rsi_weekly_days_ago}d</span>`);
-  }
+
+  // 3. Neutral / Other tags (Squeeze, Reversal, Source, Archived)
+  const neutralTags = [];
+  if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
+  if (stock.reversal_score >= 2) neutralTags.push(`<span class="mini-tag jackpot">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
+  if (stock.consolidating) neutralTags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
+  if (stock.wm_pattern) neutralTags.push(`<span class="mini-tag wm">"${stock.wm_pattern}" · ${stock.wm_status}</span>`);
   (stock.source || "").split(",").filter(Boolean).forEach((s) => {
-    tags.push(`<span class="mini-tag">${s}</span>`);
+    neutralTags.push(`<span class="mini-tag">${s}</span>`);
   });
+
+  // Combine tags so Green boxes are grouped together first, then Red boxes together
+  const allGroupedTags = [...greenTags, ...redTags, ...neutralTags].join("");
 
   return `
     <tr class="stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
@@ -1200,7 +1205,7 @@ function renderRow(stock) {
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
         <div class="name">${stock.name || ""}</div>
-        <div class="tag-row">${tags.join("")}</div>
+        <div class="tag-row">${allGroupedTags}</div>
       </td>
       <td><span class="bs-pill ${bs}">${bs === "buy" ? "▲ B" : "▼ S"}</span></td>
       <td class="mono-cell">

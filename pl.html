@@ -9,35 +9,35 @@
 <style>
 :root {
   /* Backgrounds */
-  --bg:#081321;
-  --surface-1:#13233a;
-  --surface-2:#1a2f4d;
+  --bg:#ffffff;
+  --surface-1:#ffffff;
+  --surface-2:#f8fafc;
 
   /* Borders */
-  --border: #263952;
+  --border: #cbd5e1;
 
   /* Text */
-  --text-primary:#ffffff;
-  --text-secondary:#9ba8b8;
+  --text-primary:#111827;
+  --text-secondary:#475569;
 
   /* Status Colors */
-  --accent-buy: #00e676;
-  --accent-buy-dim: rgba(0, 230, 118, 0.14);
+  --accent-buy: #166534;
+  --accent-buy-dim: rgba(22,101,52,.10);
 
-  --accent-watch: #b8860b;
-  --accent-watch-dim: rgba(184, 134, 11, 0.12);
+  --accent-watch: #a16207;
+  --accent-watch-dim: rgba(161,98,7,.10);
 
-  --accent-tracking: #0d6efd;
-  --accent-tracking-dim: rgba(13, 110, 253, 0.12);
+  --accent-tracking: #1d4ed8;
+  --accent-tracking-dim: rgba(29,78,216,.10);
 
-  --accent-needtarget: #0a8cb3;
+  --accent-needtarget: #0f766e;
 
-  --accent-loss: #ff1744;
+  --accent-loss: #991b1b;
 
-  --accent-magenta: #ff00ff;
+  --accent-magenta: #be185d;
 
-  --accent-open: #146c43;
-  --accent-closed: #334155;
+  --accent-open: #0f766e;
+  --accent-closed: #64748b;
 }
 
 * { box-sizing: border-box; }
@@ -60,65 +60,94 @@ header {
   gap: 16px;
   margin-bottom: 24px;
   padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #94a3b8;
 }
 
-.title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 26px; }
+.title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 26px; color: #0f172a; }
 .back-link {
   color: var(--text-secondary);
   font-size: 12px;
   text-decoration: none;
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 2px solid #94a3b8;
   padding: 6px 12px;
   border-radius: 6px;
 }
-.back-link:hover { color: var(--text-primary); border-color: var(--text-primary); }
+.back-link:hover { color: var(--text-primary); border-color: #111827; }
 
 .stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 .stat-box {
   background: var(--surface-1);
-  border: 1px solid var(--border);
+  border: 2px solid #334155;
   border-radius: 8px;
   padding: 14px;
+  box-shadow: 0 3px 10px rgba(15,23,42,.06);
 }
 .stat-box .label { font-family: "Space Grotesk", sans-serif; color: var(--text-primary); font-size: 15px; font-weight: 600; letter-spacing: 0.01em; margin-bottom: 6px; }
 .stat-box .num { font-family: "IBM Plex Mono", monospace; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
 
-.section-divider {
-  height: 4px;
-  background: var(--accent-buy);
-  border-radius: 2px;
-  margin: 22px 0;
-  box-shadow: 0 0 8px rgba(0, 230, 118, 0.5);
-}
-
-.section-title {
+/* ===== Collapsible sections (matches dashboard) ===== */
+.dash-section { margin: 0 0 18px 0; }
+.dash-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #eef3f8;
+  border: 2px solid #334155;
+  border-radius: 9px 9px 0 0;
+  color: #0f172a;
   font-family: "Space Grotesk", sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  margin: 28px 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .02em;
 }
+.dash-section-body {
+  border-left: 2px solid #334155;
+  border-right: 2px solid #334155;
+  border-bottom: 2px solid #334155;
+  border-radius: 0 0 9px 9px;
+  padding: 14px;
+  background: #ffffff;
+}
+.dash-section.minimized .dash-section-head { border-radius: 9px; border-bottom: 2px solid #334155; }
+.dash-section.minimized .dash-section-body { display: none; }
+.dash-min-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 30px;
+  border: 2px solid #0f172a;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 24px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.dash-min-btn:hover { background: #dbeafe; border-color: #1d4ed8; color: #1d4ed8; }
+.dash-min-btn .dash-icon { display: block; transform: translateY(-1px); }
 
 .add-form {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px;
   display: flex;
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 20px;
 }
 
 input[type="text"], input[type="number"] {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 2px solid #94a3b8;
   color: var(--text-primary);
   font-family: "IBM Plex Mono", monospace;
   font-size: 12px;
@@ -127,14 +156,14 @@ input[type="text"], input[type="number"] {
 }
 input[type="text"] { width: 100px; text-transform: uppercase; }
 input[type="number"] { width: 90px; }
-input:focus { outline: none; border-color: var(--accent-buy); }
+input:focus { outline: none; border-color: var(--accent-tracking); }
 
 button.action-btn {
   background: var(--accent-buy);
   border: none;
-  color: #0a0e14;
+  color: #ffffff;
   font-family: "IBM Plex Mono", monospace;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 12px;
   padding: 8px 16px;
   border-radius: 5px;
@@ -147,15 +176,16 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 
 .row {
   display: grid;
-  grid-template-columns: 90px 70px 90px 120px 110px auto;
+  grid-template-columns: 90px 70px 90px 120px 140px auto;
   align-items: center;
   gap: 12px;
   background: var(--surface-1);
-  border: 1px solid var(--border);
-  border-left: 6px solid var(--border);
+  border: 2px solid #334155;
+  border-left: 6px solid #334155;
   border-radius: 8px;
   padding: 12px 16px;
   font-size: 12px;
+  box-shadow: 0 3px 10px rgba(15,23,42,.06);
 }
 .row.open-row { border-left-color: var(--accent-open); }
 .row.closed-row { border-left-color: var(--accent-closed); }
@@ -167,7 +197,8 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
   font-size: 10px;
   color: var(--text-secondary);
   text-decoration: none;
-  border: 1px solid var(--border);
+  background: #ffffff;
+  border: 2px solid #94a3b8;
   padding: 1px 5px;
   border-radius: 4px;
   margin-left: 6px;
@@ -175,9 +206,10 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 }
 .tv-link:hover { color: var(--accent-tracking); border-color: var(--accent-tracking); }
 
-.pl-amount { font-weight: 700; font-size: 13px; }
-.pl-amount.gain { color: var(--accent-buy); text-shadow: 0 0 6px rgba(0, 230, 118, 0.55); }
-.pl-amount.loss { color: var(--accent-loss); text-shadow: 0 0 6px rgba(255, 23, 68, 0.55); }
+/* Hardened & bold gain/loss pills, matching the dashboard's confirmed-buy/sell badges */
+.pl-amount { font-weight: 800; font-size: 12px; padding: 3px 9px; border-radius: 6px; display: inline-block; }
+.pl-amount.gain { background: #166534; color: #ffffff; border: 2px solid #0f4c26; }
+.pl-amount.loss { background: #991b1b; color: #ffffff; border: 2px solid #6b1414; }
 
 .sell-form { display: flex; gap: 6px; justify-content: flex-end; }
 .sell-form input { width: 80px; }
@@ -186,8 +218,10 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 
 .high-dv-tag {
   font-size: 10px;
-  color: #0dcaf0;
-  background: rgba(13,202,240,0.16);
+  font-weight: 700;
+  color: var(--accent-needtarget);
+  background: rgba(15,118,110,0.08);
+  border: 2px solid var(--accent-needtarget);
   padding: 2px 7px;
   border-radius: 4px;
   display: inline-block;
@@ -197,15 +231,15 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 4px;
   display: inline-block;
-  font-weight: 600;
+  font-weight: 800;
   margin-top: 4px;
   margin-left: 4px;
 }
-.verdict-tag.buying { background: rgba(52,211,153,0.2); color: var(--accent-buy); }
-.verdict-tag.selling { background: rgba(248,113,113,0.2); color: var(--accent-loss); }
+.verdict-tag.buying { background: #166534; color: #ffffff; border: 2px solid #0f4c26; }
+.verdict-tag.selling { background: #991b1b; color: #ffffff; border: 2px solid #6b1414; }
 
 @media (max-width: 700px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -220,8 +254,6 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 <div class="title">P/L Tracker</div>
 <a href="/" class="back-link">← Back to dashboard</a>
 </header>
-
-<div class="section-divider"></div>
 
 <div class="stats">
 <div class="stat-box">
@@ -242,29 +274,45 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 </div>
 </div>
 
-<div class="section-divider"></div>
-
-<div class="section-title">Record a new buy</div>
+<div class="dash-section" id="dash-section-add-buy">
+<div class="dash-section-head">
+<span>RECORD A NEW BUY</span>
+<button class="dash-min-btn" type="button" title="Minimize"><span class="dash-icon">−</span></button>
+</div>
+<div class="dash-section-body">
 <div class="add-form">
 <input type="text" id="buy-symbol" placeholder="SYMBOL" />
 <input type="number" step="0.01" id="buy-price" placeholder="Buy price" />
 <input type="number" step="1" id="buy-qty" placeholder="Qty" style="width: 70px;" />
 <button class="action-btn" id="add-buy-btn">Add position</button>
 </div>
+</div>
+</div>
 
-<div class="section-divider"></div>
-
-<div class="section-title">Open positions</div>
+<div class="dash-section" id="dash-section-open-positions">
+<div class="dash-section-head">
+<span>OPEN POSITIONS</span>
+<button class="dash-min-btn" type="button" title="Minimize"><span class="dash-icon">−</span></button>
+</div>
+<div class="dash-section-body">
 <div class="rows" id="open-rows">
 <div class="empty">Loading…</div>
 </div>
+</div>
+</div>
 
-<div class="section-divider"></div>
-
-<div class="section-title">Closed trades</div>
+<div class="dash-section" id="dash-section-closed-trades">
+<div class="dash-section-head">
+<span>CLOSED TRADES</span>
+<button class="dash-min-btn" type="button" title="Minimize"><span class="dash-icon">−</span></button>
+</div>
+<div class="dash-section-body">
 <div class="rows" id="closed-rows">
 <div class="empty">Loading…</div>
 </div>
+</div>
+</div>
+
 </div>
 
 <script>
@@ -416,6 +464,31 @@ document.getElementById("open-rows").addEventListener("click", async (e) => {
 
 loadTrades();
 setInterval(loadTrades, 5 * 60 * 1000);
+
+/* ===== Collapsible sections: minimize/restore, persisted per-section ===== */
+(function () {
+  document.querySelectorAll(".dash-section").forEach((section) => {
+    const btn = section.querySelector(".dash-min-btn");
+    const icon = btn.querySelector(".dash-icon");
+    const key = "pl-min-" + section.id;
+
+    function setState(minimized) {
+      section.classList.toggle("minimized", minimized);
+      icon.textContent = minimized ? "+" : "−";
+      btn.title = (minimized ? "Restore" : "Minimize");
+      try { localStorage.setItem(key, minimized ? "1" : "0"); } catch (e) {}
+    }
+
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      setState(!section.classList.contains("minimized"));
+    });
+
+    try {
+      if (localStorage.getItem(key) === "1") setState(true);
+    } catch (e) {}
+  });
+})();
 </script>
 </body>
 </html>

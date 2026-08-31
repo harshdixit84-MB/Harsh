@@ -1,4 +1,5 @@
 const { google } = require("googleapis");
+const crypto = require("crypto");
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -21,17 +22,18 @@ module.exports = async (req, res) => {
     });
     const sheets = google.sheets({ version: "v4", auth });
 
-    const date = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.SHEET_ID,
-      range: "Comments!A1:C1",
+      range: "Ticker_Notes!A1:E1",
       valueInputOption: "RAW",
       insertDataOption: "INSERT_ROWS",
-      requestBody: { values: [[symbol, comment.trim(), date]] },
+      requestBody: { values: [[id, symbol, now, comment.trim(), now]] },
     });
 
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -111,6 +111,7 @@ def build_merged_stocks(spreadsheet):
             "price": price,
             "buy_target": buy_target,
             "distance_pct": distance_pct,
+            "stop_loss": stop_loss,
             "distance_to_sl_pct": distance_to_sl_pct,
             "rsi_daily_divergence": rsi_daily_div,
             "rsi_weekly_divergence": rsi_weekly_div,
@@ -138,14 +139,19 @@ def compute_signals(s):
     bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else ""]))
     bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else ""]))
 
+    near_sl_matching = s["distance_to_sl_pct"] is not None and 0 <= s["distance_to_sl_pct"] <= WATCH_THRESHOLD
+    near_sl_suffix = ""
+    if near_sl_matching and s["stop_loss"] not in (None, ""):
+        near_sl_suffix = f" (SL: ₹{s['stop_loss']}, {s['distance_to_sl_pct']:+.2f}% away)"
+
     return {
         "near_target": (
             s["distance_pct"] is not None and 0 < s["distance_pct"] <= WATCH_THRESHOLD,
             "",
         ),
         "near_sl": (
-            s["distance_to_sl_pct"] is not None and 0 <= s["distance_to_sl_pct"] <= WATCH_THRESHOLD,
-            "",
+            near_sl_matching,
+            near_sl_suffix,
         ),
         "bullish_divergence": (
             daily_bull_today or weekly_bull_today,

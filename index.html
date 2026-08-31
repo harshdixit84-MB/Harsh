@@ -971,6 +971,7 @@ LIVE
 
 <div class="quick-row">
 <label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
+<label class="chip-check" id="chip-nearsl"><input type="checkbox" data-quick="nearsl"><span>Near Stoploss</span></label>
 <label class="chip-check" id="chip-needtarget"><input type="checkbox" data-quick="needtarget"><span>Need Target</span></label>
 <label class="chip-check" id="chip-confirmedbuy"><input type="checkbox" data-quick="confirmedBuy"><span>✔ Confirmed Buy</span></label>
 <label class="chip-check" id="chip-squeeze"><input type="checkbox" data-quick="squeeze"><span>◆ Squeeze</span></label>
@@ -1059,7 +1060,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
+let quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -1078,6 +1079,12 @@ function classify(stock) {
   if (stock.distance_pct <= 0) return "buyzone";
   if (d <= WATCH_THRESHOLD) return "watch";
   return "tracking";
+}
+
+function isNearStoploss(stock) {
+  if (!stock.stop_loss || stock.price === undefined) return false;
+  const d = ((stock.price - stock.stop_loss) / stock.stop_loss) * 100;
+  return d >= 0 && d <= WATCH_THRESHOLD;
 }
 
 function buySell(stock) {
@@ -1244,6 +1251,7 @@ function computeFilteredStocks() {
   }
 
   if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");
+  if (quickFilters.nearsl) filtered = filtered.filter((s) => isNearStoploss(s));
   if (quickFilters.needtarget) filtered = filtered.filter((s) => classify(s) === "needtarget");
   if (quickFilters.confirmedBuy) filtered = filtered.filter((s) => s.dv_decision === "Confirmed Buy");
   if (quickFilters.squeeze) filtered = filtered.filter((s) => !!s.consolidating);
@@ -1456,7 +1464,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
+  quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");

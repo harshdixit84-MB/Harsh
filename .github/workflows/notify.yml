@@ -3,7 +3,7 @@ name: Signal notifications
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: 37 3-9 * * 1-5
+    - cron: "30 3-9 * * 1-5"
 
 jobs:
   notify:

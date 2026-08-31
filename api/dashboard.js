@@ -107,34 +107,6 @@ symmetryPct: row[symmetryIdx] || "",
 // WM_Patterns tab may not exist yet -- proceed without it
 }
 
-let commentsBysymbol = {};
-try {
-const commentsResponse = await sheets.spreadsheets.values.get({
-spreadsheetId: process.env.SHEET_ID,
-range: "Comments!A1:C1000",
-});
-const commentRows = commentsResponse.data.values || [];
-if (commentRows.length > 0) {
-const commentHeaders = commentRows[0];
-const symbolIdx = commentHeaders.indexOf("symbol");
-const commentIdx = commentHeaders.indexOf("comment");
-const dateIdx = commentHeaders.indexOf("date");
-commentRows.slice(1).forEach((row) => {
-const symbol = row[symbolIdx];
-const comment = row[commentIdx];
-if (symbol && comment) {
-if (!commentsBysymbol[symbol]) commentsBysymbol[symbol] = [];
-commentsBysymbol[symbol].push({
-comment,
-date: dateIdx !== -1 ? row[dateIdx] || "" : "",
-});
-}
-});
-}
-} catch (e) {
-// Comments tab may not exist yet -- proceed without it
-}
-
 const rows = response.data.values || [];
 if (rows.length === 0) {
 res.status(200).json({ stocks: [], syncedAt: new Date().toISOString() });
@@ -192,7 +164,6 @@ r.wm_status = wmBysymbol[r.symbol]?.status || "";
 r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";
 r.wm_distance_pct = wmBysymbol[r.symbol]?.distancePct || "";
 r.wm_symmetry_pct = wmBysymbol[r.symbol]?.symmetryPct || "";
-r.comments = commentsBysymbol[r.symbol] || [];
 }
 
 withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

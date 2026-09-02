@@ -510,7 +510,7 @@ table.stock-table {
   color: var(--text-secondary);
 }
 .mini-tag.squeeze { color: #f28ab4; border-color: rgba(242,138,180,0.4); }
-.mini-tag.wm { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
+.mini-tag.retest { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 .mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
 .mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 
@@ -1002,14 +1002,15 @@ LIVE
 <label class="chip-check" id="chip-below20"><input type="checkbox" data-quick="below20"><span>&lt;20%</span></label>
 <label class="chip-check" id="chip-jackpot"><input type="checkbox" data-quick="jackpot"><span>★ Reversal</span></label>
 <label class="chip-check" id="chip-highquality"><input type="checkbox" data-quick="highQuality"><span>✓ High Quality</span></label>
+<label class="chip-check" id="chip-retest52w"><input type="checkbox" data-quick="retest52w"><span>🎯 52W Retest</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 </div>
 
 <div class="dropdown-row">
 <select class="dd-select" id="sel-buysell">
-<option value="all">Buy/Sell: All</option>
-<option value="buy">Buy/Sell: Buy</option>
-<option value="sell">Buy/Sell: Sell</option>
+<option value="all">Bias: All</option>
+<option value="buy">Bias: Bullish</option>
+<option value="sell">Bias: Bearish</option>
 </select>
 
 <select class="dd-select" id="sel-decision">
@@ -1061,7 +1062,7 @@ LIVE
 <thead>
 <tr>
 <th>Symbol</th>
-<th>Buy/Sell</th>
+<th>Pattern</th>
 <th>Entry</th>
 <th class="sortable" id="th-cmp">CMP ›</th>
 <th>Source</th>
@@ -1080,7 +1081,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false, highQuality: false };
+let quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false, highQuality: false, retest52w: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -1113,6 +1114,20 @@ function buySell(stock) {
   if (stock.buying_selling_verdict === "Heavy Selling") return "sell";
   if (stock.distance_pct !== undefined) return stock.distance_pct <= 0 ? "buy" : "sell";
   return "buy";
+}
+
+function patternLabel(stock, bs) {
+  // Prefer the actual detected pattern name over a generic Buy/Sell label.
+  if (stock.harmonic_pattern) return stock.harmonic_pattern; // already formatted e.g. "Bullish Gartley"
+  if (stock.wm_pattern) {
+    const dir = stock.wm_pattern === "W" ? "Bullish" : "Bearish";
+    return `${dir} ${stock.wm_pattern}`;
+  }
+  if (bs === "buy" && (stock.rsi_daily_divergence || "").toLowerCase() === "bullish") return "RSI Bullish Div";
+  if (bs === "sell" && (stock.rsi_daily_divergence || "").toLowerCase() === "bearish") return "RSI Bearish Div";
+  if (bs === "buy" && (stock.rsi_weekly_divergence || "").toLowerCase() === "bullish") return "RSI Bullish Div (W)";
+  if (bs === "sell" && (stock.rsi_weekly_divergence || "").toLowerCase() === "bearish") return "RSI Bearish Div (W)";
+  return bs === "buy" ? "Bullish" : "Bearish";
 }
 
 function decision(stock) {
@@ -1157,7 +1172,7 @@ const QUALITY_FLAG_LABELS = {
   strong_close: "Closed strong in day's range",
   solid_base: "Base held \u226510 days",
   volume_surge: "Volume surge on breakout",
-  near_high: "Within 10% of 52w high",
+  retest_52w_breakout: "At 52w breakout retest",
 };
 
 function renderQualityRow(stock) {
@@ -1166,6 +1181,10 @@ function renderQualityRow(stock) {
     const ok = passed.includes(key);
     return `<div class="quality-check ${ok ? "pass" : "fail"}">${ok ? "\u2714" : "\u2718"} ${QUALITY_FLAG_LABELS[key]}</div>`;
   }).join("");
+
+  const retestInfo = stock.retest_52w_level !== null
+    ? `52W breakout: ₹${stock.retest_52w_level} (${stock.days_since_52w_breakout}d ago, now ${stock.retest_pct_from_52w > 0 ? "+" : ""}${stock.retest_pct_from_52w}% from it)`
+    : "No recent 52w breakout found";
 
   return `
     <tr class="quality-row" data-quality-for="${stock.symbol}">
@@ -1179,6 +1198,7 @@ function renderQualityRow(stock) {
             Vol ratio: ${stock.breakout_vol_ratio !== null ? stock.breakout_vol_ratio + "x" : "-"} ·
             Market regime: ${stock.market_regime || "-"}
           </div>
+          <div class="quality-raw">${retestInfo}</div>
         </div>
       </td>
     </tr>
@@ -1238,7 +1258,7 @@ function renderRow(stock) {
   if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
   if (stock.reversal_score >= 2) neutralTags.push(`<span class="mini-tag jackpot">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
   if (stock.consolidating) neutralTags.push(`<span class="mini-tag squeeze">◆ Squeeze</span>`);
-  if (stock.wm_pattern) neutralTags.push(`<span class="mini-tag wm">"${stock.wm_pattern}" · ${stock.wm_status}</span>`);
+  if (stock.at_52w_retest) neutralTags.push(`<span class="mini-tag retest">🎯 52W Retest</span>`);
   (stock.source || "").split(",").filter(Boolean).forEach((s) => {
     neutralTags.push(`<span class="mini-tag">${s}</span>`);
   });
@@ -1258,7 +1278,7 @@ function renderRow(stock) {
         <div class="name">${stock.name || ""}</div>
         <div class="tag-row">${allGroupedTags}</div>
       </td>
-      <td><span class="bs-pill ${bs}">${bs === "buy" ? "▲ B" : "▼ S"}</span></td>
+      <td><span class="bs-pill ${bs}">${bs === "buy" ? "▲" : "▼"} ${patternLabel(stock, bs)}</span></td>
       <td class="mono-cell">
         <div class="value-edit">
           <input type="number" step="0.01" class="value-input" value="${stock.buy_target || ""}" placeholder="entry" data-symbol="${stock.symbol}" data-field="target" />
@@ -1319,6 +1339,7 @@ function computeFilteredStocks() {
   if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
   if (quickFilters.jackpot) filtered = filtered.filter((s) => s.reversal_score >= 3);
   if (quickFilters.highQuality) filtered = filtered.filter((s) => (s.quality_score || 0) >= 4);
+  if (quickFilters.retest52w) filtered = filtered.filter((s) => !!s.at_52w_retest);
 
   if (currentSearch.trim() !== "") {
     const q = currentSearch.trim().toLowerCase();
@@ -1534,7 +1555,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false, highQuality: false };
+  quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false, highQuality: false, retest52w: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");

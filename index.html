@@ -1329,6 +1329,8 @@ function computeFilteredStocks() {
 
   if (cmpSortDir) {
     filtered.sort((a, b) => cmpSortDir === "asc" ? a.price - b.price : b.price - a.price);
+  } else {
+    filtered.sort((a, b) => (b.quality_score ?? -1) - (a.quality_score ?? -1));
   }
 
   return filtered;

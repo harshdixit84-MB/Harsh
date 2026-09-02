@@ -233,6 +233,17 @@ module.exports = async (req, res) => {
       r.signal_label = r.signal_label || null;
       r.consolidating = r.consolidating === true || r.consolidating === "TRUE" || r.consolidating === "true";
 
+      // Breakout-quality layer (additive) -- one score + flag string instead
+      // of separate columns, so the frontend can show a single badge.
+      r.rs_vs_nifty = r.rs_vs_nifty !== "" && r.rs_vs_nifty !== undefined ? parseFloat(r.rs_vs_nifty) : null;
+      r.close_location = r.close_location !== "" && r.close_location !== undefined ? parseFloat(r.close_location) : null;
+      r.base_days = r.base_days !== "" && r.base_days !== undefined ? parseInt(r.base_days) : null;
+      r.breakout_vol_ratio = r.breakout_vol_ratio !== "" && r.breakout_vol_ratio !== undefined ? parseFloat(r.breakout_vol_ratio) : null;
+      r.near_52w_high = r.near_52w_high === true || r.near_52w_high === "TRUE" || r.near_52w_high === "true";
+      r.quality_score = r.quality_score !== "" && r.quality_score !== undefined ? parseInt(r.quality_score) : null;
+      r.quality_flags = r.quality_flags || "";
+      r.market_regime = r.market_regime || "";
+
       const dv = dvSummaryBysymbol[r.symbol];
       r.adp_5 = dv && dv.adp5 !== "" ? parseFloat(dv.adp5) : null;
       r.adp_20 = dv && dv.adp20 !== "" ? parseFloat(dv.adp20) : null;

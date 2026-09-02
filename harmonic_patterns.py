@@ -27,7 +27,7 @@ SHEET_NAME = "Monthly Breakout Scan"
 PATTERNS_SHEET = "Harmonic_Patterns"
 
 SWING_FRACTAL_BARS = 2      # bars on each side to confirm a swing pivot
-MIN_CONFIDENCE = 60         # don't report patterns scoring below this
+MIN_CONFIDENCE = 70         # don't report patterns scoring below this
 WEEKS_OF_HISTORY = "3y"     # yfinance period for weekly data
 
 # Standard published ratio ranges (min, ideal, max) per pattern/leg

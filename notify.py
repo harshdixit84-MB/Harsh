@@ -105,6 +105,9 @@ def build_merged_stocks(spreadsheet):
 
         dv = dv_by_symbol.get(symbol, {})
 
+        quality_score = _to_int_or_none(r.get("quality_score"))
+        quality_flags = r.get("quality_flags", "") or ""
+
         stocks.append({
             "symbol": symbol,
             "source": r.get("source", ""),
@@ -121,6 +124,8 @@ def build_merged_stocks(spreadsheet):
             "dv_cross_state": dv.get("cross_state", "") or "",
             "dv_crossover_age": dv.get("crossover_age", ""),
             "dv_recent_bias": dv.get("recent_bias", "") or "",
+            "quality_score": quality_score,
+            "quality_flags": quality_flags,
         })
 
     return stocks
@@ -169,6 +174,10 @@ def compute_signals(s):
             s["dv_decision"] == "Confirmed Buy",
             "",
         ),
+        "high_quality": (
+            s["quality_score"] is not None and s["quality_score"] >= 4,
+            f" (Q {s['quality_score']}/5)" if s["quality_score"] is not None else "",
+        ),
     }
 
 
@@ -179,6 +188,7 @@ FILTER_DISPLAY_NAMES = {
     "bearish_divergence": "Bearish Divergence (formed today)",
     "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
     "confirmed_buy": "✅ Confirmed Buy (Delivery %)",
+    "high_quality": "🌟 High Quality Breakout (Score ≥4/5)",
 }
 
 

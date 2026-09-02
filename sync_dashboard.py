@@ -59,6 +59,7 @@ MIN_VOLUME_BY_SOURCE = {
 }
 
 ARCHIVE_THRESHOLD_PCT = 20
+MIN_PRICE = 20  # ignore new candidates below this price -- cheap stocks spike on noise/manipulation more easily
 
 # --- new tunables for the quality layer ---
 NIFTY_SYMBOL = "^NSEI"
@@ -66,7 +67,11 @@ RS_LOOKBACK_DAYS = 20
 STRONG_CLOSE_THRESHOLD = 0.6      # close in top 40% of day's range
 MIN_BASE_DAYS = 10                # minimum squeeze duration to count as a "real" base
 VOLUME_SURGE_RATIO = 1.5          # breakout-day volume vs 20-day average
-NEAR_HIGH_PCT = 0.90              # within 10% of 52-week high
+NEAR_HIGH_PCT = 0.90              # within 10% of 52-week high (informational field, no longer part of quality_score)
+
+# --- 52-week-high breakout + retest (your actual entry pattern) ---
+RETEST_LOOKBACK_DAYS = 10   # how far back to look for the breakout that set up a retest
+RETEST_TOLERANCE_PCT = 5    # how close to the old breakout level counts as "at the retest"
 
 SHEET_NAME = "Monthly Breakout Scan"
 
@@ -74,7 +79,8 @@ HEADERS = ["symbol", "name", "source", "price", "percent_change", "volume",
            "buy_target", "status", "added_date", "archived_date", "archived_reason",
            "rsi", "adx", "signal_score", "signal_label", "consolidating",
            "rs_vs_nifty", "close_location", "base_days", "breakout_vol_ratio",
-           "near_52w_high", "quality_score", "quality_flags", "market_regime"]
+           "near_52w_high", "quality_score", "quality_flags", "market_regime",
+           "retest_52w_level", "days_since_52w_breakout", "retest_pct_from_52w", "at_52w_retest"]
 
 
 async def fetch_raw_results(screener_url):
@@ -111,10 +117,13 @@ def clean_and_filter(raw_rows, min_volume):
         volume = row.get("scan-column-default-volume") or 0
         if volume < min_volume:
             continue
+        price = row.get("scan-column-default-close")
+        if price is None or price < MIN_PRICE:
+            continue
         cleaned.append({
             "symbol": row.get("nsecode"),
             "name": row.get("name"),
-            "price": row.get("scan-column-default-close"),
+            "price": price,
             "percent_change": row.get("scan-column-default-percent-change"),
             "volume": volume,
         })
@@ -217,9 +226,60 @@ def _count_trailing_base_days(squeeze_flags):
     return count
 
 
+def _find_52w_breakout_retest(close, high, volume):
+    """Finds the most recent day the stock closed above its own trailing
+    52-week high (a genuine new-high breakout), then checks whether price
+    has since pulled back to within RETEST_TOLERANCE_PCT of that breakout
+    level -- i.e. the old resistance now being tested as support, which is
+    the actual entry pattern being traded (break the 52-week high, come
+    back to the breakout point).
+
+    A price-proximity match alone isn't enough to call it a genuine retest --
+    per standard price-action theory, a healthy pullback shows volume
+    CONTRACTING (fewer sellers wanting out) rather than expanding (which
+    looks like distribution/rejection, not a real test). So this also
+    requires the average volume since the breakout day to be below the
+    20-day average volume.
+
+    Returns (breakout_level, days_since_breakout, retest_pct, at_retest).
+    All None/False if no qualifying breakout is found within the lookback
+    window."""
+    trailing_high = high.rolling(252, min_periods=100).max().shift(1)
+    breakout_mask = close > trailing_high
+    n = len(close)
+    latest_close = close.iloc[-1]
+    avg_volume_20 = volume.iloc[-20:].mean()
+
+    # Walk backwards from today so we find the MOST RECENT breakout first.
+    for idx in range(n - 1, -1, -1):
+        days_since = n - 1 - idx
+        if days_since > RETEST_LOOKBACK_DAYS:
+            break
+        if not bool(breakout_mask.iloc[idx]):
+            continue
+
+        breakout_level = trailing_high.iloc[idx]
+        if pd.isna(breakout_level) or breakout_level <= 0:
+            continue
+
+        breakout_level = float(breakout_level)
+        retest_pct = round((latest_close - breakout_level) / breakout_level * 100, 2)
+        price_in_zone = abs(retest_pct) <= RETEST_TOLERANCE_PCT
+
+        # Volume during the pullback (the days AFTER the breakout, through today).
+        pullback_slice = volume.iloc[idx + 1:] if days_since > 0 else volume.iloc[-1:]
+        pullback_avg_volume = pullback_slice.mean() if len(pullback_slice) > 0 else volume.iloc[-1]
+        volume_contracted = bool(avg_volume_20) and pullback_avg_volume < avg_volume_20
+
+        at_retest = price_in_zone and volume_contracted
+        return round(breakout_level, 2), days_since, retest_pct, at_retest
+
+    return None, None, None, False
+
+
 def compute_signal(symbol, nifty_return_20d):
     try:
-        hist = yf.Ticker(f"{symbol}.NS").history(period="1y")
+        hist = yf.Ticker(f"{symbol}.NS").history(period="2y")
         if hist.empty or len(hist) < 60:
             return None
 
@@ -294,14 +354,19 @@ def compute_signal(symbol, nifty_return_20d):
 
         breakout_vol_ratio = round(float(volume_ratio), 2)
 
-        near_52w_high = bool(latest_close >= NEAR_HIGH_PCT * close.max())
+        # True trailing 52-week high now that history covers 2 years.
+        w52_high = close.iloc[-252:].max() if len(close) >= 252 else close.max()
+        near_52w_high = bool(latest_close >= NEAR_HIGH_PCT * w52_high)
+
+        # Your actual entry pattern: broke the 52-week high, now retesting that level.
+        retest_level, days_since_breakout, retest_pct, at_retest = _find_52w_breakout_retest(close, high, volume)
 
         checks = {
             "rs_positive": rs_vs_nifty is not None and rs_vs_nifty > 0,
             "strong_close": close_location is not None and close_location >= STRONG_CLOSE_THRESHOLD,
             "solid_base": base_days >= MIN_BASE_DAYS,
             "volume_surge": breakout_vol_ratio >= VOLUME_SURGE_RATIO,
-            "near_high": near_52w_high,
+            "retest_52w_breakout": at_retest,
         }
         quality_score = sum(1 for v in checks.values() if v)
         quality_flags = ",".join(k for k, v in checks.items() if v)
@@ -320,6 +385,10 @@ def compute_signal(symbol, nifty_return_20d):
             "near_52w_high": near_52w_high,
             "quality_score": quality_score,
             "quality_flags": quality_flags,
+            "retest_52w_level": retest_level if retest_level is not None else "",
+            "days_since_52w_breakout": days_since_breakout if days_since_breakout is not None else "",
+            "retest_pct_from_52w": retest_pct if retest_pct is not None else "",
+            "at_52w_retest": at_retest,
         }
     except Exception as e:
         print(f"Signal calculation failed for {symbol}: {e}")
@@ -437,6 +506,10 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
             record["near_52w_high"] = sig["near_52w_high"]
             record["quality_score"] = sig["quality_score"]
             record["quality_flags"] = sig["quality_flags"]
+            record["retest_52w_level"] = sig["retest_52w_level"]
+            record["days_since_52w_breakout"] = sig["days_since_52w_breakout"]
+            record["retest_pct_from_52w"] = sig["retest_pct_from_52w"]
+            record["at_52w_retest"] = sig["at_52w_retest"]
 
         record["market_regime"] = market_regime
 

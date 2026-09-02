@@ -212,20 +212,65 @@ def format_dv_context(stock):
     return f" · {arrow} ({age_str})"
 
 
-def format_ticker_line(stock, detail_suffix):
-    target_str = f"₹{stock['buy_target']}" if stock["buy_target"] not in (None, "", 0) else "target not set"
+def quality_dot(quality_score):
+    "A quick visual read of breakout quality, shown on EVERY alert regardless of which filter fired it -- so a Near Target hit that's actually a weak setup doesn't look the same as a genuinely strong one."
+    if quality_score is None:
+        return "⚪"
+    if quality_score >= 4:
+        return "🟢"
+    if quality_score >= 2:
+        return "🟡"
+    return "🔴"
+
+
+def format_price_block(stock):
+    "Price + target + stop-loss with their distances, grouped together -- these are the actual numbers needed to decide on the trade, shown every time regardless of which filter triggered the alert."
+    parts = [f"💰 ₹{stock['price']}"]
+
+    if stock["buy_target"] not in (None, "", 0):
+        dist = f" ({stock['distance_pct']:+.2f}%)" if stock["distance_pct"] is not None else ""
+        parts.append(f"🎯 ₹{stock['buy_target']}{dist}")
+    else:
+        parts.append("🎯 not set")
+
+    if stock["stop_loss"] not in (None, ""):
+        dist = f" ({stock['distance_to_sl_pct']:+.2f}%)" if stock["distance_to_sl_pct"] is not None else ""
+        parts.append(f"🛑 ₹{stock['stop_loss']}{dist}")
+
+    return "  ·  ".join(parts)
+
+
+def format_ticker_block(stock, detail_suffix, filter_key):
     tv_url = f"https://www.tradingview.com/chart/?symbol=NSE:{stock['symbol']}"
     symbol_link = f'<a href="{tv_url}"><b>{stock["symbol"]}</b></a>'
-    return (
-        f"{symbol_link}{detail_suffix} — ₹{stock['price']} — Target: {target_str} — "
-        f"{stock['source'] or '-'}{format_dv_context(stock)}"
-    )
+    quality_str = f"Q{stock['quality_score']}/5" if stock["quality_score"] is not None else "Q -"
+
+    lines = [f"{quality_dot(stock['quality_score'])} {symbol_link}  <i>{quality_str}</i>"]
+    lines.append(format_price_block(stock))
+
+    context_bits = []
+    if stock["source"]:
+        context_bits.append(stock["source"])
+    dv_context = format_dv_context(stock).strip(" ·")
+    if dv_context:
+        context_bits.append(dv_context)
+    # SL details and the Q-score are already shown above for these two filters --
+    # repeating them in the note line would just be noise.
+    if detail_suffix and filter_key not in ("near_sl", "high_quality"):
+        context_bits.append(detail_suffix.strip(" ()"))
+    if context_bits:
+        lines.append("📊 " + "  ·  ".join(context_bits))
+
+    return "\n".join(lines)
 
 
 def format_group_message(filter_key, entries):
-    header = f"🔔 <b>{FILTER_DISPLAY_NAMES[filter_key]}</b> ({len(entries)} stock{'s' if len(entries) != 1 else ''})\n"
-    lines = [format_ticker_line(stock, detail_suffix) for stock, detail_suffix in entries]
-    return header + "\n".join(lines)
+    header = (
+        f"🔔 <b>{FILTER_DISPLAY_NAMES[filter_key]}</b>  •  {len(entries)} stock{'s' if len(entries) != 1 else ''}\n"
+        + "─" * 24
+    )
+    blocks = [format_ticker_block(stock, detail_suffix, filter_key) for stock, detail_suffix in entries]
+    return header + "\n\n" + "\n\n".join(blocks)
 
 
 def main():

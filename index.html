@@ -537,6 +537,25 @@ table.stock-table {
   font-weight: 800 !important;
 }
 
+.quality-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-weight: 700;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.quality-badge.q-high { color: #ffffff; background: #0d6e38; border-color: #064220; }
+.quality-badge.q-mid { color: #1a1206; background: #ffcf3d; border-color: rgba(255,207,61,0.6); }
+.quality-badge.q-low { color: var(--text-secondary); background: transparent; border-color: var(--border); }
+.quality-panel { display: flex; flex-direction: column; gap: 8px; }
+.quality-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.quality-check { font-size: 11px; }
+.quality-check.pass { color: #34d399; }
+.quality-check.fail { color: var(--text-secondary); }
+.quality-raw { font-size: 10px; color: var(--text-secondary); }
+
 .notes-toggle {
   font-size: 10px;
   padding: 1px 6px;
@@ -982,6 +1001,7 @@ LIVE
 <label class="chip-check" id="chip-above20"><input type="checkbox" data-quick="above20"><span>&gt;20%</span></label>
 <label class="chip-check" id="chip-below20"><input type="checkbox" data-quick="below20"><span>&lt;20%</span></label>
 <label class="chip-check" id="chip-jackpot"><input type="checkbox" data-quick="jackpot"><span>★ Reversal</span></label>
+<label class="chip-check" id="chip-highquality"><input type="checkbox" data-quick="highQuality"><span>✓ High Quality</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 </div>
 
@@ -1060,7 +1080,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
+let quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false, highQuality: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -1068,6 +1088,7 @@ let crossAgeFilter = "all";
 let cmpSortDir = null; // null | "asc" | "desc"
 let latestStocks = [];
 let expandedNotes = new Set();
+let expandedQuality = new Set();
 
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1124,6 +1145,39 @@ function renderNotesRow(stock) {
           <div class="notes-add">
             <textarea class="notes-input" placeholder="Add an observation for ${stock.symbol}…" data-symbol="${stock.symbol}"></textarea>
             <button class="notes-save-btn" data-symbol="${stock.symbol}">Save Note</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+const QUALITY_FLAG_LABELS = {
+  rs_positive: "Outperforming Nifty (20d)",
+  strong_close: "Closed strong in day's range",
+  solid_base: "Base held \u226510 days",
+  volume_surge: "Volume surge on breakout",
+  near_high: "Within 10% of 52w high",
+};
+
+function renderQualityRow(stock) {
+  const passed = (stock.quality_flags || "").split(",").filter(Boolean);
+  const checks = Object.keys(QUALITY_FLAG_LABELS).map((key) => {
+    const ok = passed.includes(key);
+    return `<div class="quality-check ${ok ? "pass" : "fail"}">${ok ? "\u2714" : "\u2718"} ${QUALITY_FLAG_LABELS[key]}</div>`;
+  }).join("");
+
+  return `
+    <tr class="quality-row" data-quality-for="${stock.symbol}">
+      <td colspan="6">
+        <div class="quality-panel">
+          <div class="quality-checks">${checks}</div>
+          <div class="quality-raw">
+            RS vs Nifty: ${stock.rs_vs_nifty !== null ? stock.rs_vs_nifty + "%" : "-"} ·
+            Close location: ${stock.close_location !== null ? stock.close_location : "-"} ·
+            Base days: ${stock.base_days !== null ? stock.base_days : "-"} ·
+            Vol ratio: ${stock.breakout_vol_ratio !== null ? stock.breakout_vol_ratio + "x" : "-"} ·
+            Market regime: ${stock.market_regime || "-"}
           </div>
         </div>
       </td>
@@ -1197,6 +1251,7 @@ function renderRow(stock) {
         <div class="symbol-line">
           <span class="symbol">${stock.symbol}</span>
           ${decisionBadge(stock)}
+          ${stock.quality_score !== null && stock.quality_score !== undefined ? `<button class="quality-badge ${stock.quality_score >= 4 ? "q-high" : stock.quality_score >= 2 ? "q-mid" : "q-low"}" data-symbol="${stock.symbol}" title="Breakout quality — click for breakdown">Q ${stock.quality_score}/5</button>` : ""}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
@@ -1225,6 +1280,7 @@ function renderRow(stock) {
       </td>
     </tr>
     ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
+    ${expandedQuality.has(stock.symbol) ? renderQualityRow(stock) : ""}
   `;
 }
 
@@ -1262,6 +1318,7 @@ function computeFilteredStocks() {
   if (quickFilters.above20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct > 20);
   if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
   if (quickFilters.jackpot) filtered = filtered.filter((s) => s.reversal_score >= 3);
+  if (quickFilters.highQuality) filtered = filtered.filter((s) => (s.quality_score || 0) >= 4);
 
   if (currentSearch.trim() !== "") {
     const q = currentSearch.trim().toLowerCase();
@@ -1341,6 +1398,17 @@ document.getElementById("rows").addEventListener("click", async (e) => {
       expandedNotes.delete(symbol);
     } else {
       expandedNotes.add(symbol);
+    }
+    render();
+    return;
+  }
+
+  if (e.target.classList.contains("quality-badge")) {
+    const symbol = e.target.dataset.symbol;
+    if (expandedQuality.has(symbol)) {
+      expandedQuality.delete(symbol);
+    } else {
+      expandedQuality.add(symbol);
     }
     render();
     return;
@@ -1464,7 +1532,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false };
+  quickFilters = { neartarget: false, nearsl: false, needtarget: false, confirmedBuy: false, squeeze: false, rsiDBull: false, rsiDBear: false, rsiWBull: false, rsiWBear: false, above20: false, below20: false, jackpot: false, highQuality: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");

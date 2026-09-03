@@ -71,6 +71,7 @@ def build_merged_stocks(spreadsheet):
     main_rows = spreadsheet.sheet1.get_all_records()
     rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
+    harmonic_by_symbol = read_tab_by_symbol(spreadsheet, "Harmonic_Patterns")
 
     stocks = []
     for r in main_rows:
@@ -117,6 +118,15 @@ def build_merged_stocks(spreadsheet):
         quality_score = _to_int_or_none(r.get("quality_score"))
         quality_flags = r.get("quality_flags", "") or ""
 
+        harmonic = harmonic_by_symbol.get(symbol, {})
+        harmonic_pattern = harmonic.get("pattern_name", "") or ""
+        harmonic_status = harmonic.get("status", "") or ""
+        harmonic_d_price = harmonic.get("d_price", "")
+        harmonic_days_ago = _to_int_or_none(harmonic.get("days_ago"))
+        # "informed if point C is formed" -- fire only while the setup is FRESH (the
+        # scan run that first confirmed C), not every run for the rest of its life.
+        harmonic_c_fresh = "C formed" in harmonic_status and harmonic_days_ago == 0
+
         stocks.append({
             "symbol": symbol,
             "source": r.get("source", ""),
@@ -138,6 +148,10 @@ def build_merged_stocks(spreadsheet):
             "dv_recent_bias": dv.get("recent_bias", "") or "",
             "quality_score": quality_score,
             "quality_flags": quality_flags,
+            "harmonic_pattern": harmonic_pattern,
+            "harmonic_status": harmonic_status,
+            "harmonic_d_price": harmonic_d_price,
+            "harmonic_c_fresh": harmonic_c_fresh,
         })
 
     return stocks
@@ -194,6 +208,10 @@ def compute_signals(s):
             s["quality_score"] is not None and s["quality_score"] >= 4,
             f" (Q {s['quality_score']}/5)" if s["quality_score"] is not None else "",
         ),
+        "harmonic_c_formed": (
+            s["harmonic_c_fresh"],
+            f" ({s['harmonic_pattern']} → D ₹{s['harmonic_d_price']})" if s["harmonic_c_fresh"] else "",
+        ),
     }
 
 
@@ -204,6 +222,7 @@ FILTER_DISPLAY_NAMES = {
     "bearish_divergence": "Bearish Divergence (Daily/Weekly/1H)",
     "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
     "confirmed_buy": "✅ Confirmed Buy (Delivery %)",
+    "harmonic_c_formed": "🔷 Harmonic Point C Formed (D Target)",
     "high_quality": "🌟 High Quality Breakout (Score ≥4/5)",
 }
 

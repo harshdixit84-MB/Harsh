@@ -634,6 +634,7 @@ table.stock-table {
 }
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
+.dpoint-empty { color: var(--text-secondary); font-size: 12px; }
 
 /* HARDENED & BOLD CONFIRMED BADGES */
 .decision-badge {
@@ -1062,7 +1063,7 @@ LIVE
 <thead>
 <tr>
 <th>Symbol</th>
-<th>Pattern</th>
+<th>D Point</th>
 <th>Entry</th>
 <th class="sortable" id="th-cmp">CMP ›</th>
 <th>Source</th>
@@ -1116,25 +1117,17 @@ function buySell(stock) {
   return "buy";
 }
 
-function patternLabel(stock, bs) {
-  // Prefer the actual detected pattern over a generic Buy/Sell label -- and for
-  // harmonic patterns specifically, show the D TARGET price, not just the name.
-  if (stock.harmonic_pattern) {
-    if (stock.harmonic_d_price) {
-      const projected = (stock.harmonic_status || "").includes("projected");
-      return `${stock.harmonic_pattern} → D ₹${stock.harmonic_d_price}${projected ? " (proj)" : ""}`;
-    }
-    return stock.harmonic_pattern;
+function dPointCell(stock) {
+  // Dedicated harmonic D-point signal -- pattern name + target price, not a generic direction label.
+  // (RSI divergence and other directional signals already show as tags in the symbol cell.)
+  if (!stock.harmonic_pattern || !stock.harmonic_d_price) {
+    return `<span class="dpoint-empty">—</span>`;
   }
-  if (stock.wm_pattern) {
-    const dir = stock.wm_pattern === "W" ? "Bullish" : "Bearish";
-    return `${dir} ${stock.wm_pattern}`;
-  }
-  if (bs === "buy" && (stock.rsi_daily_divergence || "").toLowerCase() === "bullish") return "RSI Bullish Div";
-  if (bs === "sell" && (stock.rsi_daily_divergence || "").toLowerCase() === "bearish") return "RSI Bearish Div";
-  if (bs === "buy" && (stock.rsi_weekly_divergence || "").toLowerCase() === "bullish") return "RSI Bullish Div (W)";
-  if (bs === "sell" && (stock.rsi_weekly_divergence || "").toLowerCase() === "bearish") return "RSI Bearish Div (W)";
-  return bs === "buy" ? "Bullish" : "Bearish";
+  const bullish = stock.harmonic_pattern.toLowerCase().includes("bullish");
+  const projected = (stock.harmonic_status || "").includes("projected");
+  const cls = bullish ? "buy" : "sell";
+  const arrow = bullish ? "▲" : "▼";
+  return `<span class="bs-pill ${cls}">${arrow} ${stock.harmonic_pattern} · D ₹${stock.harmonic_d_price}${projected ? " (proj)" : ""}</span>`;
 }
 
 function decision(stock) {
@@ -1214,7 +1207,6 @@ function renderQualityRow(stock) {
 
 function renderRow(stock) {
   const cls = classify(stock);
-  const bs = buySell(stock);
 
   const dayChange = stock.percent_change || 0;
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
@@ -1285,7 +1277,7 @@ function renderRow(stock) {
         <div class="name">${stock.name || ""}</div>
         <div class="tag-row">${allGroupedTags}</div>
       </td>
-      <td><span class="bs-pill ${bs}">${bs === "buy" ? "▲" : "▼"} ${patternLabel(stock, bs)}</span></td>
+      <td>${dPointCell(stock)}</td>
       <td class="mono-cell">
         <div class="value-edit">
           <input type="number" step="0.01" class="value-input" value="${stock.buy_target || ""}" placeholder="entry" data-symbol="${stock.symbol}" data-field="target" />

@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
     try {
       const hpResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "Harmonic_Patterns!A1:F1000",
+        range: "Harmonic_Patterns!A1:J1000",
       });
       const hpRows = hpResponse.data.values || [];
       if (hpRows.length > 0) {
@@ -71,6 +71,7 @@ module.exports = async (req, res) => {
         const statusIdx = hpHeaders.indexOf("status");
         const dPriceIdx = hpHeaders.indexOf("d_price");
         const confidenceIdx = hpHeaders.indexOf("confidence");
+        const daysAgoIdx = hpHeaders.indexOf("days_ago");
         hpRows.slice(1).forEach((row) => {
           const symbol = row[symbolIdx];
           const pattern = row[patternIdx];
@@ -80,6 +81,7 @@ module.exports = async (req, res) => {
               status: row[statusIdx] || "",
               dPrice: row[dPriceIdx] || "",
               confidence: row[confidenceIdx] || "",
+              daysAgo: daysAgoIdx >= 0 ? (row[daysAgoIdx] || "") : "",
             };
           }
         });
@@ -267,6 +269,7 @@ module.exports = async (req, res) => {
       r.harmonic_status = harmonicBysymbol[r.symbol]?.status || "";
       r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
       r.harmonic_confidence = harmonicBysymbol[r.symbol]?.confidence || "";
+      r.harmonic_days_ago = harmonicBysymbol[r.symbol]?.daysAgo || "";
       r.wm_pattern = wmBysymbol[r.symbol]?.pattern || null;
       r.wm_status = wmBysymbol[r.symbol]?.status || "";
       r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";

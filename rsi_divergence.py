@@ -46,7 +46,7 @@ WEEKLY_HISTORY = "3y"        # yfinance period for weekly data
 HOURLY_HISTORY = "60d"       # yfinance period for 60m data (well within Yahoo's ~730d intraday cap)
 DAILY_MAX_AGE_DAYS = 7        # ignore daily divergences older than this
 WEEKLY_MAX_AGE_DAYS = 14      # ignore weekly divergences older than this
-HOURLY_MAX_BARS_AGE = 3       # ignore hourly divergences confirmed more than 3 hourly bars ago
+HOURLY_MAX_BARS_AGE = 14     # ~2 trading days of 60m bars (NSE runs ~7 bars/day) -- keep enough history in the sheet for notify.py's own 2-day window
 
 
 def get_client():

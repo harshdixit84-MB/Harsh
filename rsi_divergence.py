@@ -1,19 +1,22 @@
 """
-Detects the latest RSI divergence (daily and weekly) for actively tracked
-stocks. This is a direct port of TradingView's own official "RSI Divergence
-Indicator" (the built-in Pine script, not a community script) -- same RSI
-period (14, on Close), same pivot lookback (5 bars left, 5 bars right),
-same pivot source (the RSI line itself, not price), and the same 5-60 bar
-range gate between compared pivots. Only Regular divergence is implemented
-(Hidden divergence exists in the original but defaults to off there too):
+Detects the latest RSI divergence (daily, weekly, AND hourly) for actively
+tracked stocks. This is a direct port of TradingView's own official "RSI
+Divergence Indicator" (the built-in Pine script, not a community script) --
+same RSI period (14, on Close), same pivot lookback (5 bars left, 5 bars
+right), same pivot source (the RSI line itself, not price), and the same
+5-60 bar range gate between compared pivots -- run identically across all
+three timeframes. Only Regular divergence is implemented (Hidden divergence
+exists in the original but defaults to off there too):
 
   Regular bearish: RSI makes a lower pivot high, price makes a higher pivot high.
   Regular bullish: RSI makes a higher pivot low, price makes a lower pivot low.
 
-For each stock, reports only the MOST RECENT divergence on each timeframe
-(daily and weekly), the direction (Bullish/Bearish), and how many days ago
-it formed (counted from the bar where the divergence pivot confirmed, to
-today). Both timeframes are checked in a single run.
+For each stock, reports the MOST RECENT divergence on each timeframe, the
+direction (Bullish/Bearish), and how stale it is -- daily/weekly report
+calendar days ago (matching the original design), while hourly reports BARS
+ago instead, since several hourly bars can form within a single calendar
+day and a date-based staleness check wouldn't distinguish "1 hour ago" from
+"6 hours ago."
 
 Note: a pivot can only be confirmed once PIVOT_RIGHT bars have passed after
 it, same lag TradingView's indicator has in real time -- so very recent bars
@@ -40,8 +43,10 @@ RANGE_LOWER = 5        # min bars between the two compared pivots
 RANGE_UPPER = 60        # max bars between the two compared pivots
 DAILY_HISTORY = "1y"         # yfinance period for daily data
 WEEKLY_HISTORY = "3y"        # yfinance period for weekly data
+HOURLY_HISTORY = "60d"       # yfinance period for 60m data (well within Yahoo's ~730d intraday cap)
 DAILY_MAX_AGE_DAYS = 7        # ignore daily divergences older than this
 WEEKLY_MAX_AGE_DAYS = 14      # ignore weekly divergences older than this
+HOURLY_MAX_BARS_AGE = 3       # ignore hourly divergences confirmed more than 3 hourly bars ago
 
 
 def get_client():
@@ -99,8 +104,8 @@ def find_rsi_pivots(rsi, left=PIVOT_LEFT, right=PIVOT_RIGHT):
     return highs, lows
 
 
-def detect_latest_divergence(df, rsi):
-    "Compares the last two RSI pivot highs (and the last two RSI pivot lows) against price at those same bars, gated to pivots RANGE_LOWER-RANGE_UPPER bars apart."
+def _latest_divergence_candidate(df, rsi):
+    "Shared logic: finds the latest confirmed regular divergence (type + bar index) from the last two RSI pivot highs and last two RSI pivot lows, gated to pivots RANGE_LOWER-RANGE_UPPER bars apart. Returns None if nothing qualifies."
     highs, lows = find_rsi_pivots(rsi)
     candidates = []
 
@@ -125,10 +130,26 @@ def detect_latest_divergence(df, rsi):
 
     # if both a bullish and bearish candidate exist, keep whichever formed more recently
     candidates.sort(key=lambda c: c["index"])
-    latest = candidates[-1]
+    return candidates[-1]
+
+
+def detect_latest_divergence(df, rsi):
+    "Daily/weekly variant -- reports calendar days ago (unchanged from before)."
+    latest = _latest_divergence_candidate(df, rsi)
+    if latest is None:
+        return None
     formed_date = df.index[latest["index"]].date()
     days_ago = (date.today() - formed_date).days
     return latest["type"], days_ago
+
+
+def detect_latest_divergence_bars(df, rsi):
+    "Hourly variant -- reports BARS ago instead of calendar days, since several hourly bars can form within one calendar day and a date-based check can't tell '1 hour ago' from '6 hours ago'."
+    latest = _latest_divergence_candidate(df, rsi)
+    if latest is None:
+        return None
+    bars_ago = (len(df) - 1) - latest["index"]
+    return latest["type"], bars_ago
 
 
 def check_timeframe(symbol, period, interval, max_age_days):
@@ -153,14 +174,38 @@ def check_timeframe(symbol, period, interval, max_age_days):
         return None, None
 
 
+def check_timeframe_intraday(symbol, period, interval, max_bars_age):
+    "Same idea as check_timeframe, but for hourly data: uses the bars-ago variant instead of calendar-day staleness."
+    try:
+        hist = yf.Ticker(f"{symbol}.NS").history(period=period, interval=interval)
+        if hist.empty or len(hist) < RSI_PERIOD + RANGE_UPPER + PIVOT_LEFT + PIVOT_RIGHT:
+            return None, None
+
+        rsi = compute_rsi(hist["Close"])
+        result = detect_latest_divergence_bars(hist, rsi)
+        if result is None:
+            return None, None
+
+        div_type, bars_ago = result
+        if bars_ago > max_bars_age:
+            return None, None  # too stale to be worth showing
+
+        return div_type, bars_ago
+
+    except Exception as e:
+        print(f"RSI divergence ({interval}) failed for {symbol}: {e}")
+        return None, None
+
+
 def main():
     client = get_client()
     spreadsheet = client.open(SHEET_NAME)
 
     active_symbols = get_active_symbols(spreadsheet)
-    print(f"Scanning {len(active_symbols)} active symbols for RSI divergence (daily + weekly).")
+    print(f"Scanning {len(active_symbols)} active symbols for RSI divergence (daily + weekly + hourly).")
 
-    header = ["symbol", "daily_divergence", "daily_days_ago", "weekly_divergence", "weekly_days_ago", "last_updated"]
+    header = ["symbol", "daily_divergence", "daily_days_ago", "weekly_divergence", "weekly_days_ago",
+              "hourly_divergence", "hourly_bars_ago", "last_updated"]
     div_ws = get_or_create_sheet(spreadsheet, DIVERGENCE_SHEET, header)
 
     today_str = str(date.today())
@@ -169,6 +214,7 @@ def main():
     for symbol in active_symbols:
         daily_type, daily_days = check_timeframe(symbol, DAILY_HISTORY, "1d", DAILY_MAX_AGE_DAYS)
         weekly_type, weekly_days = check_timeframe(symbol, WEEKLY_HISTORY, "1wk", WEEKLY_MAX_AGE_DAYS)
+        hourly_type, hourly_bars = check_timeframe_intraday(symbol, HOURLY_HISTORY, "60m", HOURLY_MAX_BARS_AGE)
 
         rows.append([
             symbol,
@@ -176,11 +222,13 @@ def main():
             daily_days if daily_days is not None else "",
             weekly_type or "",
             weekly_days if weekly_days is not None else "",
+            hourly_type or "",
+            hourly_bars if hourly_bars is not None else "",
             today_str,
         ])
 
-        if daily_type or weekly_type:
-            print(f"{symbol}: daily={daily_type or '-'} ({daily_days}d)  weekly={weekly_type or '-'} ({weekly_days}d)")
+        if daily_type or weekly_type or hourly_type:
+            print(f"{symbol}: daily={daily_type or '-'} ({daily_days}d)  weekly={weekly_type or '-'} ({weekly_days}d)  hourly={hourly_type or '-'} ({hourly_bars} bars)")
 
     div_ws.update(rows, "A1")
     print(f"Wrote RSI divergence results for {len(rows) - 1} symbols.")

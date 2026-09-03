@@ -10,10 +10,12 @@ zero matching stocks is simply skipped (no empty message sent).
 
 Divergence signals are restricted to FRESH formations: RSI_Divergence tracks
 daily_days_ago/weekly_days_ago/hourly_bars_ago per stock -- daily/weekly must
-have formed_today (days_ago == 0), and hourly must be confirmed on the very
-latest hourly bar (bars_ago == 0). A divergence that formed 3 days ago (even
-if still within rsi_divergence.py's own 7/14-day display window) will NOT
-show up here -- only the freshest signal on each timeframe counts.
+have formed_today (days_ago == 0), and hourly counts as fresh up to
+HOURLY_NOTIFY_MAX_BARS_AGE bars back (~2 trading days on 60m candles), shown
+in the alert as e.g. "1H·3b" so you can see how old it actually is. A
+divergence that formed 3 days ago on the daily timeframe (even if still
+within rsi_divergence.py's own 7/14-day display window) will NOT show up
+here on daily/weekly -- only the hourly timeframe gets this wider window.
 
 Reversal Confluence here is a STRICTER, same-day-only definition than the
 dashboard's 3-of-4 version: it requires BOTH daily AND weekly RSI bullish
@@ -36,6 +38,7 @@ from google.oauth2.service_account import Credentials
 
 SHEET_NAME = "Monthly Breakout Scan"
 WATCH_THRESHOLD = 2  # same 2% band used for Near Target / Near SL on the dashboard
+HOURLY_NOTIFY_MAX_BARS_AGE = 14  # ~2 trading days of 60m bars (NSE runs ~7 bars/day) -- notify on current AND up to 2 days old
 
 
 def get_client_and_spreadsheet():
@@ -106,8 +109,8 @@ def build_merged_stocks(spreadsheet):
 
         daily_formed_today = rsi_daily_days_ago == 0
         weekly_formed_today = rsi_weekly_days_ago == 0
-        # Hourly's equivalent of "formed today" -- confirmed on the very latest hourly bar.
-        hourly_formed_now = rsi_hourly_bars_ago == 0
+        # Hourly: notify on current AND up to ~2 trading days old (not just the latest bar).
+        hourly_recent = rsi_hourly_bars_ago is not None and rsi_hourly_bars_ago <= HOURLY_NOTIFY_MAX_BARS_AGE
 
         dv = dv_by_symbol.get(symbol, {})
 
@@ -125,9 +128,10 @@ def build_merged_stocks(spreadsheet):
             "rsi_daily_divergence": rsi_daily_div,
             "rsi_weekly_divergence": rsi_weekly_div,
             "rsi_hourly_divergence": rsi_hourly_div,
+            "rsi_hourly_bars_ago": rsi_hourly_bars_ago,
             "daily_formed_today": daily_formed_today,
             "weekly_formed_today": weekly_formed_today,
-            "hourly_formed_now": hourly_formed_now,
+            "hourly_recent": hourly_recent,
             "dv_decision": dv.get("decision", "") or "",
             "dv_cross_state": dv.get("cross_state", "") or "",
             "dv_crossover_age": dv.get("crossover_age", ""),
@@ -147,13 +151,14 @@ def compute_signals(s):
 
     daily_bull_today = daily == "bullish" and s["daily_formed_today"]
     weekly_bull_today = weekly == "bullish" and s["weekly_formed_today"]
-    hourly_bull_now = hourly == "bullish" and s["hourly_formed_now"]
+    hourly_bull_recent = hourly == "bullish" and s["hourly_recent"]
     daily_bear_today = daily == "bearish" and s["daily_formed_today"]
     weekly_bear_today = weekly == "bearish" and s["weekly_formed_today"]
-    hourly_bear_now = hourly == "bearish" and s["hourly_formed_now"]
+    hourly_bear_recent = hourly == "bearish" and s["hourly_recent"]
 
-    bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else "", "1H" if hourly_bull_now else ""]))
-    bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else "", "1H" if hourly_bear_now else ""]))
+    hourly_tag = f"1H·{s['rsi_hourly_bars_ago']}b" if s["rsi_hourly_bars_ago"] is not None else "1H"
+    bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else "", hourly_tag if hourly_bull_recent else ""]))
+    bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else "", hourly_tag if hourly_bear_recent else ""]))
 
     near_sl_matching = s["distance_to_sl_pct"] is not None and 0 <= s["distance_to_sl_pct"] <= WATCH_THRESHOLD
     near_sl_suffix = ""
@@ -170,11 +175,11 @@ def compute_signals(s):
             near_sl_suffix,
         ),
         "bullish_divergence": (
-            daily_bull_today or weekly_bull_today or hourly_bull_now,
+            daily_bull_today or weekly_bull_today or hourly_bull_recent,
             f" ({bullish_tf})" if bullish_tf else "",
         ),
         "bearish_divergence": (
-            daily_bear_today or weekly_bear_today or hourly_bear_now,
+            daily_bear_today or weekly_bear_today or hourly_bear_recent,
             f" ({bearish_tf})" if bearish_tf else "",
         ),
         "reversal": (

@@ -1117,8 +1117,15 @@ function buySell(stock) {
 }
 
 function patternLabel(stock, bs) {
-  // Prefer the actual detected pattern name over a generic Buy/Sell label.
-  if (stock.harmonic_pattern) return stock.harmonic_pattern; // already formatted e.g. "Bullish Gartley"
+  // Prefer the actual detected pattern over a generic Buy/Sell label -- and for
+  // harmonic patterns specifically, show the D TARGET price, not just the name.
+  if (stock.harmonic_pattern) {
+    if (stock.harmonic_d_price) {
+      const projected = (stock.harmonic_status || "").includes("projected");
+      return `${stock.harmonic_pattern} → D ₹${stock.harmonic_d_price}${projected ? " (proj)" : ""}`;
+    }
+    return stock.harmonic_pattern;
+  }
   if (stock.wm_pattern) {
     const dir = stock.wm_pattern === "W" ? "Bullish" : "Bearish";
     return `${dir} ${stock.wm_pattern}`;

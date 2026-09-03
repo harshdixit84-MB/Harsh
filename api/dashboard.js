@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
-      range: "Sheet1!A1:z1000",
+      range: "Sheet1!A1:Z1000",
     });
 
     let dvSummaryBysymbol = {};
@@ -125,7 +125,7 @@ module.exports = async (req, res) => {
     try {
       const rsiResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "RSI_Divergence!A1:F1000",
+        range: "RSI_Divergence!A1:H1000",
       });
       const rsiRows = rsiResponse.data.values || [];
       if (rsiRows.length > 0) {
@@ -135,6 +135,8 @@ module.exports = async (req, res) => {
         const dailyDaysIdx = rsiHeaders.indexOf("daily_days_ago");
         const weeklyDivIdx = rsiHeaders.indexOf("weekly_divergence");
         const weeklyDaysIdx = rsiHeaders.indexOf("weekly_days_ago");
+        const hourlyDivIdx = rsiHeaders.indexOf("hourly_divergence");
+        const hourlyBarsIdx = rsiHeaders.indexOf("hourly_bars_ago");
         rsiRows.slice(1).forEach((row) => {
           const symbol = row[symbolIdx];
           if (symbol) {
@@ -143,6 +145,8 @@ module.exports = async (req, res) => {
               dailyDaysAgo: row[dailyDaysIdx] || "",
               weeklyDivergence: row[weeklyDivIdx] || "",
               weeklyDaysAgo: row[weeklyDaysIdx] || "",
+              hourlyDivergence: hourlyDivIdx >= 0 ? (row[hourlyDivIdx] || "") : "",
+              hourlyBarsAgo: hourlyBarsIdx >= 0 ? (row[hourlyBarsIdx] || "") : "",
             };
           }
         });
@@ -243,6 +247,10 @@ module.exports = async (req, res) => {
       r.quality_score = r.quality_score !== "" && r.quality_score !== undefined ? parseInt(r.quality_score) : null;
       r.quality_flags = r.quality_flags || "";
       r.market_regime = r.market_regime || "";
+      r.retest_52w_level = r.retest_52w_level !== "" && r.retest_52w_level !== undefined ? parseFloat(r.retest_52w_level) : null;
+      r.days_since_52w_breakout = r.days_since_52w_breakout !== "" && r.days_since_52w_breakout !== undefined ? parseInt(r.days_since_52w_breakout) : null;
+      r.retest_pct_from_52w = r.retest_pct_from_52w !== "" && r.retest_pct_from_52w !== undefined ? parseFloat(r.retest_pct_from_52w) : null;
+      r.at_52w_retest = r.at_52w_retest === true || r.at_52w_retest === "TRUE" || r.at_52w_retest === "true";
 
       const dv = dvSummaryBysymbol[r.symbol];
       r.adp_5 = dv && dv.adp5 !== "" ? parseFloat(dv.adp5) : null;
@@ -268,6 +276,8 @@ module.exports = async (req, res) => {
       r.rsi_daily_days_ago = rsiDivBysymbol[r.symbol]?.dailyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.dailyDaysAgo : null;
       r.rsi_weekly_divergence = rsiDivBysymbol[r.symbol]?.weeklyDivergence || null;
       r.rsi_weekly_days_ago = rsiDivBysymbol[r.symbol]?.weeklyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.weeklyDaysAgo : null;
+      r.rsi_hourly_divergence = rsiDivBysymbol[r.symbol]?.hourlyDivergence || null;
+      r.rsi_hourly_bars_ago = rsiDivBysymbol[r.symbol]?.hourlyBarsAgo !== "" ? rsiDivBysymbol[r.symbol]?.hourlyBarsAgo : null;
       r.comments = notesBysymbol[r.symbol] || [];
 
       // Reversal confluence -- bottom-fishing signals that genuinely cluster

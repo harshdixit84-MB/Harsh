@@ -1,0 +1,26 @@
+name: EMA signals (crossover+volume breakout, pullback)
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 10:30 UTC = 4:00 PM IST (after close -- both signals use DAILY EMAs/volume,
+    # so this must read the FINAL confirmed candle, not a still-forming intraday one)
+    - cron: "30 10 * * 1-5"
+
+jobs:
+  ema-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance gspread google-auth pandas
+
+      - name: Run EMA signal detection
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+        run: python ema_signals.py

@@ -1754,6 +1754,179 @@ setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
 </script>
+<style>
+.analyzer-panel{
+  background:#fff;border:2px solid #334155;border-radius:12px;
+  box-shadow:0 3px 10px rgba(15,23,42,.06);
+  padding:20px;margin:24px 0;
+}
+.analyzer-panel h2{
+  font-family:"Space Grotesk",sans-serif;font-size:16px;font-weight:700;
+  color:#0f172a;margin:0 0 14px 0;letter-spacing:.02em;
+}
+.analyzer-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+#analyzer-symbol-input{
+  flex:1 1 220px;padding:10px 14px;border-radius:8px;border:2px solid #94a3b8;
+  font-family:"IBM Plex Mono",monospace;font-size:14px;color:#334155;
+}
+#analyzer-symbol-input:focus{outline:none;border-color:#1d4ed8;}
+#analyzer-btn{
+  padding:10px 22px;border-radius:8px;border:2px solid #334155;
+  background:#18263d;color:#fff;font-weight:600;cursor:pointer;
+  font-family:"IBM Plex Mono",monospace;
+}
+#analyzer-btn:hover{background:#223557;}
+#analyzer-btn:disabled{opacity:.6;cursor:not-allowed;}
+#analyzer-status{margin-top:10px;font-size:13px;color:#475569;}
 
+.analyzer-modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);
+  z-index:1000;align-items:center;justify-content:center;padding:20px;
+}
+.analyzer-modal-overlay.open{display:flex;}
+.analyzer-modal{
+  background:#fff;border-radius:14px;max-width:520px;width:100%;
+  max-height:85vh;overflow-y:auto;padding:24px;position:relative;
+  font-family:"IBM Plex Mono",monospace;color:#1e293b;
+  box-shadow:0 10px 40px rgba(0,0,0,.25);
+}
+.analyzer-modal h3{
+  font-family:"Space Grotesk",sans-serif;margin:0 0 4px 0;font-size:20px;color:#0f172a;
+}
+.analyzer-modal .close-btn{
+  position:absolute;top:16px;right:16px;background:none;border:none;
+  font-size:22px;cursor:pointer;color:#64748b;line-height:1;
+}
+.analyzer-modal .close-btn:hover{color:#0f172a;}
+.analyzer-verdict{
+  display:inline-block;padding:4px 12px;border-radius:20px;font-weight:700;
+  font-size:13px;margin:10px 0;
+}
+.analyzer-verdict.buy{background:rgba(25,135,84,.12);color:#198754;}
+.analyzer-verdict.none{background:rgba(184,134,11,.12);color:#b8860b;}
+.analyzer-section-title{font-weight:700;font-size:12px;color:#475569;margin:14px 0 6px 0;text-transform:uppercase;letter-spacing:.04em;}
+.analyzer-kv{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;border-bottom:1px dashed #e2e8f0;}
+.analyzer-rank-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:#334155;}
+.analyzer-dot{margin-right:6px;}
+</style>
+
+<div class="analyzer-panel">
+  <h2>ON-DEMAND STOCK ANALYZER</h2>
+  <div class="analyzer-row">
+    <input type="text" id="analyzer-symbol-input" placeholder="Enter NSE symbol, e.g. RELIANCE" />
+    <button id="analyzer-btn" type="button">Analyse</button>
+  </div>
+  <div id="analyzer-status"></div>
+</div>
+
+<div class="analyzer-modal-overlay" id="analyzer-modal-overlay">
+  <div class="analyzer-modal">
+    <button class="close-btn" id="analyzer-close-btn" aria-label="Close">&times;</button>
+    <div id="analyzer-modal-content"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var API_URL = "https://nse-stock-chatbot.vercel.app/api";
+
+  var input = document.getElementById("analyzer-symbol-input");
+  var btn = document.getElementById("analyzer-btn");
+  var status = document.getElementById("analyzer-status");
+  var overlay = document.getElementById("analyzer-modal-overlay");
+  var content = document.getElementById("analyzer-modal-content");
+  var closeBtn = document.getElementById("analyzer-close-btn");
+
+  function closeModal(){ overlay.classList.remove("open"); }
+  closeBtn.addEventListener("click", closeModal);
+  overlay.addEventListener("click", function(e){ if(e.target === overlay) closeModal(); });
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+
+  function renderReport(result){
+    if(result.error){
+      content.innerHTML = "<h3>Error</h3><p>" + escapeHtml(result.error) + "</p>";
+      return;
+    }
+
+    var html = "";
+    html += "<h3>" + escapeHtml(result.symbol) + "</h3>";
+    html += "<div style='color:#64748b;font-size:13px;'>As of " + escapeHtml(result.as_of) + " &middot; Last close &#8377;" + result.last_close + "</div>";
+
+    if(result.verdict === "BUY" || result.verdict === "BUY_NO_TRACK_RECORD"){
+      html += "<div class='analyzer-verdict buy'>BUY via " + escapeHtml(result.strategy) + "</div>";
+      var plan = result.trade_plan;
+      html += "<div class='analyzer-section-title'>Trade Plan</div>";
+      html += "<div class='analyzer-kv'><span>Entry</span><span>&#8377;" + plan.entry_price + "</span></div>";
+      html += "<div class='analyzer-kv'><span>Stop-loss</span><span>&#8377;" + plan.stop_loss + "</span></div>";
+      html += "<div class='analyzer-kv'><span>Target</span><span>&#8377;" + plan.target + "</span></div>";
+      html += "<div class='analyzer-kv'><span>Risk:Reward</span><span>1 : " + plan.reward_risk_ratio + "</span></div>";
+
+      if(result.backtest){
+        html += "<div class='analyzer-section-title'>Backtest (this stock)</div>";
+        html += "<div class='analyzer-kv'><span>Win rate</span><span>" + result.backtest.win_rate_pct + "%</span></div>";
+        html += "<div class='analyzer-kv'><span>Signals</span><span>" + result.backtest.signals + "</span></div>";
+        html += "<div class='analyzer-kv'><span>Profit factor</span><span>" + result.backtest.profit_factor + "</span></div>";
+        if(result.backtest.low_sample_warning){
+          html += "<div style='color:#b8860b;font-size:12px;margin-top:4px;'>&#9888; Small sample size &mdash; treat with caution</div>";
+        }
+      } else if(result.note){
+        html += "<div style='color:#b8860b;font-size:12px;margin-top:8px;'>" + escapeHtml(result.note) + "</div>";
+      }
+    } else {
+      html += "<div class='analyzer-verdict none'>NO ACTIVE SETUP</div>";
+      html += "<div style='font-size:13px;color:#475569;'>" + escapeHtml(result.note || "") + "</div>";
+    }
+
+    if(result.momentum_confirmation){
+      html += "<div class='analyzer-section-title'>Momentum (MACD)</div>";
+      html += "<div class='analyzer-kv'><span>Status</span><span>" + escapeHtml(result.momentum_confirmation.status) + "</span></div>";
+    }
+
+    if(result.strategy_ranking){
+      html += "<div class='analyzer-section-title'>Strategy Ranking (win rate)</div>";
+      result.strategy_ranking.forEach(function(r){
+        var dot = r.active_today ? "&#128994;" : "&#9898;";
+        var wr = (r.win_rate_pct !== null && r.win_rate_pct !== undefined) ? r.win_rate_pct + "%" : "n/a";
+        html += "<div class='analyzer-rank-row'><span><span class='analyzer-dot'>" + dot + "</span>" + escapeHtml(r.strategy) + "</span><span>" + wr + " (" + r.signals + ")</span></div>";
+      });
+    }
+
+    content.innerHTML = html;
+  }
+
+  function runAnalysis(){
+    var symbol = input.value.trim().toUpperCase();
+    if(!symbol){
+      status.textContent = "Enter a symbol first.";
+      return;
+    }
+
+    btn.disabled = true;
+    status.textContent = "Analyzing " + symbol + "... this can take up to 30 seconds.";
+
+    fetch(API_URL + "?symbol=" + encodeURIComponent(symbol))
+      .then(function(res){ return res.json(); })
+      .then(function(result){
+        status.textContent = "";
+        renderReport(result);
+        overlay.classList.add("open");
+      })
+      .catch(function(err){
+        status.textContent = "Request failed: " + err.message;
+      })
+      .finally(function(){
+        btn.disabled = false;
+      });
+  }
+
+  btn.addEventListener("click", runAnalysis);
+  input.addEventListener("keydown", function(e){ if(e.key === "Enter") runAnalysis(); });
+})();
+</script>
 </body>
 </html>

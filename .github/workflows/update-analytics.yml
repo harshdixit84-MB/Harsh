@@ -1,0 +1,43 @@
+name: Update execution analytics
+
+# Runs automatically every day, AND gives you a manual "Run workflow"
+# button under the Actions tab on github.com whenever you want to
+# refresh it on demand -- no PowerShell needed either way.
+on:
+  schedule:
+    - cron: "30 11 * * 1-5"   # 11:30 UTC = 5:00 PM IST, Mon-Fri (after market close)
+  workflow_dispatch: {}        # <-- this is what adds the manual "Run workflow" button
+
+permissions:
+  contents: write   # needed so the workflow can commit data/history.json back to the repo
+
+jobs:
+  update-analytics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install gspread google-auth yfinance pandas
+
+      - name: Rebuild execution history from the Google Sheet
+        run: python analytics/build_history.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Check chatbot strategy confluence
+        run: python analytics/strategy_confluence.py
+
+      - name: Commit updated data/history.json, if anything changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/history.json
+          git diff --staged --quiet || git commit -m "Update execution analytics [automated]"
+          git push

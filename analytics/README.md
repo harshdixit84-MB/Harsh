@@ -8,8 +8,20 @@ Copy this `analytics/` folder into the root of the `Harsh` repo.
   `data/history.json` with every signal ever flagged plus:
   - whether it was ever actually traded
   - immediate-entry vs actual-entry return comparison
+  - max drawdown % / max gain % since being flagged
   - loophole flags (never_entered, archived_before_entry, large_entry_slippage,
     long_wait, waiting_cost_you, target_never_reached, duplicate_signal, no_price_history)
+- `strategy_confluence.py` — **run this after `build_history.py`.** For every
+  ticker, fetches OHLCV via yfinance and checks which of the 4 strategies
+  from `nse-stock-chatbot` (Volume Breakout, EMA Crossover, RSI Divergence,
+  EMA Pullback — vendored as-is in `chatbot_strategies/`) actually fired on
+  the exact day the ticker was added here. Rewrites `data/history.json` in
+  place with a `chatbot_strategies_triggered` field per entry and a
+  `chatbot_confluence` summary block. This is slow (~250+ symbols x yfinance
+  fetch) — run it in GitHub Actions, not interactively.
+- `chatbot_strategies/` — exact copies of `nse-stock-chatbot`'s
+  `config.py`, `breakout.py`, `ema_crossover.py`, `rsi_divergence.py`,
+  `strategy.py`. Not reimplemented — same trigger logic, same thresholds.
 - `dashboard.html` — self-contained (Chart.js via CDN) dashboard that reads
   `data/history.json` and renders it. No build step — open it directly or
   host it (e.g. GitHub Pages, or drop it into your existing Vercel/static
@@ -19,8 +31,9 @@ Copy this `analytics/` folder into the root of the `Harsh` repo.
 
 ```bash
 export GOOGLE_SERVICE_ACCOUNT_KEY='<the same JSON key your other scripts use>'
-pip install gspread google-auth
+pip install gspread google-auth yfinance pandas
 python analytics/build_history.py
+python analytics/strategy_confluence.py
 ```
 
 This writes `data/history.json` to the repo root. Commit it (or let a
@@ -28,7 +41,7 @@ GitHub Action commit it, same pattern as `sync_dashboard.py`).
 
 ## Wire it into your existing daily workflow
 
-Add a step to `.github/workflows/*.yml`, **after** `sync_dashboard.py` and
+Add steps to `.github/workflows/*.yml`, **after** `sync_dashboard.py` and
 `delivery_value.py` have run (it depends on Sheet1 and DV_History being
 fresh):
 
@@ -37,6 +50,9 @@ fresh):
         run: python analytics/build_history.py
         env:
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Check chatbot strategy confluence
+        run: python analytics/strategy_confluence.py
 
       - name: Commit history.json
         run: |

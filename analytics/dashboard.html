@@ -109,6 +109,26 @@
     <canvas id="flagChart" style="max-height:220px"></canvas>
   </div>
 
+  <div class="grid">
+    <div class="panel">
+      <h2>Chatbot strategy confluence — how often each fired on the day a ticker was added</h2>
+      <div id="confluenceNote" class="empty">Not computed yet — run analytics/strategy_confluence.py</div>
+      <canvas id="confluenceChart"></canvas>
+      <div class="note">Checked against the 4 strategies in nse-stock-chatbot (Volume Breakout, EMA Crossover, RSI Divergence, EMA Pullback), evaluated on the exact added_date.</div>
+    </div>
+    <div class="panel">
+      <h2>Does confluence actually predict better performance?</h2>
+      <canvas id="confluenceReturnChart"></canvas>
+      <div class="note">Average return since flagged, grouped by how many of the 4 chatbot strategies also fired that same day. If 2+ consistently beats 0, confluence is a real filter worth using; if not, it's noise.</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:20px">
+    <h2>Confluence by source strategy</h2>
+    <canvas id="sourceConfluenceChart" style="max-height:260px"></canvas>
+    <div class="note">Which chatbot strategies tend to co-fire with each of your Breakout/Consolidation/Near52WLow sources.</div>
+  </div>
+
   <div class="panel">
     <h2>All tickers — full list detail</h2>
     <div class="filter-row">
@@ -119,6 +139,16 @@
         <option value="__all__">All tickers</option>
         <option value="traded">Traded only</option>
         <option value="not_traded">Not traded (watchlist only)</option>
+      </select>
+      <label for="chatbotFilter" style="margin-left:16px">Chatbot confluence:</label>
+      <select id="chatbotFilter">
+        <option value="__all__">Any</option>
+        <option value="0">None fired</option>
+        <option value="1plus">1+ fired</option>
+        <option value="EMA Pullback">EMA Pullback</option>
+        <option value="EMA Crossover">EMA Crossover</option>
+        <option value="Volume Breakout">Volume Breakout</option>
+        <option value="RSI Divergence">RSI Divergence</option>
       </select>
       <span id="rowCount" class="note" style="margin-left:auto"></span>
     </div>
@@ -220,6 +250,49 @@ function render(data){
               scales:{ x:{ ticks:{color:'#7c8898'}, grid:{color:'#1f2733'} }, y:{ ticks:{color:'#dfe6ee'}, grid:{display:false} } } }
   });
 
+  // ---- Chatbot strategy confluence ----
+  const conf = s.chatbot_confluence;
+  if (conf) {
+    document.getElementById('confluenceNote').style.display = 'none';
+    const tc = Object.entries(conf.trigger_counts||{});
+    new Chart(document.getElementById('confluenceChart'), {
+      type:'bar',
+      data:{ labels: tc.map(([k])=>k), datasets:[{ data: tc.map(([,v])=>v), backgroundColor:'#5aa2e0' }] },
+      options:{ indexAxis:'y', plugins:{legend:{display:false}},
+                scales:{ x:{ ticks:{color:'#7c8898'}, grid:{color:'#1f2733'} }, y:{ ticks:{color:'#dfe6ee'}, grid:{display:false} } } }
+    });
+
+    const rbc = conf.avg_return_by_confluence_count || {};
+    new Chart(document.getElementById('confluenceReturnChart'), {
+      type:'bar',
+      data:{
+        labels:['0 strategies fired', '1 strategy fired', '2+ strategies fired'],
+        datasets:[{ data:[rbc['0'], rbc['1'], rbc['2+']], backgroundColor:['#3a4655','#e0a13a','#3fb87f'] }]
+      },
+      options:{ plugins:{legend:{display:false}},
+                scales:{ y:{ ticks:{color:'#7c8898'}, grid:{color:'#1f2733'} }, x:{ ticks:{color:'#dfe6ee'}, grid:{display:false} } } }
+    });
+
+    const bySrc = conf.by_harsh_source_x_chatbot_strategy || {};
+    const srcLabels = Object.keys(bySrc);
+    const chatbotStrategies = ['EMA Pullback','EMA Crossover','Volume Breakout','RSI Divergence'];
+    const palette = ['#5aa2e0','#e0a13a','#3fb87f','#e2584c'];
+    new Chart(document.getElementById('sourceConfluenceChart'), {
+      type:'bar',
+      data:{
+        labels: srcLabels,
+        datasets: chatbotStrategies.map((strat,i) => ({
+          label: strat,
+          data: srcLabels.map(src => (bySrc[src]||{})[strat] || 0),
+          backgroundColor: palette[i]
+        }))
+      },
+      options:{ scales:{ x:{ stacked:true, ticks:{color:'#dfe6ee'}, grid:{display:false} },
+                          y:{ stacked:true, ticks:{color:'#7c8898'}, grid:{color:'#1f2733'} } },
+                plugins:{ legend:{labels:{color:'#dfe6ee'}} } }
+    });
+  }
+
   // ---- Full ticker table: every signal ever flagged, traded or not ----
   const allEntries = data.entries || [];
   const allSources = [...new Set(allEntries.flatMap(e => (e.source||'').split(',').map(s=>s.trim()).filter(Boolean)))].sort();
@@ -233,6 +306,7 @@ function render(data){
   function drawTable(){
     const srcFilter = sourceSelect.value;
     const tradedFilter = document.getElementById('tradedFilter').value;
+    const chatbotFilter = document.getElementById('chatbotFilter').value;
 
     let rows = allEntries.filter(e => {
       if (srcFilter !== '__all__') {
@@ -241,6 +315,10 @@ function render(data){
       }
       if (tradedFilter === 'traded' && !e.traded) return false;
       if (tradedFilter === 'not_traded' && e.traded) return false;
+      const cs = e.chatbot_strategies_triggered || [];
+      if (chatbotFilter === '0' && cs.length !== 0) return false;
+      if (chatbotFilter === '1plus' && cs.length === 0) return false;
+      if (!['__all__','0','1plus'].includes(chatbotFilter) && !cs.includes(chatbotFilter)) return false;
       return true;
     });
     rows.sort((a,b) => (b.traded - a.traded) || ((b.entry_diff_pct||-999) - (a.entry_diff_pct||-999)));
@@ -257,18 +335,20 @@ function render(data){
         <td class="num" style="color:${colorFor(e.immediate_entry_return_pct ?? e.list_to_latest_return_pct)}">${fmtPct(e.immediate_entry_return_pct ?? e.list_to_latest_return_pct)}</td>
         <td class="num" style="color:${colorFor(e.actual_entry_return_pct)}">${fmtPct(e.actual_entry_return_pct)}</td>
         <td class="num" style="color:${colorFor(e.entry_diff_pct)}">${fmtPct(e.entry_diff_pct)}</td>
+        <td>${(e.chatbot_strategies_triggered||[]).map(f=>`<span class="flag" style="color:var(--accent);border-color:#2a3f57">${f}</span>`).join('') || '<span class="flag">none</span>'}</td>
         <td>${(e.loophole_flags||[]).map(f=>`<span class="flag ${f.includes('never')||f.includes('cost')||f.includes('slippage')?'warn':''}">${f}</span>`).join('')}</td>
       </tr>`).join('');
 
     document.getElementById('tableWrap').innerHTML = `<table>
       <thead><tr><th>Symbol</th><th>Source</th><th>Added date</th><th>List px</th>
       <th>Max drawdown</th><th>Max gain</th>
-      <th>Immediate ret</th><th>Actual ret</th><th>Diff</th><th>Flags</th></tr></thead>
-      <tbody>${html || '<tr><td colspan=10 class="empty">No tickers match this filter</td></tr>'}</tbody></table>`;
+      <th>Immediate ret</th><th>Actual ret</th><th>Diff</th><th>Chatbot confluence</th><th>Flags</th></tr></thead>
+      <tbody>${html || '<tr><td colspan=11 class="empty">No tickers match this filter</td></tr>'}</tbody></table>`;
   }
 
   sourceSelect.addEventListener('change', drawTable);
   document.getElementById('tradedFilter').addEventListener('change', drawTable);
+  document.getElementById('chatbotFilter').addEventListener('change', drawTable);
   drawTable();
 }
 </script>

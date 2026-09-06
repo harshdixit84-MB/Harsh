@@ -123,6 +123,41 @@ module.exports = async (req, res) => {
       // WM_Patterns tab may not exist yet -- proceed without it
     }
 
+    let emaSignalsBysymbol = {};
+    try {
+      const emaResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "EMA_Signals!A1:N1000",
+      });
+      const emaRows = emaResponse.data.values || [];
+      if (emaRows.length > 0) {
+        const emaHeaders = emaRows[0];
+        const idx = (name) => emaHeaders.indexOf(name);
+        const symbolIdx = idx("symbol");
+        emaRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol) {
+            emaSignalsBysymbol[symbol] = {
+              crossSignal: row[idx("ema_cross_signal")] || "",
+              crossEntry: row[idx("ema_cross_entry")] || "",
+              crossStop: row[idx("ema_cross_stop")] || "",
+              crossTarget: row[idx("ema_cross_target")] || "",
+              crossRR: row[idx("ema_cross_rr")] || "",
+              pullbackSignal: row[idx("ema_pullback_signal")] || "",
+              pullbackPattern: row[idx("ema_pullback_pattern")] || "",
+              pullbackEntry: row[idx("ema_pullback_entry")] || "",
+              pullbackStop: row[idx("ema_pullback_stop")] || "",
+              pullbackTarget: row[idx("ema_pullback_target")] || "",
+              pullbackRR: row[idx("ema_pullback_rr")] || "",
+              pullbackPct: row[idx("ema_pullback_pct")] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // EMA_Signals tab may not exist yet -- proceed without it
+    }
+
     let rsiDivBysymbol = {};
     try {
       const rsiResponse = await sheets.spreadsheets.values.get({
@@ -270,6 +305,21 @@ module.exports = async (req, res) => {
       r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
       r.harmonic_confidence = harmonicBysymbol[r.symbol]?.confidence || "";
       r.harmonic_days_ago = harmonicBysymbol[r.symbol]?.daysAgo || "";
+
+      const emaSig = emaSignalsBysymbol[r.symbol] || {};
+      const truthy = (v) => v === true || v === "TRUE" || v === "true";
+      r.ema_cross_signal = truthy(emaSig.crossSignal);
+      r.ema_cross_entry = emaSig.crossEntry || "";
+      r.ema_cross_stop = emaSig.crossStop || "";
+      r.ema_cross_target = emaSig.crossTarget || "";
+      r.ema_cross_rr = emaSig.crossRR || "";
+      r.ema_pullback_signal = truthy(emaSig.pullbackSignal);
+      r.ema_pullback_pattern = emaSig.pullbackPattern || "";
+      r.ema_pullback_entry = emaSig.pullbackEntry || "";
+      r.ema_pullback_stop = emaSig.pullbackStop || "";
+      r.ema_pullback_target = emaSig.pullbackTarget || "";
+      r.ema_pullback_rr = emaSig.pullbackRR || "";
+      r.ema_pullback_pct = emaSig.pullbackPct || "";
       r.wm_pattern = wmBysymbol[r.symbol]?.pattern || null;
       r.wm_status = wmBysymbol[r.symbol]?.status || "";
       r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";

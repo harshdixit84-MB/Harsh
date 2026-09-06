@@ -54,6 +54,15 @@
         padding:1px 6px; font-size:10.5px; margin:1px 3px 1px 0; color:var(--ink-dim)}
   .flag.warn{color:var(--down); border-color:#3a2422}
   .empty{color:var(--ink-dim); padding:20px; text-align:center}
+  .filter-row{display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:12.5px; color:var(--ink-dim)}
+  select{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:4px;
+    padding:5px 8px; font-family:var(--sans); font-size:12.5px;
+  }
+  tr.not-traded{opacity:.72}
+  .badge{display:inline-block; padding:1px 6px; border-radius:3px; font-size:10.5px; margin-left:6px;
+         background:var(--panel-2); border:1px solid var(--line); color:var(--ink-dim)}
+  .badge.traded{color:var(--accent); border-color:#3a2f16}
 </style>
 </head>
 <body>
@@ -101,15 +110,30 @@
   </div>
 
   <div class="panel">
-    <h2>Trade-by-trade detail</h2>
+    <h2>All tickers — full list detail</h2>
+    <div class="filter-row">
+      <label for="sourceFilter">Category:</label>
+      <select id="sourceFilter"><option value="__all__">All sources</option></select>
+      <label for="tradedFilter" style="margin-left:16px">Show:</label>
+      <select id="tradedFilter">
+        <option value="__all__">All tickers</option>
+        <option value="traded">Traded only</option>
+        <option value="not_traded">Not traded (watchlist only)</option>
+      </select>
+      <span id="rowCount" class="note" style="margin-left:auto"></span>
+    </div>
     <div id="tableWrap"><div class="empty">Loading…</div></div>
   </div>
 </main>
 
 <script>
+// This file lives in analytics/, but data/history.json lives at the repo
+// root (a sibling of analytics/) -- so the path must go up one level.
+// If this dashboard is deployed at e.g. https://harsh-nu.vercel.app/analytics/dashboard.html
+// then '/data/history.json' (absolute, from the domain root) is the safest choice.
 const DATA_URL = '/data/history.json';
-// If you host this file separately from the repo (e.g. as a GitHub Page in
-// another location), point this at the raw file instead:
+// Fallbacks, uncomment whichever fits how you're viewing this file:
+// const DATA_URL = '../data/history.json';   // opening the file directly from disk
 // const DATA_URL = 'https://raw.githubusercontent.com/<user>/Harsh/main/data/history.json';
 
 const fmtPct = v => v === null || v === undefined ? '—' : (v>0?'+':'') + v.toFixed(2) + '%';
@@ -196,21 +220,56 @@ function render(data){
               scales:{ x:{ ticks:{color:'#7c8898'}, grid:{color:'#1f2733'} }, y:{ ticks:{color:'#dfe6ee'}, grid:{display:false} } } }
   });
 
-  const traded = (data.entries||[]).filter(e=>e.traded).sort((a,b)=>(b.entry_diff_pct||0)-(a.entry_diff_pct||0));
-  const rows = traded.map(e => `<tr>
-      <td>${e.symbol}</td><td>${e.source}</td>
-      <td class="num">${e.list_price ?? '—'}</td>
-      <td class="num">${e.actual_buy_price ?? '—'}</td>
-      <td class="num">${e.gap_days_waited ?? '—'}d</td>
-      <td class="num" style="color:${colorFor(e.immediate_entry_return_pct)}">${fmtPct(e.immediate_entry_return_pct)}</td>
-      <td class="num" style="color:${colorFor(e.actual_entry_return_pct)}">${fmtPct(e.actual_entry_return_pct)}</td>
-      <td class="num" style="color:${colorFor(e.entry_diff_pct)}">${fmtPct(e.entry_diff_pct)}</td>
-      <td>${(e.loophole_flags||[]).map(f=>`<span class="flag ${f.includes('never')||f.includes('cost')||f.includes('slippage')?'warn':''}">${f}</span>`).join('')}</td>
-    </tr>`).join('');
-  document.getElementById('tableWrap').innerHTML = `<table>
-    <thead><tr><th>Symbol</th><th>Source</th><th>List px</th><th>Buy px</th><th>Waited</th>
-    <th>Immediate ret</th><th>Actual ret</th><th>Diff</th><th>Flags</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan=9 class="empty">No trades yet</td></tr>'}</tbody></table>`;
+  // ---- Full ticker table: every signal ever flagged, traded or not ----
+  const allEntries = data.entries || [];
+  const allSources = [...new Set(allEntries.flatMap(e => (e.source||'').split(',').map(s=>s.trim()).filter(Boolean)))].sort();
+  const sourceSelect = document.getElementById('sourceFilter');
+  allSources.forEach(src => {
+    const opt = document.createElement('option');
+    opt.value = src; opt.textContent = src;
+    sourceSelect.appendChild(opt);
+  });
+
+  function drawTable(){
+    const srcFilter = sourceSelect.value;
+    const tradedFilter = document.getElementById('tradedFilter').value;
+
+    let rows = allEntries.filter(e => {
+      if (srcFilter !== '__all__') {
+        const srcs = (e.source||'').split(',').map(s=>s.trim());
+        if (!srcs.includes(srcFilter)) return false;
+      }
+      if (tradedFilter === 'traded' && !e.traded) return false;
+      if (tradedFilter === 'not_traded' && e.traded) return false;
+      return true;
+    });
+    rows.sort((a,b) => (b.traded - a.traded) || ((b.entry_diff_pct||-999) - (a.entry_diff_pct||-999)));
+
+    document.getElementById('rowCount').textContent = `${rows.length} of ${allEntries.length} tickers`;
+
+    const html = rows.map(e => `<tr class="${e.traded ? '' : 'not-traded'}">
+        <td>${e.symbol}<span class="badge ${e.traded?'traded':''}">${e.traded ? 'traded' : 'watchlist'}</span></td>
+        <td>${e.source}</td>
+        <td>${e.added_date ?? '—'}</td>
+        <td class="num">${e.list_price ?? '—'}</td>
+        <td class="num" style="color:${colorFor(e.max_drawdown_pct)}">${fmtPct(e.max_drawdown_pct)}</td>
+        <td class="num" style="color:${colorFor(e.max_gain_pct)}">${fmtPct(e.max_gain_pct)}</td>
+        <td class="num" style="color:${colorFor(e.immediate_entry_return_pct ?? e.list_to_latest_return_pct)}">${fmtPct(e.immediate_entry_return_pct ?? e.list_to_latest_return_pct)}</td>
+        <td class="num" style="color:${colorFor(e.actual_entry_return_pct)}">${fmtPct(e.actual_entry_return_pct)}</td>
+        <td class="num" style="color:${colorFor(e.entry_diff_pct)}">${fmtPct(e.entry_diff_pct)}</td>
+        <td>${(e.loophole_flags||[]).map(f=>`<span class="flag ${f.includes('never')||f.includes('cost')||f.includes('slippage')?'warn':''}">${f}</span>`).join('')}</td>
+      </tr>`).join('');
+
+    document.getElementById('tableWrap').innerHTML = `<table>
+      <thead><tr><th>Symbol</th><th>Source</th><th>Added date</th><th>List px</th>
+      <th>Max drawdown</th><th>Max gain</th>
+      <th>Immediate ret</th><th>Actual ret</th><th>Diff</th><th>Flags</th></tr></thead>
+      <tbody>${html || '<tr><td colspan=10 class="empty">No tickers match this filter</td></tr>'}</tbody></table>`;
+  }
+
+  sourceSelect.addEventListener('change', drawTable);
+  document.getElementById('tradedFilter').addEventListener('change', drawTable);
+  drawTable();
 }
 </script>
 </body>

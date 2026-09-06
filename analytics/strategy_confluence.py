@@ -84,33 +84,62 @@ _price_cache = {}
 
 
 def fetch_ohlcv(symbol, up_to_date):
-    """OHLCV up to and including up_to_date, cached per symbol for the run
-    (individual entries just get sliced from the same fetch when possible)."""
-    if symbol not in _price_cache:
-        end = (datetime.strptime(up_to_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
-        start = (datetime.strptime(up_to_date, "%Y-%m-%d") - timedelta(days=LOOKBACK_CALENDAR_DAYS)).strftime("%Y-%m-%d")
-        try:
-            df = yf.Ticker(symbol + NSE_SUFFIX).history(start=start, end=end)
-            time.sleep(0.15)  # be polite to Yahoo's rate limits across ~250+ symbols
-        except Exception:
-            df = pd.DataFrame()
-        if not df.empty:
-            df = df.rename(columns={"Open": "Open", "High": "High", "Low": "Low", "Close": "Close", "Volume": "Volume"})
-            df.index = df.index.strftime("%Y-%m-%d")
-        _price_cache[symbol] = df
-    return _price_cache[symbol]
+    """OHLCV for this symbol, cached ONCE per symbol using the LATEST
+    up_to_date requested across all of that symbol's entries (a symbol can
+    appear more than once in history.json with different added_dates, e.g.
+    flagged again months later). Caching by the max date needed, then
+    slicing per-entry with df.loc[:added_date], guarantees every entry
+    gets evaluated against its own correct date, not whichever date
+    happened to be fetched first.
+    """
+    cache_key = symbol
+    cached = _price_cache.get(cache_key)
+    if cached is not None and cached["up_to"] >= up_to_date:
+        return cached["df"]
+
+    end = (datetime.strptime(up_to_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    start = (datetime.strptime(up_to_date, "%Y-%m-%d") - timedelta(days=LOOKBACK_CALENDAR_DAYS)).strftime("%Y-%m-%d")
+    try:
+        df = yf.Ticker(symbol + NSE_SUFFIX).history(start=start, end=end)
+        time.sleep(0.15)  # be polite to Yahoo's rate limits across ~250+ symbols
+    except Exception:
+        df = pd.DataFrame()
+    if not df.empty:
+        df.index = df.index.strftime("%Y-%m-%d")
+    _price_cache[cache_key] = {"df": df, "up_to": up_to_date}
+    return df
+
+
+def normalize_date(d):
+    return str(d)[:10] if d else None
 
 
 def check_confluence(symbol, added_date):
+    added_date = normalize_date(added_date)
     if not added_date:
         return [], {}
     df = fetch_ohlcv(symbol, added_date)
-    if df.empty or added_date not in df.index:
+    if df.empty:
         return [], {}
 
-    sub_df = df.loc[:added_date].reset_index(drop=True)
-    if sub_df.empty or sub_df.index[-1] < 0:
+    # df.loc[:added_date] works even if added_date itself isn't a trading
+    # day (weekend/holiday) -- it correctly includes everything up to and
+    # including the most recent prior trading day. But if added_date falls
+    # entirely before the fetched data starts, or the resulting slice's
+    # last row isn't actually on/near added_date, bail out rather than
+    # silently evaluating the wrong day.
+    sliced = df.loc[:added_date]
+    if sliced.empty:
         return [], {}
+    last_date_in_slice = sliced.index[-1]
+    # guard: the slice's last date should be within a few calendar days of
+    # added_date (covers weekends/holidays) -- if it's off by more than
+    # that, the requested date is outside this symbol's fetched range.
+    gap_days = (datetime.strptime(added_date, "%Y-%m-%d") - datetime.strptime(last_date_in_slice, "%Y-%m-%d")).days
+    if gap_days > 5 or gap_days < 0:
+        return [], {}
+
+    sub_df = sliced.reset_index(drop=True)
 
     triggered, plans = [], {}
     for name, module in STRATEGIES.items():
@@ -169,14 +198,22 @@ def main():
 
     entries = data.get("entries", [])
     total = len(entries)
-    for i, e in enumerate(entries):
+
+    # Process each symbol's LATEST added_date first, so the first fetch for
+    # that symbol already covers the full range needed -- every other
+    # occurrence of the same symbol then just slices the same cached data
+    # instead of triggering a redundant re-fetch.
+    order = sorted(range(total), key=lambda i: (entries[i]["symbol"], normalize_date(entries[i].get("added_date")) or ""), reverse=True)
+
+    for n, i in enumerate(order):
+        e = entries[i]
         symbol, added_date = e["symbol"], e.get("added_date")
         triggered, plans = check_confluence(symbol, added_date)
         e["chatbot_strategies_triggered"] = triggered
         e["chatbot_strategy_count"] = len(triggered)
         e["chatbot_strategy_plans"] = plans
-        if (i + 1) % 25 == 0:
-            print(f"  {i+1}/{total} processed...")
+        if (n + 1) % 25 == 0:
+            print(f"  {n+1}/{total} processed...")
 
     data["summary"]["chatbot_confluence"] = build_confluence_summary(entries)
     data["generated_at"] = datetime.now().isoformat(timespec="seconds")

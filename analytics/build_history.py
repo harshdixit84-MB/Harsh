@@ -35,6 +35,8 @@ OUTPUT SCHEMA (data/history.json)
     {
       "symbol", "source", "added_date", "status", "archived_reason",
       "list_price", "list_price_date_used",
+      "max_drawdown_pct",              # worst close vs list_price, at any point since added_date (<=0)
+      "max_gain_pct",                  # best close vs list_price, at any point since added_date (>=0)
       "buy_target_manual",
       "target_hit_date", "days_to_target",          # first day price touched buy_target after being flagged
       "traded": true/false,
@@ -135,6 +137,32 @@ def find_target_hit(dv_lookup, symbol, added_date, buy_target, source):
     return None, None
 
 
+def price_series_after(dv_lookup, symbol, added_date):
+    """All (date, close_price) pairs for this symbol on/after added_date, sorted."""
+    if not added_date or symbol not in dv_lookup:
+        return []
+    hist = dv_lookup[symbol]
+    d0 = str(added_date)[:10]
+    return sorted(((d, p) for d, p in hist.items() if d >= d0), key=lambda x: x[0])
+
+
+def max_drawdown_and_gain(dv_lookup, symbol, added_date, list_price):
+    """Max drawdown % (worst close relative to list_price, always <= 0) and
+    max gain % (best close relative to list_price, always >= 0) at any point
+    from added_date to the latest available price. This is independent of
+    whether the stock was ever actually traded -- it answers 'how far did
+    this move against/for you at its worst/best, if you'd bought at the
+    list price the day it appeared.'
+    """
+    if not list_price:
+        return None, None
+    series = price_series_after(dv_lookup, symbol, added_date)
+    if not series:
+        return None, None
+    pct_moves = [round((p - list_price) / list_price * 100, 2) for _, p in series]
+    return min(pct_moves + [0]), max(pct_moves + [0])
+
+
 def build_entries(sheet1, trades, dv_lookup, today_str):
     symbol_counts = Counter(r["symbol"] for r in sheet1 if r.get("symbol"))
     trades_by_symbol = defaultdict(list)
@@ -154,6 +182,7 @@ def build_entries(sheet1, trades, dv_lookup, today_str):
 
         list_price, list_price_date_used = price_on_or_after(dv_lookup, symbol, added_date)
         target_hit_date, days_to_target = find_target_hit(dv_lookup, symbol, added_date, buy_target, source)
+        max_drawdown_pct, max_gain_pct = max_drawdown_and_gain(dv_lookup, symbol, added_date, list_price)
 
         # watchlist-level performance (list_price -> most recent known price), independent of
         # whether it was ever actually traded -- this is what drives the by-source aggregates.
@@ -187,6 +216,7 @@ def build_entries(sheet1, trades, dv_lookup, today_str):
                 "status": status, "archived_reason": row.get("archived_reason"),
                 "list_price": list_price, "list_price_date_used": list_price_date_used,
                 "list_to_latest_return_pct": list_to_latest_return_pct,
+                "max_drawdown_pct": max_drawdown_pct, "max_gain_pct": max_gain_pct,
                 "buy_target_manual": buy_target,
                 "target_hit_date": target_hit_date, "days_to_target": days_to_target,
                 "traded": False, "actual_buy_date": None, "actual_buy_price": None,
@@ -245,6 +275,7 @@ def build_entries(sheet1, trades, dv_lookup, today_str):
             "status": status, "archived_reason": row.get("archived_reason"),
             "list_price": list_price, "list_price_date_used": list_price_date_used,
             "list_to_latest_return_pct": list_to_latest_return_pct,
+            "max_drawdown_pct": max_drawdown_pct, "max_gain_pct": max_gain_pct,
             "buy_target_manual": buy_target,
             "target_hit_date": target_hit_date, "days_to_target": days_to_target,
             "traded": True, "actual_buy_date": actual_buy_date, "actual_buy_price": actual_buy_price,

@@ -127,7 +127,7 @@ module.exports = async (req, res) => {
     try {
       const emaResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "EMA_Signals!A1:N1000",
+        range: "EMA_Signals!A1:U1000",
       });
       const emaRows = emaResponse.data.values || [];
       if (emaRows.length > 0) {
@@ -150,6 +150,13 @@ module.exports = async (req, res) => {
               pullbackTarget: row[idx("ema_pullback_target")] || "",
               pullbackRR: row[idx("ema_pullback_rr")] || "",
               pullbackPct: row[idx("ema_pullback_pct")] || "",
+              retestSignal: row[idx("ema_retest_signal")] || "",
+              retestTouchedEma: row[idx("ema_retest_touched_ema")] || "",
+              retestDaysSinceCross: row[idx("ema_retest_days_since_cross")] || "",
+              retestEntry: row[idx("ema_retest_entry")] || "",
+              retestStop: row[idx("ema_retest_stop")] || "",
+              retestTarget: row[idx("ema_retest_target")] || "",
+              retestRR: row[idx("ema_retest_rr")] || "",
             };
           }
         });
@@ -320,6 +327,13 @@ module.exports = async (req, res) => {
       r.ema_pullback_target = emaSig.pullbackTarget || "";
       r.ema_pullback_rr = emaSig.pullbackRR || "";
       r.ema_pullback_pct = emaSig.pullbackPct || "";
+      r.ema_retest_signal = truthy(emaSig.retestSignal);
+      r.ema_retest_touched = emaSig.retestTouchedEma || "";
+      r.ema_retest_days_since_cross = emaSig.retestDaysSinceCross || "";
+      r.ema_retest_entry = emaSig.retestEntry || "";
+      r.ema_retest_stop = emaSig.retestStop || "";
+      r.ema_retest_target = emaSig.retestTarget || "";
+      r.ema_retest_rr = emaSig.retestRR || "";
       r.wm_pattern = wmBysymbol[r.symbol]?.pattern || null;
       r.wm_status = wmBysymbol[r.symbol]?.status || "";
       r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";

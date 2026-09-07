@@ -243,8 +243,10 @@ def main():
     ]
     ws = get_or_create_sheet(spreadsheet, EMA_SHEET, header)
 
-    today_str = str(date.today())
+    today = date.today()
+    today_str = str(today)
     rows = [header]
+    stale_count = 0
 
     for symbol in active_symbols:
         try:
@@ -253,8 +255,18 @@ def main():
             print(f"{symbol}: history fetch failed ({e})")
             hist = None
 
-        cross = check_ema_crossover_volume(hist) if hist is not None and not hist.empty else None
-        pullback = check_ema_pullback(hist) if hist is not None and not hist.empty else None
+        cross, pullback = None, None
+        if hist is not None and not hist.empty:
+            # Hard freshness gate -- a signal only counts if it's based on TODAY's
+            # confirmed bar. If Yahoo's latest bar is still yesterday's (e.g. this
+            # ran before data caught up, or got triggered manually on an off day),
+            # skip both checks entirely rather than reporting a stale signal as current.
+            last_bar_date = hist.index[-1].date()
+            if last_bar_date == today:
+                cross = check_ema_crossover_volume(hist)
+                pullback = check_ema_pullback(hist)
+            else:
+                stale_count += 1
 
         rows.append([
             symbol,
@@ -272,7 +284,7 @@ def main():
             print(f"{symbol}: EMA Pullback ({pullback['pattern']}) -- entry {pullback['entry_price']}, target {pullback['target']}")
 
     ws.update(rows, "A1")
-    print(f"Wrote EMA signal results for {len(rows) - 1} symbols.")
+    print(f"Wrote EMA signal results for {len(rows) - 1} symbols ({stale_count} skipped for stale/non-today data).")
 
 
 if __name__ == "__main__":

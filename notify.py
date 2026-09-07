@@ -66,12 +66,17 @@ def _to_int_or_none(value):
         return None
 
 
+def _to_bool(value):
+    return value is True or value == "TRUE" or value == "True" or value == "true"
+
+
 def build_merged_stocks(spreadsheet):
     "Mirrors the relevant parts of the join logic in api/dashboard.js, in Python."
     main_rows = spreadsheet.sheet1.get_all_records()
     rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
     harmonic_by_symbol = read_tab_by_symbol(spreadsheet, "Harmonic_Patterns")
+    ema_by_symbol = read_tab_by_symbol(spreadsheet, "EMA_Signals")
 
     stocks = []
     for r in main_rows:
@@ -127,6 +132,10 @@ def build_merged_stocks(spreadsheet):
         # scan run that first confirmed C), not every run for the rest of its life.
         harmonic_c_fresh = "C formed" in harmonic_status and harmonic_days_ago == 0
 
+        ema = ema_by_symbol.get(symbol, {})
+        ema_cross_signal = _to_bool(ema.get("ema_cross_signal"))
+        ema_pullback_signal = _to_bool(ema.get("ema_pullback_signal"))
+
         stocks.append({
             "symbol": symbol,
             "source": r.get("source", ""),
@@ -152,6 +161,11 @@ def build_merged_stocks(spreadsheet):
             "harmonic_status": harmonic_status,
             "harmonic_d_price": harmonic_d_price,
             "harmonic_c_fresh": harmonic_c_fresh,
+            "ema_cross_signal": ema_cross_signal,
+            "ema_cross_target": ema.get("ema_cross_target", ""),
+            "ema_pullback_signal": ema_pullback_signal,
+            "ema_pullback_pattern": ema.get("ema_pullback_pattern", "") or "",
+            "ema_pullback_target": ema.get("ema_pullback_target", ""),
         })
 
     return stocks
@@ -212,6 +226,14 @@ def compute_signals(s):
             s["harmonic_c_fresh"],
             f" ({s['harmonic_pattern']} → D ₹{s['harmonic_d_price']})" if s["harmonic_c_fresh"] else "",
         ),
+        "ema_crossover_volume": (
+            s["ema_cross_signal"],
+            f" (target ₹{s['ema_cross_target']})" if s["ema_cross_signal"] else "",
+        ),
+        "ema_pullback": (
+            s["ema_pullback_signal"],
+            f" ({s['ema_pullback_pattern']} → target ₹{s['ema_pullback_target']})" if s["ema_pullback_signal"] else "",
+        ),
     }
 
 
@@ -223,6 +245,8 @@ FILTER_DISPLAY_NAMES = {
     "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
     "confirmed_buy": "✅ Confirmed Buy (Delivery %)",
     "harmonic_c_formed": "🔷 Harmonic Point C Formed (D Target)",
+    "ema_crossover_volume": "📈 20/50 EMA Crossover + Volume Breakout",
+    "ema_pullback": "↩️ EMA Pullback",
     "high_quality": "🌟 High Quality Breakout (Score ≥4/5)",
 }
 

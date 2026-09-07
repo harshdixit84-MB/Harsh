@@ -135,6 +135,7 @@ def build_merged_stocks(spreadsheet):
         ema = ema_by_symbol.get(symbol, {})
         ema_cross_signal = _to_bool(ema.get("ema_cross_signal"))
         ema_pullback_signal = _to_bool(ema.get("ema_pullback_signal"))
+        ema_retest_signal = _to_bool(ema.get("ema_retest_signal"))
 
         stocks.append({
             "symbol": symbol,
@@ -166,6 +167,10 @@ def build_merged_stocks(spreadsheet):
             "ema_pullback_signal": ema_pullback_signal,
             "ema_pullback_pattern": ema.get("ema_pullback_pattern", "") or "",
             "ema_pullback_target": ema.get("ema_pullback_target", ""),
+            "ema_retest_signal": ema_retest_signal,
+            "ema_retest_touched": ema.get("ema_retest_touched_ema", "") or "",
+            "ema_retest_days_since_cross": ema.get("ema_retest_days_since_cross", ""),
+            "ema_retest_target": ema.get("ema_retest_target", ""),
         })
 
     return stocks
@@ -179,14 +184,14 @@ def compute_signals(s):
 
     daily_bull_today = daily == "bullish" and s["daily_formed_today"]
     weekly_bull_today = weekly == "bullish" and s["weekly_formed_today"]
-    hourly_bull_recent = hourly == "bullish" and s["hourly_recent"]
     daily_bear_today = daily == "bearish" and s["daily_formed_today"]
-    weekly_bear_today = weekly == "bearish" and s["weekly_formed_today"]
     hourly_bear_recent = hourly == "bearish" and s["hourly_recent"]
 
+    # Weekly RSI divergence no longer factors into any standalone alert (daily
+    # + hourly only) -- "reversal" is the one exception, since it's specifically
+    # defined as a daily+weekly same-day confluence, not a divergence alert itself.
     hourly_tag = f"1H·{s['rsi_hourly_bars_ago']}b" if s["rsi_hourly_bars_ago"] is not None else "1H"
-    bullish_tf = "+".join(filter(None, ["D" if daily_bull_today else "", "W" if weekly_bull_today else "", hourly_tag if hourly_bull_recent else ""]))
-    bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", "W" if weekly_bear_today else "", hourly_tag if hourly_bear_recent else ""]))
+    bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", hourly_tag if hourly_bear_recent else ""]))
 
     near_sl_matching = s["distance_to_sl_pct"] is not None and 0 <= s["distance_to_sl_pct"] <= WATCH_THRESHOLD
     near_sl_suffix = ""
@@ -202,25 +207,17 @@ def compute_signals(s):
             near_sl_matching,
             near_sl_suffix,
         ),
-        "bullish_divergence": (
-            daily_bull_today or weekly_bull_today or hourly_bull_recent,
-            f" ({bullish_tf})" if bullish_tf else "",
+        "need_target": (
+            s["buy_target"] in (None, "", 0),
+            "",
         ),
         "bearish_divergence": (
-            daily_bear_today or weekly_bear_today or hourly_bear_recent,
+            daily_bear_today or hourly_bear_recent,
             f" ({bearish_tf})" if bearish_tf else "",
         ),
         "reversal": (
             daily_bull_today and weekly_bull_today,
             " (D+W same-day)",
-        ),
-        "confirmed_buy": (
-            s["dv_decision"] == "Confirmed Buy",
-            "",
-        ),
-        "high_quality": (
-            s["quality_score"] is not None and s["quality_score"] >= 4,
-            f" (Q {s['quality_score']}/5)" if s["quality_score"] is not None else "",
         ),
         "harmonic_c_formed": (
             s["harmonic_c_fresh"],
@@ -234,20 +231,23 @@ def compute_signals(s):
             s["ema_pullback_signal"],
             f" ({s['ema_pullback_pattern']} → target ₹{s['ema_pullback_target']})" if s["ema_pullback_signal"] else "",
         ),
+        "ema_retest": (
+            s["ema_retest_signal"],
+            f" (touching {s['ema_retest_touched']} EMA, crossed {s['ema_retest_days_since_cross']}d ago → target ₹{s['ema_retest_target']})" if s["ema_retest_signal"] else "",
+        ),
     }
 
 
 FILTER_DISPLAY_NAMES = {
     "near_target": "Near Target",
     "near_sl": "Near Stoploss",
-    "bullish_divergence": "Bullish Divergence (Daily/Weekly/1H)",
-    "bearish_divergence": "Bearish Divergence (Daily/Weekly/1H)",
+    "need_target": "📝 Need Target Set",
+    "bearish_divergence": "Bearish Divergence (Daily/1H)",
     "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
-    "confirmed_buy": "✅ Confirmed Buy (Delivery %)",
     "harmonic_c_formed": "🔷 Harmonic Point C Formed (D Target)",
     "ema_crossover_volume": "📈 20/50 EMA Crossover + Volume Breakout",
     "ema_pullback": "↩️ EMA Pullback",
-    "high_quality": "🌟 High Quality Breakout (Score ≥4/5)",
+    "ema_retest": "〰️ EMA Retest (Past Crossover)",
 }
 
 

@@ -12,7 +12,7 @@ module.exports = async (req, res) => {
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
-      range: "Sheet1!A1:Z1000",
+      range: "Sheet1!A1:AF1000",
     });
 
     let dvSummaryBysymbol = {};
@@ -295,6 +295,8 @@ module.exports = async (req, res) => {
       r.days_since_52w_breakout = r.days_since_52w_breakout !== "" && r.days_since_52w_breakout !== undefined ? parseInt(r.days_since_52w_breakout) : null;
       r.retest_pct_from_52w = r.retest_pct_from_52w !== "" && r.retest_pct_from_52w !== undefined ? parseFloat(r.retest_pct_from_52w) : null;
       r.at_52w_retest = r.at_52w_retest === true || r.at_52w_retest === "TRUE" || r.at_52w_retest === "true";
+      r.watchlisted = r.watchlisted === true || r.watchlisted === "TRUE" || r.watchlisted === "true";
+      r.bought = r.bought === true || r.bought === "TRUE" || r.bought === "true";
 
       const dv = dvSummaryBysymbol[r.symbol];
       r.adp_5 = dv && dv.adp5 !== "" ? parseFloat(dv.adp5) : null;

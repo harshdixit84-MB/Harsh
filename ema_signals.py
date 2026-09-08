@@ -1,5 +1,5 @@
 """
-Detects two EMA-based setups on DAILY charts for actively tracked stocks:
+Detects EMA-based setups on DAILY charts for actively tracked stocks:
 
   1. "20/50 EMA Crossover + Volume Breakout" -- a TREND CHANGE signal: the
      20 EMA crosses above the 50 EMA on the same day volume breaks out to
@@ -14,21 +14,30 @@ Detects two EMA-based setups on DAILY charts for actively tracked stocks:
      bullish reversal candle (hammer or bullish engulfing) on above-average
      volume.
 
-Both are ports of the logic already running in the nse-stock-chatbot repo
-(core/ema_crossover.py and core/strategy.py respectively) -- same ratios,
-same thresholds -- just adapted here to scan every actively tracked symbol
-on a schedule and write results to a sheet, instead of running on-demand
-for a single queried stock.
+  3. "EMA Retest / first touch since latest crossover" -- the WATCHLIST GATE:
+     finds the most recent 20/50 EMA bullish crossover, confirms the uptrend
+     hasn't flipped back down since, and fires ONLY on the very first day
+     since that crossover that price touches the 20 or 50 EMA. A second or
+     third touch of the same crossover's uptrend does NOT re-fire. When this
+     fires, the symbol is automatically marked watchlisted=True on the main
+     sheet (see auto_add_to_watchlist) -- this is the automatic entry point
+     into the watchlist for tickers sourced from the 52-week breakout scan.
 
-IMPORTANT: both signals are based on DAILY closes/EMAs, so this is
-scheduled to run ONCE, AFTER market close -- an intraday run would read a
-still-forming candle and could flag (or miss) a crossover/pullback that
-isn't actually confirmed yet. See .github/workflows/ema-signals.yml.
+(1) and (2) are ports of the logic already running in the nse-stock-chatbot
+repo (core/ema_crossover.py and core/strategy.py respectively) -- same
+ratios, same thresholds -- just adapted here to scan every actively tracked
+symbol on a schedule and write results to a sheet, instead of running
+on-demand for a single queried stock.
+
+IMPORTANT: all three are based on DAILY closes/EMAs, so this is scheduled
+to run ONCE, AFTER market close -- an intraday run would read a still-
+forming candle and could flag (or miss) a crossover/pullback/first-touch
+that isn't actually confirmed yet. See .github/workflows/ema-signals.yml.
 
 Each check only asks "does the MOST RECENT daily bar qualify" -- so unlike
-the divergence/retest checks elsewhere in this project, there's no
-separate "days_ago" freshness field needed: True inherently means "as of
-today's close."
+the divergence checks elsewhere in this project, there's no separate
+"days_ago" freshness field needed: True inherently means "as of today's
+close."
 
 Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY
 """
@@ -65,9 +74,11 @@ EMA_TOLERANCE_PCT = 2.0           # how close price must be to EMA20/EMA50
 VOLUME_CONFIRM_MULT = 1.0         # reversal-day volume vs 20-day avg volume
 PULLBACK_MIN_AVG_VOLUME = 500_000
 
-# ---- EMA Retest (crossover happened at some point in the past, uptrend still
-#      intact, price now touching the 20 or 50 EMA -- no candle-pattern or
-#      volume-spike requirement, unlike EMA Pullback which needs both) ----
+# ---- EMA first-touch-since-crossover (the watchlist gate): crossover
+#      happened at some point in the past, uptrend still intact, and TODAY
+#      is the very first day price has touched the 20 or 50 EMA since that
+#      crossover -- no candle-pattern or volume-spike requirement, unlike
+#      EMA Pullback which needs both. Fires once per crossover only. ----
 RETEST_CROSSOVER_LOOKBACK_DAYS = 30   # how far back to look for the crossover itself
 RETEST_EMA_TOLERANCE_PCT = 2.0        # how close price must be to count as "touching" the line
 RETEST_MIN_AVG_VOLUME = 500_000
@@ -237,12 +248,14 @@ def check_ema_pullback(df):
 def check_ema_retest(df):
     """20 EMA crossed above 50 EMA at SOME POINT in the recent past (not
     necessarily today), the uptrend is still intact (hasn't crossed back
-    down since), and price has now pulled back to where it's actually
-    touching the 20 or 50 EMA line. No candle-pattern or volume-spike
-    requirement -- this is a simpler "is price retesting EMA support in an
-    intact uptrend" check, distinct from EMA Pullback (needs a % pullback +
-    reversal candle) and EMA Crossover+Volume Breakout (needs the crossover
-    itself to be happening today)."""
+    down since), and TODAY is the very FIRST day since that crossover that
+    price has touched the 20 or 50 EMA.
+
+    Unlike a plain "is price touching the EMA" check, this only fires ONCE
+    per crossover: if price already touched either EMA on any earlier day
+    since the same crossover, this returns None even if today is also
+    touching -- only the first pullback counts. A later, second or third
+    touch of the same crossover's uptrend does NOT re-qualify."""
     if df is None or len(df) < EMA_SLOW + RETEST_CROSSOVER_LOOKBACK_DAYS + 1:
         return None
 
@@ -252,61 +265,103 @@ def check_ema_retest(df):
     df["AvgVol20"] = df["Volume"].rolling(20).mean()
     df["SwingLow"] = df["Low"].rolling(CROSSOVER_LOOKBACK_DAYS).min()
 
-    last = df.iloc[-1]
-    close = last["Close"]
-    ema20, ema50 = last["EMA20"], last["EMA50"]
+    ema20_arr = df["EMA20"].values
+    ema50_arr = df["EMA50"].values
+    close_arr = df["Close"].values
+    n = len(df)
+    last_idx = n - 1
 
     # Uptrend must still be intact right now.
-    if not (ema20 > ema50):
+    if not (ema20_arr[last_idx] > ema50_arr[last_idx]):
         return None
 
-    avg_vol20 = last["AvgVol20"]
+    avg_vol20 = df["AvgVol20"].iloc[last_idx]
     if pd.isna(avg_vol20) or avg_vol20 < RETEST_MIN_AVG_VOLUME:
         return None
 
     # Find the most recent bullish crossover within the lookback window, and
     # confirm the trend hasn't flipped back down since then.
-    ema20_arr = df["EMA20"].values
-    ema50_arr = df["EMA50"].values
-    n = len(df)
-    days_since_cross = None
-    for i in range(n - 1, max(n - 1 - RETEST_CROSSOVER_LOOKBACK_DAYS, 1) - 1, -1):
+    cross_idx = None
+    for i in range(last_idx, max(last_idx - RETEST_CROSSOVER_LOOKBACK_DAYS, 1) - 1, -1):
         crossed_up = ema20_arr[i - 1] <= ema50_arr[i - 1] and ema20_arr[i] > ema50_arr[i]
         if crossed_up:
-            days_since_cross = (n - 1) - i
+            cross_idx = i
             break
         if ema20_arr[i] <= ema50_arr[i]:
             break  # trend flipped back down before we found a qualifying crossover -- stop looking
 
-    if days_since_cross is None:
+    if cross_idx is None:
         return None
 
-    dist_ema20_pct = abs(close - ema20) / ema20 * 100
-    dist_ema50_pct = abs(close - ema50) / ema50 * 100
-    touching_20 = dist_ema20_pct <= RETEST_EMA_TOLERANCE_PCT
-    touching_50 = dist_ema50_pct <= RETEST_EMA_TOLERANCE_PCT
-    if not (touching_20 or touching_50):
+    def _touch(i):
+        dist20 = abs(close_arr[i] - ema20_arr[i]) / ema20_arr[i] * 100
+        dist50 = abs(close_arr[i] - ema50_arr[i]) / ema50_arr[i] * 100
+        touching20 = dist20 <= RETEST_EMA_TOLERANCE_PCT
+        touching50 = dist50 <= RETEST_EMA_TOLERANCE_PCT
+        return (touching20 or touching50), ("20" if touching20 else "50")
+
+    today_touching, today_touched_ema = _touch(last_idx)
+    if not today_touching:
         return None
 
-    touched = "20" if touching_20 else "50"
-    swing_low = last["SwingLow"]
-    stop_loss = min(swing_low, ema50) * (1 - STOP_BUFFER_PCT / 100)
-    risk_per_share = close - stop_loss
+    # Reject if ANY earlier day since the crossover (before today) already
+    # touched -- only the first touch since the latest crossover qualifies.
+    for i in range(cross_idx, last_idx):
+        earlier_touching, _ = _touch(i)
+        if earlier_touching:
+            return None
+
+    days_since_cross = last_idx - cross_idx
+    swing_low = df["SwingLow"].iloc[last_idx]
+    stop_loss = min(swing_low, ema50_arr[last_idx]) * (1 - STOP_BUFFER_PCT / 100)
+    risk_per_share = close_arr[last_idx] - stop_loss
     if risk_per_share <= 0:
         return None
 
-    target = close + risk_per_share * RISK_REWARD_MULT
+    target = close_arr[last_idx] + risk_per_share * RISK_REWARD_MULT
 
     return {
-        "entry_price": round(float(close), 2),
+        "entry_price": round(float(close_arr[last_idx]), 2),
         "stop_loss": round(float(stop_loss), 2),
         "target": round(float(target), 2),
-        "reward_risk_ratio": round(float((target - close) / risk_per_share), 2),
+        "reward_risk_ratio": round(float((target - close_arr[last_idx]) / risk_per_share), 2),
         "days_since_cross": int(days_since_cross),
-        "touched_ema": touched,
-        "ema20": round(float(ema20), 2),
-        "ema50": round(float(ema50), 2),
+        "touched_ema": today_touched_ema,
+        "ema20": round(float(ema20_arr[last_idx]), 2),
+        "ema50": round(float(ema50_arr[last_idx]), 2),
     }
+
+
+def auto_add_to_watchlist(spreadsheet, symbols):
+    "Sets watchlisted=True on the main sheet for symbols that just triggered check_ema_retest's first-touch-since-latest-crossover gate. Only touches rows that aren't already watchlisted -- never re-adds a symbol a person manually removed, since the gate itself only fires once per crossover anyway."
+    if not symbols:
+        return []
+
+    main_ws = spreadsheet.sheet1
+    main_values = main_ws.get_all_values()
+    if not main_values:
+        return []
+
+    main_header = main_values[0]
+    try:
+        symbol_col = main_header.index("symbol")
+        watchlisted_col = main_header.index("watchlisted")
+    except ValueError:
+        print("Could not find 'symbol'/'watchlisted' columns on the main sheet -- skipping auto-watchlist.")
+        return []
+
+    newly_watchlisted = []
+    for row_num, row in enumerate(main_values[1:], start=2):
+        sym = row[symbol_col] if len(row) > symbol_col else ""
+        if sym not in symbols:
+            continue
+        current = row[watchlisted_col] if len(row) > watchlisted_col else ""
+        if str(current).strip().upper() in ("TRUE", "1"):
+            continue  # already watchlisted, don't touch it
+        main_ws.update_cell(row_num, watchlisted_col + 1, True)
+        newly_watchlisted.append(sym)
+
+    return newly_watchlisted
 
 
 def main():
@@ -331,6 +386,7 @@ def main():
     today_str = str(today)
     rows = [header]
     stale_count = 0
+    first_touch_symbols = []
 
     for symbol in active_symbols:
         try:
@@ -371,10 +427,15 @@ def main():
         if pullback:
             print(f"{symbol}: EMA Pullback ({pullback['pattern']}) -- entry {pullback['entry_price']}, target {pullback['target']}")
         if retest:
-            print(f"{symbol}: EMA Retest (touching {retest['touched_ema']} EMA, crossed {retest['days_since_cross']}d ago) -- entry {retest['entry_price']}, target {retest['target']}")
+            print(f"{symbol}: first EMA touch since latest crossover (touching {retest['touched_ema']} EMA, crossed {retest['days_since_cross']}d ago) -- entry {retest['entry_price']}, target {retest['target']} -- auto-adding to watchlist")
+            first_touch_symbols.append(symbol)
 
     ws.update(rows, "A1")
     print(f"Wrote EMA signal results for {len(rows) - 1} symbols ({stale_count} skipped for stale/non-today data).")
+
+    newly_watchlisted = auto_add_to_watchlist(spreadsheet, first_touch_symbols)
+    if newly_watchlisted:
+        print(f"Auto-added to watchlist: {', '.join(newly_watchlisted)}")
 
 
 if __name__ == "__main__":

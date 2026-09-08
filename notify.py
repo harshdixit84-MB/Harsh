@@ -50,13 +50,16 @@ def get_client_and_spreadsheet():
 
 
 def read_tab_by_symbol(spreadsheet, tab_name):
-    "Reads a side tab into a dict keyed by symbol. Returns {} if the tab doesn't exist yet."
+    "Reads a side tab into a dict keyed by symbol. Returns {} if the tab doesn't exist, OR if reading it fails for any reason (e.g. duplicate/malformed headers) -- one broken side tab should degrade that signal, not crash the entire run and send zero messages."
     try:
         ws = spreadsheet.worksheet(tab_name)
+        rows = ws.get_all_records()
+        return {r["symbol"]: r for r in rows if r.get("symbol")}
     except gspread.exceptions.WorksheetNotFound:
         return {}
-    rows = ws.get_all_records()
-    return {r["symbol"]: r for r in rows if r.get("symbol")}
+    except Exception as e:
+        print(f"WARNING: could not read '{tab_name}' tab ({type(e).__name__}: {e}) -- continuing without it.")
+        return {}
 
 
 def _to_int_or_none(value):
@@ -73,20 +76,27 @@ def _to_bool(value):
 def build_merged_stocks(spreadsheet):
     "Mirrors the relevant parts of the join logic in api/dashboard.js, in Python."
     main_rows = spreadsheet.sheet1.get_all_records()
+    print(f"Sheet1: read {len(main_rows)} row(s).")
     rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
     harmonic_by_symbol = read_tab_by_symbol(spreadsheet, "Harmonic_Patterns")
     ema_by_symbol = read_tab_by_symbol(spreadsheet, "EMA_Signals")
+    print(f"Side tabs: RSI_Divergence={len(rsi_by_symbol)}, DV_Summary={len(dv_by_symbol)}, "
+          f"Harmonic_Patterns={len(harmonic_by_symbol)}, EMA_Signals={len(ema_by_symbol)} symbol(s).")
 
     stocks = []
+    skipped_no_symbol = 0
+    skipped_bad_price = 0
     for r in main_rows:
         symbol = r.get("symbol")
         if not symbol:
+            skipped_no_symbol += 1
             continue
 
         try:
             price = float(r.get("price"))
         except (TypeError, ValueError):
+            skipped_bad_price += 1
             continue  # no usable price, skip this stock entirely
 
         buy_target = r.get("buy_target")
@@ -173,6 +183,8 @@ def build_merged_stocks(spreadsheet):
             "ema_retest_target": ema.get("ema_retest_target", ""),
         })
 
+    print(f"Built {len(stocks)} usable stock record(s) "
+          f"(skipped: {skipped_no_symbol} with no symbol, {skipped_bad_price} with unusable price).")
     return stocks
 
 
@@ -255,9 +267,15 @@ def send_telegram_message(text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    resp = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=15)
+    try:
+        resp = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=15)
+    except requests.RequestException as e:
+        print(f"Telegram send failed: network/request error -- {e}")
+        return False
     if not resp.ok:
         print(f"Telegram send failed: {resp.status_code} {resp.text}")
+        return False
+    return True
 
 
 def format_dv_context(stock):
@@ -333,6 +351,15 @@ def format_group_message(filter_key, entries):
 
 
 def main():
+    # Fail fast and clearly if secrets are missing, instead of a bare KeyError
+    # partway through a run (which would abort with zero messages sent and no
+    # obvious reason why in the log).
+    missing_env = [v for v in ("GOOGLE_SERVICE_ACCOUNT_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID") if not os.environ.get(v)]
+    if missing_env:
+        print(f"ERROR: missing required environment variable(s): {', '.join(missing_env)}. "
+              f"Check the workflow's secrets/env block -- nothing else in this script can run without these.")
+        return
+
     client, spreadsheet = get_client_and_spreadsheet()
     stocks = build_merged_stocks(spreadsheet)
     print(f"Checking {len(stocks)} tracked stocks across {len(FILTER_DISPLAY_NAMES)} signal types.")
@@ -345,17 +372,30 @@ def main():
             if is_matching:
                 matching_by_filter[filter_key].append((stock, detail_suffix))
 
+    total_matches = sum(len(v) for v in matching_by_filter.values())
+    print(f"Total matches across all filters: {total_matches}.")
+    if total_matches == 0:
+        print("No filter matched ANY stock this run. If this keeps happening, the likely causes are: "
+              "sync_dashboard.py/rsi_divergence.py/etc. haven't run recently (stale/empty data), "
+              "or a side tab's data doesn't match what this script expects. "
+              "Check the counts printed above from build_merged_stocks().")
+
     sent_count = 0
+    failed_count = 0
     for filter_key, entries in matching_by_filter.items():
         if not entries:
             print(f"{FILTER_DISPLAY_NAMES[filter_key]}: 0 stocks, skipping message.")
             continue
-        send_telegram_message(format_group_message(filter_key, entries))
-        sent_count += 1
+        ok = send_telegram_message(format_group_message(filter_key, entries))
         symbols = ", ".join(s["symbol"] for s, _ in entries)
-        print(f"Sent {FILTER_DISPLAY_NAMES[filter_key]} ({len(entries)}): {symbols}")
+        if ok:
+            sent_count += 1
+            print(f"Sent {FILTER_DISPLAY_NAMES[filter_key]} ({len(entries)}): {symbols}")
+        else:
+            failed_count += 1
+            print(f"FAILED to send {FILTER_DISPLAY_NAMES[filter_key]} ({len(entries)}): {symbols} -- see Telegram error above.")
 
-    print(f"Done. Sent {sent_count} message(s) this run.")
+    print(f"Done. Sent {sent_count} message(s), {failed_count} failed, this run.")
 
 
 if __name__ == "__main__":

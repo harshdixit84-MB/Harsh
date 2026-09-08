@@ -416,10 +416,13 @@ def main():
         # messages to the same chat back-to-back, which is exactly what firing all
         # 9 possible filter messages with zero delay was doing.
         if sent_this_run > 0:
-            time.sleep(2)
+            time.sleep(5)
 
-        ok = send_telegram_message(format_group_message(filter_key, entries))
+       ok = send_telegram_message(format_group_message(filter_key, entries))
         sent_this_run += 1
+        if not ok:
+            print("Stopping further sends this run -- Telegram is rate-limiting; retrying now would only make it worse.")
+            break
         symbols = ", ".join(s["symbol"] for s, _ in entries)
         if ok:
             sent_count += 1

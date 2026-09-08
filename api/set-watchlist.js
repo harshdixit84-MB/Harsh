@@ -1,7 +1,14 @@
 const { google } = require("googleapis");
 
 function colLetter(index) {
-  return String.fromCharCode(65 + index);
+  let letter = "";
+  index += 1; // convert to 1-based
+  while (index > 0) {
+    const rem = (index - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    index = Math.floor((index - 1) / 26);
+  }
+  return letter;
 }
 
 const ALLOWED_FIELDS = ["watchlisted", "bought"];

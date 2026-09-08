@@ -31,6 +31,7 @@ Environment variables required:
 """
 import json
 import os
+import time
 
 import gspread
 import requests
@@ -267,15 +268,38 @@ def send_telegram_message(text):
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    try:
-        resp = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=15)
-    except requests.RequestException as e:
-        print(f"Telegram send failed: network/request error -- {e}")
-        return False
-    if not resp.ok:
+
+    for attempt in range(2):  # one retry, only for a SHORT flood-control wait
+        try:
+            resp = requests.post(url, json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"}, timeout=15)
+        except requests.RequestException as e:
+            print(f"Telegram send failed: network/request error -- {e}")
+            return False
+
+        if resp.ok:
+            return True
+
+        if resp.status_code == 429 and attempt == 0:
+            try:
+                retry_after = resp.json().get("parameters", {}).get("retry_after", 0)
+            except ValueError:
+                retry_after = 0
+            # A short cooldown (a few seconds) is worth waiting out inline. A long
+            # one (which is what a compounding flood-control penalty looks like)
+            # is NOT -- waiting minutes here would just make the whole workflow
+            # run long, so give up on this message and let the NEXT scheduled
+            # run send the (by-then-current) list instead.
+            if 0 < retry_after <= 10:
+                print(f"Telegram send hit a brief flood-control wait ({retry_after}s) -- retrying once.")
+                time.sleep(retry_after + 1)
+                continue
+            print(f"Telegram send failed: {resp.status_code} {resp.text}")
+            return False
+
         print(f"Telegram send failed: {resp.status_code} {resp.text}")
         return False
-    return True
+
+    return False
 
 
 def format_dv_context(stock):
@@ -382,11 +406,20 @@ def main():
 
     sent_count = 0
     failed_count = 0
+    sent_this_run = 0
     for filter_key, entries in matching_by_filter.items():
         if not entries:
             print(f"{FILTER_DISPLAY_NAMES[filter_key]}: 0 stocks, skipping message.")
             continue
+
+        # Space consecutive sends out -- Telegram throttles a bot sending multiple
+        # messages to the same chat back-to-back, which is exactly what firing all
+        # 9 possible filter messages with zero delay was doing.
+        if sent_this_run > 0:
+            time.sleep(2)
+
         ok = send_telegram_message(format_group_message(filter_key, entries))
+        sent_this_run += 1
         symbols = ", ".join(s["symbol"] for s, _ in entries)
         if ok:
             sent_count += 1

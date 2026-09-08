@@ -418,7 +418,7 @@ def main():
         if sent_this_run > 0:
             time.sleep(5)
 
-       ok = send_telegram_message(format_group_message(filter_key, entries))
+                ok = send_telegram_message(format_group_message(filter_key, entries))
         sent_this_run += 1
         if not ok:
             print("Stopping further sends this run -- Telegram is rate-limiting; retrying now would only make it worse.")

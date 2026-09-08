@@ -556,6 +556,74 @@ table.stock-table {
 .quality-check.fail { color: var(--text-secondary); }
 .quality-raw { font-size: 10px; color: var(--text-secondary); }
 
+.watch-check { width: 15px; height: 15px; cursor: pointer; accent-color: #ffd60a; vertical-align: middle; }
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--bg-card, #12172b);
+  border: 1px solid var(--border, #2a3352);
+  border-radius: 10px;
+  width: min(720px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border, #2a3352);
+  font-weight: 700;
+  font-size: 15px;
+}
+.modal-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.modal-close:hover { opacity: 1; }
+.modal-body { padding: 14px 18px; overflow-y: auto; }
+.watchlist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.watchlist-table th { text-align: left; padding: 6px 8px; font-size: 11px; color: var(--text-secondary); border-bottom: 1px solid var(--border, #2a3352); }
+.watchlist-table td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+.remove-watch-btn {
+  background: rgba(192,57,43,0.18);
+  color: #e5626b;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.analyze-btn {
+  background: rgba(37,99,235,0.18);
+  color: #6ea8fe;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bought-check { width: 16px; height: 16px; cursor: pointer; accent-color: #3ddc8a; }
+.verdict-strategy-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
+
+
 .notes-toggle {
   font-size: 10px;
   padding: 1px 6px;
@@ -1001,6 +1069,7 @@ LIVE
 <label class="chip-check" id="chip-jackpot"><input type="checkbox" data-quick="jackpot"><span>★ Reversal</span></label>
 <label class="chip-check" id="chip-retest52w"><input type="checkbox" data-quick="retest52w"><span>🎯 52W Retest</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
+<button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
 </div>
 
 <div class="dropdown-row">
@@ -1073,6 +1142,37 @@ LIVE
 </div>
 
 <footer>Auto-refreshes every 5 minutes · data synced from Chartlink via scheduled job</footer>
+</div>
+
+<div class="modal-overlay" id="watchlist-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span>⭐ Watchlist</span>
+      <button class="modal-close" id="close-watchlist">✕</button>
+    </div>
+    <div class="modal-body">
+      <table class="watchlist-table">
+        <thead>
+          <tr><th>Symbol</th><th>TV</th><th>Analyze</th><th>Bought</th><th>Remove</th></tr>
+        </thead>
+        <tbody id="watchlist-rows">
+          <tr><td colspan="5" class="empty">No stocks on your watchlist yet — tick the checkbox next to any symbol.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="analyze-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="analyze-title">Analyze</span>
+      <button class="modal-close" id="close-analyze">✕</button>
+    </div>
+    <div class="modal-body" id="analyze-body">
+      <div class="loading">Analyzing… this can take up to 30 seconds.</div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1263,6 +1363,7 @@ function renderRow(stock) {
     <tr class="stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
       <td class="cell-symbol">
         <div class="symbol-line">
+          <input type="checkbox" class="watch-check" data-symbol="${stock.symbol}" ${stock.watchlisted ? "checked" : ""} title="Add to Watchlist" />
           <span class="symbol">${stock.symbol}</span>
           ${decisionBadge(stock)}
           ${stock.quality_score !== null && stock.quality_score !== undefined ? `<button class="quality-badge ${stock.quality_score >= 4 ? "q-high" : stock.quality_score >= 2 ? "q-mid" : "q-low"}" data-symbol="${stock.symbol}" title="Breakout quality — click for breakdown">Q ${stock.quality_score}/5</button>` : ""}
@@ -1669,6 +1770,155 @@ document.addEventListener("click", async (e) => {
     btn.disabled = false;
     alert("Could not dismiss: " + err.message);
   }
+});
+
+// ---- Watchlist ----
+
+async function setWatchlistField(symbol, field, value, checkboxEl) {
+  try {
+    const res = await fetch("/api/set-watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, field, value }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `Failed to update ${field}`);
+
+    const stock = latestStocks.find((s) => s.symbol === symbol);
+    if (stock) stock[field] = value;
+    render();
+    renderWatchlistModal();
+  } catch (err) {
+    if (checkboxEl) checkboxEl.checked = !value;
+    alert(`Could not update ${field}: ` + err.message);
+  }
+}
+
+document.getElementById("rows").addEventListener("change", (e) => {
+  if (e.target.classList.contains("watch-check")) {
+    const symbol = e.target.dataset.symbol;
+    setWatchlistField(symbol, "watchlisted", e.target.checked, e.target);
+  }
+});
+
+function renderWatchlistModal() {
+  const container = document.getElementById("watchlist-rows");
+  const watched = latestStocks.filter((s) => s.watchlisted);
+
+  if (watched.length === 0) {
+    container.innerHTML = '<tr><td colspan="5" class="empty">No stocks on your watchlist yet — tick the checkbox next to any symbol.</td></tr>';
+    return;
+  }
+
+  container.innerHTML = watched.map((s) => `
+    <tr data-symbol="${s.symbol}">
+      <td><b>${s.symbol}</b></td>
+      <td><a href="https://www.tradingview.com/chart/?symbol=NSE:${s.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a></td>
+      <td><button class="analyze-btn" data-symbol="${s.symbol}">Analyze</button></td>
+      <td><input type="checkbox" class="bought-check" data-symbol="${s.symbol}" ${s.bought ? "checked" : ""} /></td>
+      <td><button class="remove-watch-btn" data-symbol="${s.symbol}">Remove</button></td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("open-watchlist").addEventListener("click", () => {
+  renderWatchlistModal();
+  document.getElementById("watchlist-overlay").classList.add("open");
+});
+document.getElementById("close-watchlist").addEventListener("click", () => {
+  document.getElementById("watchlist-overlay").classList.remove("open");
+});
+document.getElementById("watchlist-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "watchlist-overlay") e.target.classList.remove("open");
+});
+
+document.getElementById("watchlist-rows").addEventListener("click", (e) => {
+  const symbol = e.target.dataset.symbol;
+  if (!symbol) return;
+
+  if (e.target.classList.contains("remove-watch-btn")) {
+    setWatchlistField(symbol, "watchlisted", false);
+    return;
+  }
+  if (e.target.classList.contains("analyze-btn")) {
+    openAnalyze(symbol);
+    return;
+  }
+});
+
+document.getElementById("watchlist-rows").addEventListener("change", (e) => {
+  if (e.target.classList.contains("bought-check")) {
+    const symbol = e.target.dataset.symbol;
+    setWatchlistField(symbol, "bought", e.target.checked, e.target);
+  }
+});
+
+// ---- Analyze (calls the nse-stock-chatbot API) ----
+
+const ANALYZE_API_BASE = "https://nse-stock-chatbot.vercel.app/api";
+
+function renderAnalyzeResult(result) {
+  if (result.error) {
+    return `<div class="empty">⚠️ ${result.error}</div>`;
+  }
+
+  let html = `<div style="margin-bottom:10px;"><b>${result.symbol}</b> — as of ${result.as_of}<br/>Last close: ₹${result.last_close}</div>`;
+
+  if (result.verdict === "BUY") {
+    const p = result.trade_plan;
+    const bt = result.backtest;
+    html += `<div style="margin-bottom:10px;">
+      <span class="bs-pill buy">✅ BUY via ${result.strategy}</span><br/><br/>
+      Entry: ₹${p.entry_price} · Stop: ₹${p.stop_loss} · Target: ₹${p.target}<br/>
+      Risk:Reward = 1:${p.reward_risk_ratio}<br/>
+      Backtest: ${bt.win_rate_pct}% win rate over ${bt.signals} signals, profit factor ${bt.profit_factor}
+      ${bt.low_sample_warning ? '<br/>⚠️ Small sample size -- treat with caution' : ""}
+    </div>`;
+  } else if (result.verdict === "BUY_NO_TRACK_RECORD") {
+    const p = result.trade_plan;
+    html += `<div style="margin-bottom:10px;">
+      <span class="bs-pill buy">⚠️ ${result.strategy} setup active (no track record yet)</span><br/><br/>
+      Entry: ₹${p.entry_price} · Stop: ₹${p.stop_loss} · Target: ₹${p.target}
+    </div>`;
+  } else {
+    html += `<div style="margin-bottom:10px;">No active setup today.</div>`;
+  }
+
+  if (result.momentum_confirmation) {
+    html += `<div style="margin-bottom:10px;">Momentum (MACD): ${result.momentum_confirmation.status}</div>`;
+  }
+
+  if (result.strategy_ranking) {
+    html += `<div style="font-size:11px; color:var(--text-secondary); margin-bottom:6px;">Ranking by backtested win rate:</div>`;
+    result.strategy_ranking.forEach((r) => {
+      const flag = r.active_today ? "🟢" : "⚪";
+      const wr = r.win_rate_pct !== null ? `${r.win_rate_pct}%` : "n/a";
+      html += `<div class="verdict-strategy-row">${flag} ${r.strategy}: ${wr} (${r.signals} signals)</div>`;
+    });
+  }
+
+  return html;
+}
+
+async function openAnalyze(symbol) {
+  document.getElementById("analyze-title").textContent = `Analyze — ${symbol}`;
+  document.getElementById("analyze-body").innerHTML = '<div class="loading">Analyzing… this can take up to 30 seconds.</div>';
+  document.getElementById("analyze-overlay").classList.add("open");
+
+  try {
+    const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}`);
+    const result = await res.json();
+    document.getElementById("analyze-body").innerHTML = renderAnalyzeResult(result);
+  } catch (err) {
+    document.getElementById("analyze-body").innerHTML = `<div class="empty">⚠️ Could not reach the analysis service: ${err.message}</div>`;
+  }
+}
+
+document.getElementById("close-analyze").addEventListener("click", () => {
+  document.getElementById("analyze-overlay").classList.remove("open");
+});
+document.getElementById("analyze-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "analyze-overlay") e.target.classList.remove("open");
 });
 
 loadDashboard();

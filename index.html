@@ -908,8 +908,6 @@ LIVE
 <label class="chip-check" id="chip-emacross"><input type="checkbox" data-quick="emaCross"><span>20/50 EMA Cross+Vol</span></label>
 <label class="chip-check" id="chip-emapullback"><input type="checkbox" data-quick="emaPullback"><span>EMA Pullback</span></label>
 <label class="chip-check" id="chip-emaretest"><input type="checkbox" data-quick="emaRetest"><span>EMA Retest</span></label>
-<label class="chip-check" id="chip-above20"><input type="checkbox" data-quick="above20"><span>&gt;20%</span></label>
-<label class="chip-check" id="chip-below20"><input type="checkbox" data-quick="below20"><span>&lt;20%</span></label>
 <label class="chip-check" id="chip-retest52w"><input type="checkbox" data-quick="retest52w"><span>🎯 52W Retest</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 <button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
@@ -1002,7 +1000,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, above20: false, below20: false, retest52w: false };
+let quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, retest52w: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -1200,9 +1198,7 @@ function renderRow(stock) {
 }
 
 function computeFilteredStocks() {
-  const showExtreme = quickFilters.above20 || quickFilters.below20;
-  const isExtreme = (s) => s.archived || (s.distance_pct !== undefined && Math.abs(s.distance_pct) > 20);
-  let filtered = showExtreme ? latestStocks.slice() : latestStocks.filter((s) => !isExtreme(s));
+  let filtered = latestStocks.filter((s) => !s.archived);
 
   if (buysellFilter !== "all") {
     filtered = filtered.filter((s) => buySell(s) === buysellFilter);
@@ -1227,8 +1223,6 @@ function computeFilteredStocks() {
   if (quickFilters.emaCross) filtered = filtered.filter((s) => !!s.ema_cross_signal);
   if (quickFilters.emaPullback) filtered = filtered.filter((s) => !!s.ema_pullback_signal);
   if (quickFilters.emaRetest) filtered = filtered.filter((s) => !!s.ema_retest_signal);
-  if (quickFilters.above20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct > 20);
-  if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
   if (quickFilters.retest52w) filtered = filtered.filter((s) => !!s.at_52w_retest);
 
   if (currentSearch.trim() !== "") {
@@ -1443,7 +1437,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, above20: false, below20: false, retest52w: false };
+  quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, retest52w: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");

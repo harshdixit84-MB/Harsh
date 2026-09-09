@@ -1,8 +1,17 @@
 const { google } = require("googleapis");
 
 function colLetter(index) {
-  return String.fromCharCode(65 + index);
+  let letter = "";
+  index += 1; // convert to 1-based
+  while (index > 0) {
+    const rem = (index - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    index = Math.floor((index - 1) / 26);
+  }
+  return letter;
 }
+
+const ALLOWED_TARGET_FIELDS = ["buy_target", "target_1", "target_2"];
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -11,10 +20,15 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { symbol, target } = req.body;
+    const { symbol, target, field } = req.body;
+    const targetField = field || "buy_target"; // default keeps old callers (main table Entry field) working unchanged
 
     if (!symbol || target === undefined || target === null || target === "") {
       res.status(400).json({ error: "symbol and target are required" });
+      return;
+    }
+    if (!ALLOWED_TARGET_FIELDS.includes(targetField)) {
+      res.status(400).json({ error: `field must be one of: ${ALLOWED_TARGET_FIELDS.join(", ")}` });
       return;
     }
 
@@ -27,7 +41,7 @@ module.exports = async (req, res) => {
 
     const getResp = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SHEET_ID,
-      range: "Sheet1!A1:J1000",
+      range: "Sheet1!A1:AF1000",
     });
 
     const rows = getResp.data.values || [];
@@ -38,7 +52,7 @@ module.exports = async (req, res) => {
 
     const headers = rows[0];
     const symbolCol = headers.indexOf("symbol");
-    const targetCol = headers.indexOf("buy_target");
+    const targetCol = headers.indexOf(targetField);
 
     if (symbolCol === -1 || targetCol === -1) {
       res.status(500).json({ error: "Expected columns not found in sheet" });

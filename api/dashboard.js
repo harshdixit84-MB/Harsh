@@ -167,6 +167,9 @@ module.exports = async (req, res) => {
         withoutTarget.push(r);
       }
 
+      r.target_1 = r.target_1 && r.target_1 !== "" ? parseFloat(r.target_1) : "";
+      r.target_2 = r.target_2 && r.target_2 !== "" ? parseFloat(r.target_2) : "";
+
       r.price = price;
       r.percent_change = parseFloat(r.percent_change) || 0;
       r.rsi = r.rsi !== "" ? parseFloat(r.rsi) : null;

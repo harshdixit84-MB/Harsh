@@ -77,7 +77,7 @@ HEADERS = ["symbol", "name", "source", "price", "percent_change", "volume",
            "rs_vs_nifty", "close_location", "base_days", "breakout_vol_ratio",
            "near_52w_high", "quality_score", "quality_flags", "market_regime",
            "retest_52w_level", "days_since_52w_breakout", "retest_pct_from_52w", "at_52w_retest",
-           "watchlisted", "bought"]
+           "watchlisted", "bought", "target_1", "target_2"]
 
 
 async def fetch_raw_results(screener_url):
@@ -455,6 +455,8 @@ def sync_stocks_to_sheet(sheet, fetched_stocks):
                 "archived_reason": "",
                 "watchlisted": False,
                 "bought": False,
+                "target_1": "",
+                "target_2": "",
             }
         else:
             # Union with whatever source tags this stock already earned --

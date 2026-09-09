@@ -929,10 +929,12 @@ LIVE
 <th class="sortable" id="th-cmp">CMP ›</th>
 <th>Source</th>
 <th>SL</th>
+<th>Target 1</th>
+<th>Target 2</th>
 </tr>
 </thead>
 <tbody id="rows">
-<tr><td colspan="5" class="loading">Fetching dashboard…</td></tr>
+<tr><td colspan="7" class="loading">Fetching dashboard…</td></tr>
 </tbody>
 </table>
 </div>
@@ -1021,7 +1023,7 @@ function renderNotesRow(stock) {
 
   return `
     <tr class="notes-row" data-notes-for="${stock.symbol}">
-      <td colspan="5">
+      <td colspan="7">
         <div class="notes-panel">
           <div class="notes-list">${list}</div>
           <div class="notes-add">
@@ -1055,7 +1057,7 @@ function renderQualityRow(stock) {
 
   return `
     <tr class="quality-row" data-quality-for="${stock.symbol}">
-      <td colspan="5">
+      <td colspan="7">
         <div class="quality-panel">
           <div class="quality-checks">${checks}</div>
           <div class="quality-raw">
@@ -1138,6 +1140,18 @@ function renderRow(stock) {
           <button class="save-btn sl-save" data-symbol="${stock.symbol}" data-field="stop_loss">Save</button>
         </div>
       </td>
+      <td class="mono-cell">
+        <div class="value-edit">
+          <input type="number" step="0.01" class="value-input" value="${stock.target_1 || ""}" placeholder="target 1" data-symbol="${stock.symbol}" data-field="target_1" />
+          <button class="save-btn" data-symbol="${stock.symbol}" data-field="target_1">Save</button>
+        </div>
+      </td>
+      <td class="mono-cell">
+        <div class="value-edit">
+          <input type="number" step="0.01" class="value-input" value="${stock.target_2 || ""}" placeholder="target 2" data-symbol="${stock.symbol}" data-field="target_2" />
+          <button class="save-btn" data-symbol="${stock.symbol}" data-field="target_2">Save</button>
+        </div>
+      </td>
     </tr>
     ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
     ${expandedQuality.has(stock.symbol) ? renderQualityRow(stock) : ""}
@@ -1195,7 +1209,7 @@ function render() {
   renderTickerBand(filtered);
 
   if (filtered.length === 0) {
-    container.innerHTML = '<tr><td colspan="5" class="empty">Nothing matches this filter right now.</td></tr>';
+    container.innerHTML = '<tr><td colspan="7" class="empty">Nothing matches this filter right now.</td></tr>';
   } else {
     container.innerHTML = filtered.map(renderRow).join("");
   }
@@ -1228,7 +1242,7 @@ async function loadDashboard() {
     const data = await res.json();
 
     if (data.error) {
-      document.getElementById("rows").innerHTML = `<tr><td colspan="5" class="empty">Error loading data: ${data.error}</td></tr>`;
+      document.getElementById("rows").innerHTML = `<tr><td colspan="7" class="empty">Error loading data: ${data.error}</td></tr>`;
       return;
     }
 
@@ -1239,7 +1253,7 @@ async function loadDashboard() {
     const syncedDate = new Date(data.syncedAt);
     document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
   } catch (e) {
-    document.getElementById("rows").innerHTML = `<tr><td colspan="5" class="empty">Could not reach the dashboard API.</td></tr>`;
+    document.getElementById("rows").innerHTML = `<tr><td colspan="7" class="empty">Could not reach the dashboard API.</td></tr>`;
   }
 }
 

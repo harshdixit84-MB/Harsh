@@ -380,7 +380,6 @@ table.stock-table {
 .mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
 
 /* HARDENED & BOLD GREEN / RED TAGS */
-.mini-tag.adp-rising, 
 .mini-tag.dv-buying, 
 .mini-tag.cross-bull {
   color: #ffffff !important;
@@ -389,7 +388,6 @@ table.stock-table {
   font-weight: 800 !important;
 }
 
-.mini-tag.adp-falling, 
 .mini-tag.dv-selling, 
 .mini-tag.cross-bear {
   color: #ffffff !important;
@@ -563,31 +561,6 @@ table.stock-table {
 }
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
-
-/* HARDENED & BOLD CONFIRMED BADGES */
-.decision-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 4px 9px;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-.decision-badge.confirmed-buy { 
-  background: #008000 !important; 
-  color: #ffffff !important; 
-  font-weight: 800 !important;
-  border: 2px solid #004d00 !important;
-}
-.decision-badge.confirmed-sell { 
-  background: #cc0000 !important; 
-  color: #ffffff !important; 
-  font-weight: 800 !important;
-  border: 2px solid #800000 !important;
-}
 
 .mono-cell {
   font-family: "IBM Plex Mono", monospace;
@@ -1039,18 +1012,6 @@ function decision(stock) {
   return classify(stock) === "buyzone" ? "Confirmed" : "Watching";
 }
 
-function decisionBadge(stock) {
-  // Only keep confirmed buy/sell and attach the ticker name directly
-  const map = {
-    "Confirmed Buy": { cls: "confirmed-buy", label: "Confirmed Buy" },
-    "Confirmed Sell": { cls: "confirmed-sell", label: "Confirmed Sell" }
-  };
-  const entry = map[stock.dv_decision];
-  if (!entry) return "";
-  
-  return `<span class="decision-badge ${entry.cls}">${stock.symbol} ${entry.label}</span>`;
-}
-
 function renderNotesRow(stock) {
   const comments = (stock.comments || []).slice().sort((a, b) => (b.created_at || b.date || "").localeCompare(a.created_at || a.date || ""));
   const list = comments.length
@@ -1119,14 +1080,7 @@ function renderRow(stock) {
 
   // 1. Group Green Elements
   const greenTags = [];
-  if (stock.adp5_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="5-day avg delivery % vs previous day">▲ 5D ADP</span>`);
-  if (stock.adp20_trend === "Rising") greenTags.push(`<span class="mini-tag adp-rising" title="20-day avg delivery % vs previous day">▲ 20D ADP</span>`);
   if (stock.buying_selling_verdict === "Heavy Buying") greenTags.push(`<span class="mini-tag dv-buying" title="Heavy Buying">Heavy Buying</span>`);
-  if (stock.adp_cross_state === "Bullish") {
-    const age = stock.adp_crossover_age;
-    const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
-    greenTags.push(`<span class="mini-tag cross-bull">5D↗20D ADP${ageStr}</span>`);
-  }
   if (stock.ema_cross_signal) {
     greenTags.push(`<span class="mini-tag cross-bull">📈 20/50 Cross+Vol → ₹${stock.ema_cross_target}</span>`);
   }
@@ -1139,14 +1093,7 @@ function renderRow(stock) {
 
   // 2. Group Red Elements
   const redTags = [];
-  if (stock.adp5_trend === "Falling") redTags.push(`<span class="mini-tag adp-falling" title="5-day avg delivery % vs previous day">▼ 5D ADP</span>`);
-  if (stock.adp20_trend === "Falling") redTags.push(`<span class="mini-tag adp-falling" title="20-day avg delivery % vs previous day">▼ 20D ADP</span>`);
   if (stock.buying_selling_verdict === "Heavy Selling") redTags.push(`<span class="mini-tag dv-selling" title="Heavy Selling">Heavy Selling</span>`);
-  if (stock.adp_cross_state === "Bearish") {
-    const age = stock.adp_crossover_age;
-    const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
-    redTags.push(`<span class="mini-tag cross-bear">5D↘20D ADP${ageStr}</span>`);
-  }
 
   // 3. Neutral / Other Tags
   const neutralTags = [];
@@ -1164,7 +1111,6 @@ function renderRow(stock) {
         <div class="symbol-line">
           <input type="checkbox" class="watch-check" data-symbol="${stock.symbol}" ${stock.watchlisted ? "checked" : ""} title="Add to Watchlist" />
           <span class="symbol">${stock.symbol}</span>
-          ${decisionBadge(stock)}
           ${stock.quality_score !== null && stock.quality_score !== undefined ? `<button class="quality-badge ${stock.quality_score >= 4 ? "q-high" : stock.quality_score >= 2 ? "q-mid" : "q-low"}" data-symbol="${stock.symbol}" title="Breakout quality — click for breakdown">Q ${stock.quality_score}/5</button>` : ""}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>

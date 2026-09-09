@@ -1,28 +1,13 @@
 """
-Checks every tracked stock (active AND archived) against 5 signal filters --
-Near Target, Near Stoploss, Bullish Divergence, Bearish Divergence, and
-Reversal Confluence -- and sends ONE collective Telegram message per filter,
-listing EVERY ticker currently matching that filter. Runs every scheduled
-hour during the day and resends the full current list each time (not just
-new entries) -- so whenever you check your phone, the latest message for
-each filter shows the complete, current picture for that day. A filter with
-zero matching stocks is simply skipped (no empty message sent).
-
-Divergence signals are restricted to FRESH formations: RSI_Divergence tracks
-daily_days_ago/weekly_days_ago/hourly_bars_ago per stock -- daily/weekly must
-have formed_today (days_ago == 0), and hourly counts as fresh up to
-HOURLY_NOTIFY_MAX_BARS_AGE bars back (~2 trading days on 60m candles), shown
-in the alert as e.g. "1H·3b" so you can see how old it actually is. A
-divergence that formed 3 days ago on the daily timeframe (even if still
-within rsi_divergence.py's own 7/14-day display window) will NOT show up
-here on daily/weekly -- only the hourly timeframe gets this wider window.
-
-Reversal Confluence here is a STRICTER, same-day-only definition than the
-dashboard's 3-of-4 version: it requires BOTH daily AND weekly RSI bullish
-divergence to have formed on the same day. The dashboard's other two
-sub-signals (harmonic pattern, high delivery value) have no formation date
-anywhere in the sheet, so they can't be checked for "today" and were dropped
-here rather than left as a same-day/no-date inconsistency within one filter.
+Checks every tracked stock (active AND archived) against 6 signal filters --
+Near Target, Near Stoploss, Need Target Set, 20/50 EMA Crossover + Volume
+Breakout, EMA Pullback, and EMA Retest (first touch since latest crossover)
+-- and sends ONE collective Telegram message per filter, listing EVERY
+ticker currently matching that filter. Runs every scheduled hour during the
+day and resends the full current list each time (not just new entries) --
+so whenever you check your phone, the latest message for each filter shows
+the complete, current picture for that day. A filter with zero matching
+stocks is simply skipped (no empty message sent).
 
 Environment variables required:
   GOOGLE_SERVICE_ACCOUNT_KEY
@@ -39,7 +24,6 @@ from google.oauth2.service_account import Credentials
 
 SHEET_NAME = "Monthly Breakout Scan"
 WATCH_THRESHOLD = 2  # same 2% band used for Near Target / Near SL on the dashboard
-HOURLY_NOTIFY_MAX_BARS_AGE = 14  # ~2 trading days of 60m bars (NSE runs ~7 bars/day) -- notify on current AND up to 2 days old
 
 
 def get_client_and_spreadsheet():
@@ -78,12 +62,9 @@ def build_merged_stocks(spreadsheet):
     "Mirrors the relevant parts of the join logic in api/dashboard.js, in Python."
     main_rows = spreadsheet.sheet1.get_all_records()
     print(f"Sheet1: read {len(main_rows)} row(s).")
-    rsi_by_symbol = read_tab_by_symbol(spreadsheet, "RSI_Divergence")
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
-    harmonic_by_symbol = read_tab_by_symbol(spreadsheet, "Harmonic_Patterns")
     ema_by_symbol = read_tab_by_symbol(spreadsheet, "EMA_Signals")
-    print(f"Side tabs: RSI_Divergence={len(rsi_by_symbol)}, DV_Summary={len(dv_by_symbol)}, "
-          f"Harmonic_Patterns={len(harmonic_by_symbol)}, EMA_Signals={len(ema_by_symbol)} symbol(s).")
+    print(f"Side tabs: DV_Summary={len(dv_by_symbol)}, EMA_Signals={len(ema_by_symbol)} symbol(s).")
 
     stocks = []
     skipped_no_symbol = 0
@@ -116,32 +97,10 @@ def build_merged_stocks(spreadsheet):
             except (TypeError, ValueError):
                 pass
 
-        rsi_div = rsi_by_symbol.get(symbol, {})
-        rsi_daily_div = rsi_div.get("daily_divergence", "") or ""
-        rsi_weekly_div = rsi_div.get("weekly_divergence", "") or ""
-        rsi_hourly_div = rsi_div.get("hourly_divergence", "") or ""
-        rsi_daily_days_ago = _to_int_or_none(rsi_div.get("daily_days_ago"))
-        rsi_weekly_days_ago = _to_int_or_none(rsi_div.get("weekly_days_ago"))
-        rsi_hourly_bars_ago = _to_int_or_none(rsi_div.get("hourly_bars_ago"))
-
-        daily_formed_today = rsi_daily_days_ago == 0
-        weekly_formed_today = rsi_weekly_days_ago == 0
-        # Hourly: notify on current AND up to ~2 trading days old (not just the latest bar).
-        hourly_recent = rsi_hourly_bars_ago is not None and rsi_hourly_bars_ago <= HOURLY_NOTIFY_MAX_BARS_AGE
-
         dv = dv_by_symbol.get(symbol, {})
 
         quality_score = _to_int_or_none(r.get("quality_score"))
         quality_flags = r.get("quality_flags", "") or ""
-
-        harmonic = harmonic_by_symbol.get(symbol, {})
-        harmonic_pattern = harmonic.get("pattern_name", "") or ""
-        harmonic_status = harmonic.get("status", "") or ""
-        harmonic_d_price = harmonic.get("d_price", "")
-        harmonic_days_ago = _to_int_or_none(harmonic.get("days_ago"))
-        # "informed if point C is formed" -- fire only while the setup is FRESH (the
-        # scan run that first confirmed C), not every run for the rest of its life.
-        harmonic_c_fresh = "C formed" in harmonic_status and harmonic_days_ago == 0
 
         ema = ema_by_symbol.get(symbol, {})
         ema_cross_signal = _to_bool(ema.get("ema_cross_signal"))
@@ -156,23 +115,12 @@ def build_merged_stocks(spreadsheet):
             "distance_pct": distance_pct,
             "stop_loss": stop_loss,
             "distance_to_sl_pct": distance_to_sl_pct,
-            "rsi_daily_divergence": rsi_daily_div,
-            "rsi_weekly_divergence": rsi_weekly_div,
-            "rsi_hourly_divergence": rsi_hourly_div,
-            "rsi_hourly_bars_ago": rsi_hourly_bars_ago,
-            "daily_formed_today": daily_formed_today,
-            "weekly_formed_today": weekly_formed_today,
-            "hourly_recent": hourly_recent,
+            "quality_score": quality_score,
+            "quality_flags": quality_flags,
             "dv_decision": dv.get("decision", "") or "",
             "dv_cross_state": dv.get("cross_state", "") or "",
             "dv_crossover_age": dv.get("crossover_age", ""),
             "dv_recent_bias": dv.get("recent_bias", "") or "",
-            "quality_score": quality_score,
-            "quality_flags": quality_flags,
-            "harmonic_pattern": harmonic_pattern,
-            "harmonic_status": harmonic_status,
-            "harmonic_d_price": harmonic_d_price,
-            "harmonic_c_fresh": harmonic_c_fresh,
             "ema_cross_signal": ema_cross_signal,
             "ema_cross_target": ema.get("ema_cross_target", ""),
             "ema_pullback_signal": ema_pullback_signal,
@@ -191,21 +139,6 @@ def build_merged_stocks(spreadsheet):
 
 def compute_signals(s):
     "Returns {filter_key: (is_matching, detail_suffix)} -- one entry per tracked filter."
-    daily = s["rsi_daily_divergence"].lower()
-    weekly = s["rsi_weekly_divergence"].lower()
-    hourly = s["rsi_hourly_divergence"].lower()
-
-    daily_bull_today = daily == "bullish" and s["daily_formed_today"]
-    weekly_bull_today = weekly == "bullish" and s["weekly_formed_today"]
-    daily_bear_today = daily == "bearish" and s["daily_formed_today"]
-    hourly_bear_recent = hourly == "bearish" and s["hourly_recent"]
-
-    # Weekly RSI divergence no longer factors into any standalone alert (daily
-    # + hourly only) -- "reversal" is the one exception, since it's specifically
-    # defined as a daily+weekly same-day confluence, not a divergence alert itself.
-    hourly_tag = f"1H·{s['rsi_hourly_bars_ago']}b" if s["rsi_hourly_bars_ago"] is not None else "1H"
-    bearish_tf = "+".join(filter(None, ["D" if daily_bear_today else "", hourly_tag if hourly_bear_recent else ""]))
-
     near_sl_matching = s["distance_to_sl_pct"] is not None and 0 <= s["distance_to_sl_pct"] <= WATCH_THRESHOLD
     near_sl_suffix = ""
     if near_sl_matching and s["stop_loss"] not in (None, ""):
@@ -223,18 +156,6 @@ def compute_signals(s):
         "need_target": (
             s["buy_target"] in (None, "", 0),
             "",
-        ),
-        "bearish_divergence": (
-            daily_bear_today or hourly_bear_recent,
-            f" ({bearish_tf})" if bearish_tf else "",
-        ),
-        "reversal": (
-            daily_bull_today and weekly_bull_today,
-            " (D+W same-day)",
-        ),
-        "harmonic_c_formed": (
-            s["harmonic_c_fresh"],
-            f" ({s['harmonic_pattern']} → D ₹{s['harmonic_d_price']})" if s["harmonic_c_fresh"] else "",
         ),
         "ema_crossover_volume": (
             s["ema_cross_signal"],
@@ -255,9 +176,6 @@ FILTER_DISPLAY_NAMES = {
     "near_target": "Near Target",
     "near_sl": "Near Stoploss",
     "need_target": "📝 Need Target Set",
-    "bearish_divergence": "Bearish Divergence (Daily/1H)",
-    "reversal": "★ Reversal Confluence (Daily+Weekly, same-day)",
-    "harmonic_c_formed": "🔷 Harmonic Point C Formed (D Target)",
     "ema_crossover_volume": "📈 20/50 EMA Crossover + Volume Breakout",
     "ema_pullback": "↩️ EMA Pullback",
     "ema_retest": "〰️ EMA Retest (Past Crossover)",
@@ -400,7 +318,7 @@ def main():
     print(f"Total matches across all filters: {total_matches}.")
     if total_matches == 0:
         print("No filter matched ANY stock this run. If this keeps happening, the likely causes are: "
-              "sync_dashboard.py/rsi_divergence.py/etc. haven't run recently (stale/empty data), "
+              "sync_dashboard.py/ema_signals.py/etc. haven't run recently (stale/empty data), "
               "or a side tab's data doesn't match what this script expects. "
               "Check the counts printed above from build_merged_stocks().")
 

@@ -288,140 +288,6 @@ body {
 
 .ticker-empty { font-size: 11px; color: var(--text-secondary); }
 
-/* NEWS PANEL */
-.news-panel {
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--accent-buy);
-  border-radius: 10px;
-  background: var(--surface-1);
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-
-.news-panel-header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.news-panel-header {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.news-filter-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.news-search-input {
-  flex: 1;
-  min-width: 120px;
-  max-width: 200px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
-  padding: 5px 9px;
-  border-radius: 6px;
-}
-.news-search-input:focus { outline: none; border-color: var(--accent-tracking); }
-
-.news-filter-chip {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.news-filter-chip:hover { color: var(--text-primary); border-color: var(--text-primary); }
-.news-filter-chip.on { color: var(--text-primary); border-color: var(--text-primary); }
-.news-filter-chip.on[data-filter="Good"] { background: rgba(25,135,84,0.18); color: #3ddc8a; border-color: rgba(61,220,138,0.5); }
-.news-filter-chip.on[data-filter="Bad"] { background: rgba(192,57,43,0.18); color: #e5626b; border-color: rgba(229,98,107,0.5); }
-.news-filter-chip.on[data-filter="Neutral"] { background: var(--surface-2); color: var(--text-primary); border-color: var(--text-primary); }
-
-.news-list {
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-.news-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.news-item:last-child { border-bottom: none; }
-.news-item:hover { background: var(--surface-2); }
-
-.news-flag {
-  flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 5px;
-  white-space: nowrap;
-  margin-top: 2px;
-}
-.news-flag.good { background: rgba(25,135,84,0.18); color: #3ddc8a; }
-.news-flag.bad { background: rgba(192,57,43,0.18); color: #e5626b; }
-.news-flag.neutral { background: var(--surface-2); color: var(--text-secondary); }
-
-.news-body { flex: 1; min-width: 0; }
-
-.news-top-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.news-symbol { font-weight: 600; font-size: 12px; color: var(--text-primary); }
-
-.news-date { font-size: 10px; color: var(--text-secondary); }
-
-.news-headline {
-  font-size: 12px;
-  color: var(--text-primary);
-  margin-top: 3px;
-  line-height: 1.4;
-}
-.news-headline a { color: inherit; text-decoration: none; }
-.news-headline a:hover { color: var(--accent-tracking); }
-
-.news-reason { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-
-.news-dismiss {
-  flex-shrink: 0;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  margin-top: 2px;
-}
-.news-dismiss:hover { color: var(--accent-loss); border-color: var(--accent-loss); }
-
-.news-empty { padding: 16px; font-size: 12px; color: var(--text-secondary); text-align: center; }
-
 .table-scroll {
   overflow-x: auto;
   border: 1px solid var(--border);
@@ -512,14 +378,11 @@ table.stock-table {
 .mini-tag.squeeze { color: #f28ab4; border-color: rgba(242,138,180,0.4); }
 .mini-tag.retest { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 .mini-tag.archived { color: var(--text-secondary); border-color: var(--text-secondary); }
-.mini-tag.jackpot { color: #1a1206; background: #ffd60a; border-color: #ffd60a; font-weight: 700; }
 
 /* HARDENED & BOLD GREEN / RED TAGS */
 .mini-tag.adp-rising, 
 .mini-tag.dv-buying, 
-.mini-tag.cross-bull, 
-.mini-tag.rsi-bull, 
-.mini-tag.harmonic-bull {
+.mini-tag.cross-bull {
   color: #ffffff !important;
   background: #0d6e38 !important;
   border: 1px solid #064220 !important;
@@ -528,9 +391,7 @@ table.stock-table {
 
 .mini-tag.adp-falling, 
 .mini-tag.dv-selling, 
-.mini-tag.cross-bear, 
-.mini-tag.rsi-bear, 
-.mini-tag.harmonic-bear {
+.mini-tag.cross-bear {
   color: #ffffff !important;
   background: #b91c1c !important;
   border: 1px solid #7f1d1d !important;
@@ -702,7 +563,6 @@ table.stock-table {
 }
 .bs-pill.buy { background: rgba(25,135,84,0.18); color: #3ddc8a; }
 .bs-pill.sell { background: rgba(192,57,43,0.18); color: #e5626b; }
-.dpoint-empty { color: var(--text-secondary); font-size: 12px; }
 
 /* HARDENED & BOLD CONFIRMED BADGES */
 .decision-badge {
@@ -829,15 +689,14 @@ body { background:#ffffff; color:#000000; }
 .quick-row, .dropdown-row { border-top-color:#145a32; }
 
 #stock-search, .chip-check, .reset-btn, .dd-select,
-.news-search-input, .news-filter-chip, .news-dismiss,
 .value-input, .save-btn, .notes-input, .notes-toggle, .tv-link {
   background:#ffffff;
   color:#000000;
   border:2px solid #000000;
 }
 
-.chip-check.on, .reset-btn:hover, .news-filter-chip:hover,
-.news-filter-chip.on, .notes-toggle:hover {
+.chip-check.on, .reset-btn:hover,
+.notes-toggle:hover {
   color:#000000;
   border-color:#000000;
 }
@@ -855,17 +714,13 @@ body { background:#ffffff; color:#000000; }
   font-weight:700;
 }
 
-.news-panel, .table-scroll { background:#ffffff; border:2px solid #000000; }
-.news-panel { border-top:3px solid #145a32; }
-.news-panel-header-row { border-bottom:2px solid #000000; }
-.news-item { border-bottom:2px solid #000000; }
-.news-item:hover, .stock-row:hover, .notes-row td { background:#f5f5f5; }
+.table-scroll { background:#ffffff; border:2px solid #000000; }
+.stock-row:hover, .notes-row td { background:#f5f5f5; }
 
-.news-panel-header, .news-date, .news-reason,
 .ticker-label, .ticker-empty, .name, .tv-link,
 .stat-label, .empty, .loading, footer { color:#333333; }
 
-.news-symbol, .news-headline, .symbol, .note-text,
+.symbol, .note-text,
 .stock-table thead th, .stock-row td { color:#000000; }
 
 .stock-table thead th { border-bottom:2px solid #000000; }
@@ -900,16 +755,6 @@ body { background:#ffffff; color:#000000; }
   color:#ffffff;
   font-weight:700;
 }
-.news-flag.good {
-  background:#eaf4ee;
-  color:#145a32;
-  font-weight:700;
-}
-.news-flag.bad {
-  background:#f9eaea;
-  color:#8b0000;
-  font-weight:700;
-}
 
 /* ===== Attractive Light Theme ===== */
 :root {
@@ -932,24 +777,24 @@ body { background:#ffffff; color:#000000; }
 body{background:var(--bg);color:var(--text-primary);}
 .dashboard-header,.toolbar,.ticker-band{border-color:#94a3b8;}
 .dashboard-title{color:#0f172a;}
-.dashboard-subtitle,.stat-label,.ticker-label,footer,.news-panel-header,.news-date,.news-reason,.ticker-empty,.empty,.loading,.name{color:#475569;}
+.dashboard-subtitle,.stat-label,.ticker-label,footer,.ticker-empty,.empty,.loading,.name{color:#475569;}
 .header-btn{background:#ffffff;color:#111827;border:2px solid #334155;box-shadow:0 2px 5px rgba(15,23,42,.08);}
 .header-btn:hover{background:#eef2f7;}
 .live-box{background:#ecfdf5;border:2px solid #166534;color:#166534;}
 .live-dot{background:#166534;}
-.stat-card,.news-panel,.table-scroll{background:#fff;border:2px solid #334155;box-shadow:0 3px 10px rgba(15,23,42,.06);}
-.stat-value,.symbol,.price,.news-symbol,.news-headline,.note-text{color:#111827;}
+.stat-card,.table-scroll{background:#fff;border:2px solid #334155;box-shadow:0 3px 10px rgba(15,23,42,.06);}
+.stat-value,.symbol,.price,.note-text{color:#111827;}
 .stock-table thead th{color:#334155;border-bottom:2px solid #334155;}
-.stock-row td,.news-item{border-bottom:1px solid #cbd5e1;}
-.stock-row:hover,.news-item:hover{background:#f1f5f9;}
-#stock-search,.chip-check,.dd-select,.news-search-input,.news-filter-chip,.reset-btn,.value-input,.save-btn,.notes-input,.notes-toggle,.tv-link,.mini-tag,.note-entry,.news-dismiss{background:#fff;color:#334155;border:2px solid #94a3b8;}
-#stock-search:focus,.news-search-input:focus,.notes-input:focus,.value-input:focus{border-color:#1d4ed8;}
+.stock-row td{border-bottom:1px solid #cbd5e1;}
+.stock-row:hover{background:#f1f5f9;}
+#stock-search,.chip-check,.dd-select,.reset-btn,.value-input,.save-btn,.notes-input,.notes-toggle,.tv-link,.mini-tag,.note-entry{background:#fff;color:#334155;border:2px solid #94a3b8;}
+#stock-search:focus,.notes-input:focus,.value-input:focus{border-color:#1d4ed8;}
 .quick-row,.dropdown-row{border-top:3px solid #166534;}
-.chip-check.on,.news-filter-chip.on{color:#111827;border-color:#334155;background:#e2e8f0;}
+.chip-check.on{color:#111827;border-color:#334155;background:#e2e8f0;}
 .ticker-chip.up{color:#166534;border-color:#166534;background:#ecfdf5;font-weight:700;}
 .ticker-chip.down{color:#991b1b;border-color:#991b1b;background:#fef2f2;font-weight:700;}
-.bs-pill.buy,.decision-pill.confirmed,.news-flag.good{background:#dcfce7;color:#166534;font-weight:700;}
-.bs-pill.sell,.news-flag.bad{background:#fee2e2;color:#991b1b;font-weight:700;}
+.bs-pill.buy,.decision-pill.confirmed{background:#dcfce7;color:#166534;font-weight:700;}
+.bs-pill.sell{background:#fee2e2;color:#991b1b;font-weight:700;}
 .notes-save-btn{background:#166534;color:#fff;}
 .stat-card.green{border-left:6px solid #166534;}
 .stat-card.yellow{border-left:6px solid #a16207;}
@@ -957,7 +802,6 @@ body{background:var(--bg);color:var(--text-primary);}
 .stock-row.buyzone{box-shadow:inset 5px 0 0 #166534;}
 .stock-row.watch{box-shadow:inset 5px 0 0 #a16207;}
 .stock-row.needtarget{box-shadow:inset 5px 0 0 #0f766e;}
-.news-panel{border-top:5px solid #166534;}
 
 /* Section minimize buttons */
 .section-title-wrap{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;}
@@ -1066,7 +910,6 @@ LIVE
 <label class="chip-check" id="chip-emaretest"><input type="checkbox" data-quick="emaRetest"><span>EMA Retest</span></label>
 <label class="chip-check" id="chip-above20"><input type="checkbox" data-quick="above20"><span>&gt;20%</span></label>
 <label class="chip-check" id="chip-below20"><input type="checkbox" data-quick="below20"><span>&lt;20%</span></label>
-<label class="chip-check" id="chip-jackpot"><input type="checkbox" data-quick="jackpot"><span>★ Reversal</span></label>
 <label class="chip-check" id="chip-retest52w"><input type="checkbox" data-quick="retest52w"><span>🎯 52W Retest</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 <button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
@@ -1105,28 +948,11 @@ LIVE
 <div class="ticker-list" id="ticker-list"></div>
 </div>
 
-<div class="news-panel">
-<div class="news-panel-header-row">
-<div class="news-panel-header">News</div>
-<input type="text" id="news-search" class="news-search-input" placeholder="Search any stock…" />
-<div class="news-filter-row" id="news-filter-row">
-<button class="news-filter-chip on" data-filter="all">All</button>
-<button class="news-filter-chip" data-filter="Good">Good</button>
-<button class="news-filter-chip" data-filter="Bad">Bad</button>
-<button class="news-filter-chip" data-filter="Neutral">Neutral</button>
-</div>
-</div>
-<div class="news-list" id="news-list">
-<div class="news-empty">Loading news…</div>
-</div>
-</div>
-
 <div class="table-scroll">
 <table class="stock-table">
 <thead>
 <tr>
 <th>Symbol</th>
-<th>D Point</th>
 <th>Entry</th>
 <th class="sortable" id="th-cmp">CMP ›</th>
 <th>Source</th>
@@ -1134,7 +960,7 @@ LIVE
 </tr>
 </thead>
 <tbody id="rows">
-<tr><td colspan="6" class="loading">Fetching dashboard…</td></tr>
+<tr><td colspan="5" class="loading">Fetching dashboard…</td></tr>
 </tbody>
 </table>
 </div>
@@ -1176,7 +1002,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, above20: false, below20: false, jackpot: false, retest52w: false };
+let quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, above20: false, below20: false, retest52w: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -1211,19 +1037,6 @@ function buySell(stock) {
   return "buy";
 }
 
-function dPointCell(stock) {
-  // Dedicated harmonic D-point signal -- pattern name + target price, not a generic direction label.
-  // (RSI divergence and other directional signals already show as tags in the symbol cell.)
-  if (!stock.harmonic_pattern || !stock.harmonic_d_price) {
-    return `<span class="dpoint-empty">—</span>`;
-  }
-  const bullish = stock.harmonic_pattern.toLowerCase().includes("bullish");
-  const projected = (stock.harmonic_status || "").includes("projected");
-  const cls = bullish ? "buy" : "sell";
-  const arrow = bullish ? "▲" : "▼";
-  return `<span class="bs-pill ${cls}">${arrow} ${stock.harmonic_pattern} · D ₹${stock.harmonic_d_price}${projected ? " (proj)" : ""}</span>`;
-}
-
 function decision(stock) {
   return classify(stock) === "buyzone" ? "Confirmed" : "Watching";
 }
@@ -1248,7 +1061,7 @@ function renderNotesRow(stock) {
 
   return `
     <tr class="notes-row" data-notes-for="${stock.symbol}">
-      <td colspan="6">
+      <td colspan="5">
         <div class="notes-panel">
           <div class="notes-list">${list}</div>
           <div class="notes-add">
@@ -1282,7 +1095,7 @@ function renderQualityRow(stock) {
 
   return `
     <tr class="quality-row" data-quality-for="${stock.symbol}">
-      <td colspan="6">
+      <td colspan="5">
         <div class="quality-panel">
           <div class="quality-checks">${checks}</div>
           <div class="quality-raw">
@@ -1316,9 +1129,6 @@ function renderRow(stock) {
     const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
     greenTags.push(`<span class="mini-tag cross-bull">5D↗20D ADP${ageStr}</span>`);
   }
-  if (stock.harmonic_pattern && stock.harmonic_pattern.toLowerCase().includes("bullish")) {
-    greenTags.push(`<span class="mini-tag harmonic-bull">${stock.harmonic_pattern}</span>`);
-  }
   if (stock.ema_cross_signal) {
     greenTags.push(`<span class="mini-tag cross-bull">📈 20/50 Cross+Vol → ₹${stock.ema_cross_target}</span>`);
   }
@@ -1339,17 +1149,10 @@ function renderRow(stock) {
     const ageStr = age !== null && age !== undefined ? ` (${age}d)` : "";
     redTags.push(`<span class="mini-tag cross-bear">5D↘20D ADP${ageStr}</span>`);
   }
-  if (stock.harmonic_pattern && stock.harmonic_pattern.toLowerCase().includes("bearish")) {
-    redTags.push(`<span class="mini-tag harmonic-bear">${stock.harmonic_pattern}</span>`);
-  }
-  if (stock.rsi_daily_divergence && stock.rsi_daily_divergence.toLowerCase() === "bearish") {
-    redTags.push(`<span class="mini-tag rsi-bear">RSI D: ${stock.rsi_daily_divergence}</span>`);
-  }
 
   // 3. Neutral / Other Tags
   const neutralTags = [];
   if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
-  if (stock.reversal_score >= 2) neutralTags.push(`<span class="mini-tag jackpot">★ ${stock.reversal_score}/${stock.reversal_total} Reversal</span>`);
   if (stock.at_52w_retest) neutralTags.push(`<span class="mini-tag retest">🎯 52W Retest</span>`);
   (stock.source || "").split(",").filter(Boolean).forEach((s) => {
     neutralTags.push(`<span class="mini-tag">${s}</span>`);
@@ -1371,7 +1174,6 @@ function renderRow(stock) {
         <div class="name">${stock.name || ""}</div>
         <div class="tag-row">${allGroupedTags}</div>
       </td>
-      <td>${dPointCell(stock)}</td>
       <td class="mono-cell">
         <div class="value-edit">
           <input type="number" step="0.01" class="value-input" value="${stock.buy_target || ""}" placeholder="entry" data-symbol="${stock.symbol}" data-field="target" />
@@ -1427,7 +1229,6 @@ function computeFilteredStocks() {
   if (quickFilters.emaRetest) filtered = filtered.filter((s) => !!s.ema_retest_signal);
   if (quickFilters.above20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct > 20);
   if (quickFilters.below20) filtered = filtered.filter((s) => s.distance_pct !== undefined && s.distance_pct < -20);
-  if (quickFilters.jackpot) filtered = filtered.filter((s) => s.reversal_score >= 3);
   if (quickFilters.retest52w) filtered = filtered.filter((s) => !!s.at_52w_retest);
 
   if (currentSearch.trim() !== "") {
@@ -1453,12 +1254,10 @@ function render() {
   renderTickerBand(filtered);
 
   if (filtered.length === 0) {
-    container.innerHTML = '<tr><td colspan="6" class="empty">Nothing matches this filter right now.</td></tr>';
+    container.innerHTML = '<tr><td colspan="5" class="empty">Nothing matches this filter right now.</td></tr>';
   } else {
     container.innerHTML = filtered.map(renderRow).join("");
   }
-
-  renderNewsList(); 
 }
 
 function renderTickerBand(filtered) {
@@ -1488,7 +1287,7 @@ async function loadDashboard() {
     const data = await res.json();
 
     if (data.error) {
-      document.getElementById("rows").innerHTML = `<tr><td colspan="6" class="empty">Error loading data: ${data.error}</td></tr>`;
+      document.getElementById("rows").innerHTML = `<tr><td colspan="5" class="empty">Error loading data: ${data.error}</td></tr>`;
       return;
     }
 
@@ -1499,7 +1298,7 @@ async function loadDashboard() {
     const syncedDate = new Date(data.syncedAt);
     document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
   } catch (e) {
-    document.getElementById("rows").innerHTML = `<tr><td colspan="6" class="empty">Could not reach the dashboard API.</td></tr>`;
+    document.getElementById("rows").innerHTML = `<tr><td colspan="5" class="empty">Could not reach the dashboard API.</td></tr>`;
   }
 }
 
@@ -1644,7 +1443,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, above20: false, below20: false, jackpot: false, retest52w: false };
+  quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, above20: false, below20: false, retest52w: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");
@@ -1655,119 +1454,6 @@ document.getElementById("reset-filters").addEventListener("click", () => {
   crossAgeFilter = "all"; document.getElementById("sel-crossage").value = "all";
   cmpSortDir = null;
   render();
-});
-
-let newsSentimentFilter = "all";
-let newsSearchQuery = "";
-let latestNews = [];
-
-function flagClass(sentiment) {
-  if (sentiment === "Good") return "good";
-  if (sentiment === "Bad") return "bad";
-  return "neutral";
-}
-
-function renderNewsItem(item) {
-  return `
-    <div class="news-item" data-id="${item.id}">
-      <span class="news-flag ${flagClass(item.sentiment)}">${item.sentiment}</span>
-      <div class="news-body">
-        <div class="news-top-row">
-          <span class="news-symbol">${item.symbol}</span>
-          <span class="news-date">${item.date}${item.source ? " · " + item.source : ""}</span>
-        </div>
-        <div class="news-headline"><a href="${item.link}" target="_blank" rel="noopener">${item.headline}</a></div>
-        ${item.reason ? `<div class="news-reason">${item.reason}</div>` : ""}
-      </div>
-      <button class="news-dismiss" data-id="${item.id}" title="Dismiss">✕</button>
-    </div>
-  `;
-}
-
-function renderNewsList() {
-  const container = document.getElementById("news-list");
-  let base;
-
-  const q = newsSearchQuery.trim().toLowerCase();
-  if (q !== "") {
-    base = latestNews.filter((item) =>
-      (item.symbol || "").toLowerCase().includes(q) || (item.headline || "").toLowerCase().includes(q)
-    );
-  } else {
-    const visibleSymbols = new Set(computeFilteredStocks().map((s) => s.symbol));
-    base = latestNews.filter((item) => visibleSymbols.has(item.symbol));
-  }
-
-  const filtered = newsSentimentFilter === "all"
-    ? base
-    : base.filter((item) => item.sentiment === newsSentimentFilter);
-
-  if (filtered.length === 0) {
-    if (latestNews.length === 0) {
-      container.innerHTML = '<div class="news-empty">No news yet.</div>';
-    } else if (q !== "") {
-      container.innerHTML = '<div class="news-empty">No news found for that search.</div>';
-    } else {
-      container.innerHTML = '<div class="news-empty">No news for the currently filtered stocks.</div>';
-    }
-    return;
-  }
-
-  container.innerHTML = filtered.map(renderNewsItem).join("");
-}
-
-async function loadNews() {
-  const container = document.getElementById("news-list");
-  try {
-    const res = await fetch("/api/news?t=" + Date.now(), { cache: "no-store" });
-    const data = await res.json();
-    latestNews = data.news || [];
-    renderNewsList();
-  } catch (e) {
-    container.innerHTML = '<div class="news-empty">Could not reach the news API.</div>';
-  }
-}
-
-document.getElementById("news-search").addEventListener("input", (e) => {
-  newsSearchQuery = e.target.value;
-  renderNewsList();
-});
-
-document.getElementById("news-filter-row").addEventListener("click", (e) => {
-  if (!e.target.classList.contains("news-filter-chip")) return;
-  newsSentimentFilter = e.target.dataset.filter;
-  document.querySelectorAll(".news-filter-chip").forEach((chip) => {
-    chip.classList.toggle("on", chip.dataset.filter === newsSentimentFilter);
-  });
-  renderNewsList();
-});
-
-document.addEventListener("click", async (e) => {
-  if (!e.target.classList.contains("news-dismiss")) return;
-
-  const btn = e.target;
-  const id = btn.dataset.id;
-  btn.disabled = true;
-
-  try {
-    const res = await fetch("/api/news", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || "Failed to dismiss");
-
-    btn.closest(".news-item").remove();
-    latestNews = latestNews.filter((item) => item.id !== id);
-    const container = document.getElementById("news-list");
-    if (!container.querySelector(".news-item")) {
-      renderNewsList();
-    }
-  } catch (err) {
-    btn.disabled = false;
-    alert("Could not dismiss: " + err.message);
-  }
 });
 
 // ---- Watchlist ----
@@ -1920,8 +1606,7 @@ document.getElementById("analyze-overlay").addEventListener("click", (e) => {
 });
 
 loadDashboard();
-loadNews();
-setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
+setInterval(() => { loadDashboard(); }, 5 * 60 * 1000);
 </script>
 
 <style id="collapsible-sections-v3">
@@ -1987,7 +1672,6 @@ setInterval(() => { loadDashboard(); loadNews(); }, 5 * 60 * 1000);
   function init(){
     makeSection('filters','FILTERS',document.querySelector('.toolbar'));
     makeSection('matching-stocks','MATCHING STOCKS',document.querySelector('.ticker-band'));
-    makeSection('news','NEWS',document.querySelector('.news-panel'));
     makeSection('stock-scanner','STOCK SCANNER',document.querySelector('.table-scroll'));
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();

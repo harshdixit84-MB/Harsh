@@ -57,72 +57,6 @@ module.exports = async (req, res) => {
       // DV_Summary tab may not exist yet -- proceed without it
     }
 
-    let harmonicBysymbol = {};
-    try {
-      const hpResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.SHEET_ID,
-        range: "Harmonic_Patterns!A1:J1000",
-      });
-      const hpRows = hpResponse.data.values || [];
-      if (hpRows.length > 0) {
-        const hpHeaders = hpRows[0];
-        const symbolIdx = hpHeaders.indexOf("symbol");
-        const patternIdx = hpHeaders.indexOf("pattern_name");
-        const statusIdx = hpHeaders.indexOf("status");
-        const dPriceIdx = hpHeaders.indexOf("d_price");
-        const confidenceIdx = hpHeaders.indexOf("confidence");
-        const daysAgoIdx = hpHeaders.indexOf("days_ago");
-        hpRows.slice(1).forEach((row) => {
-          const symbol = row[symbolIdx];
-          const pattern = row[patternIdx];
-          if (symbol && pattern) {
-            harmonicBysymbol[symbol] = {
-              pattern,
-              status: row[statusIdx] || "",
-              dPrice: row[dPriceIdx] || "",
-              confidence: row[confidenceIdx] || "",
-              daysAgo: daysAgoIdx >= 0 ? (row[daysAgoIdx] || "") : "",
-            };
-          }
-        });
-      }
-    } catch (e) {
-      // Harmonic_Patterns tab may not exist yet -- proceed without it
-    }
-
-    let wmBysymbol = {};
-    try {
-      const wmResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.SHEET_ID,
-        range: "WM_Patterns!A1:H1000",
-      });
-      const wmRows = wmResponse.data.values || [];
-      if (wmRows.length > 0) {
-        const wmHeaders = wmRows[0];
-        const symbolIdx = wmHeaders.indexOf("symbol");
-        const patternIdx = wmHeaders.indexOf("pattern");
-        const statusIdx = wmHeaders.indexOf("status");
-        const breakoutLevelIdx = wmHeaders.indexOf("breakout_level");
-        const distanceIdx = wmHeaders.indexOf("distance_to_breakout_pct");
-        const symmetryIdx = wmHeaders.indexOf("symmetry_pct");
-        wmRows.slice(1).forEach((row) => {
-          const symbol = row[symbolIdx];
-          const pattern = row[patternIdx];
-          if (symbol && pattern) {
-            wmBysymbol[symbol] = {
-              pattern,
-              status: row[statusIdx] || "",
-              breakoutLevel: row[breakoutLevelIdx] || "",
-              distancePct: row[distanceIdx] || "",
-              symmetryPct: row[symmetryIdx] || "",
-            };
-          }
-        });
-      }
-    } catch (e) {
-      // WM_Patterns tab may not exist yet -- proceed without it
-    }
-
     let emaSignalsBysymbol = {};
     try {
       const emaResponse = await sheets.spreadsheets.values.get({
@@ -163,40 +97,6 @@ module.exports = async (req, res) => {
       }
     } catch (e) {
       // EMA_Signals tab may not exist yet -- proceed without it
-    }
-
-    let rsiDivBysymbol = {};
-    try {
-      const rsiResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.SHEET_ID,
-        range: "RSI_Divergence!A1:H1000",
-      });
-      const rsiRows = rsiResponse.data.values || [];
-      if (rsiRows.length > 0) {
-        const rsiHeaders = rsiRows[0];
-        const symbolIdx = rsiHeaders.indexOf("symbol");
-        const dailyDivIdx = rsiHeaders.indexOf("daily_divergence");
-        const dailyDaysIdx = rsiHeaders.indexOf("daily_days_ago");
-        const weeklyDivIdx = rsiHeaders.indexOf("weekly_divergence");
-        const weeklyDaysIdx = rsiHeaders.indexOf("weekly_days_ago");
-        const hourlyDivIdx = rsiHeaders.indexOf("hourly_divergence");
-        const hourlyBarsIdx = rsiHeaders.indexOf("hourly_bars_ago");
-        rsiRows.slice(1).forEach((row) => {
-          const symbol = row[symbolIdx];
-          if (symbol) {
-            rsiDivBysymbol[symbol] = {
-              dailyDivergence: row[dailyDivIdx] || "",
-              dailyDaysAgo: row[dailyDaysIdx] || "",
-              weeklyDivergence: row[weeklyDivIdx] || "",
-              weeklyDaysAgo: row[weeklyDaysIdx] || "",
-              hourlyDivergence: hourlyDivIdx >= 0 ? (row[hourlyDivIdx] || "") : "",
-              hourlyBarsAgo: hourlyBarsIdx >= 0 ? (row[hourlyBarsIdx] || "") : "",
-            };
-          }
-        });
-      }
-    } catch (e) {
-      // RSI_Divergence tab may not exist yet -- proceed without it
     }
 
     let notesBysymbol = {};
@@ -309,11 +209,6 @@ module.exports = async (req, res) => {
       r.adp_recent_bias = dv?.recentBias || "";
       r.buying_selling_verdict = dv?.buyingSellingVerdict || "";
       r.dv_decision = dv?.decision || "";
-      r.harmonic_pattern = harmonicBysymbol[r.symbol]?.pattern || null;
-      r.harmonic_status = harmonicBysymbol[r.symbol]?.status || "";
-      r.harmonic_d_price = harmonicBysymbol[r.symbol]?.dPrice || "";
-      r.harmonic_confidence = harmonicBysymbol[r.symbol]?.confidence || "";
-      r.harmonic_days_ago = harmonicBysymbol[r.symbol]?.daysAgo || "";
 
       const emaSig = emaSignalsBysymbol[r.symbol] || {};
       const truthy = (v) => v === true || v === "TRUE" || v === "true";
@@ -336,34 +231,7 @@ module.exports = async (req, res) => {
       r.ema_retest_stop = emaSig.retestStop || "";
       r.ema_retest_target = emaSig.retestTarget || "";
       r.ema_retest_rr = emaSig.retestRR || "";
-      r.wm_pattern = wmBysymbol[r.symbol]?.pattern || null;
-      r.wm_status = wmBysymbol[r.symbol]?.status || "";
-      r.wm_breakout_level = wmBysymbol[r.symbol]?.breakoutLevel || "";
-      r.wm_distance_pct = wmBysymbol[r.symbol]?.distancePct || "";
-      r.wm_symmetry_pct = wmBysymbol[r.symbol]?.symmetryPct || "";
-      r.rsi_daily_divergence = rsiDivBysymbol[r.symbol]?.dailyDivergence || null;
-      r.rsi_daily_days_ago = rsiDivBysymbol[r.symbol]?.dailyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.dailyDaysAgo : null;
-      r.rsi_weekly_divergence = rsiDivBysymbol[r.symbol]?.weeklyDivergence || null;
-      r.rsi_weekly_days_ago = rsiDivBysymbol[r.symbol]?.weeklyDaysAgo !== "" ? rsiDivBysymbol[r.symbol]?.weeklyDaysAgo : null;
-      r.rsi_hourly_divergence = rsiDivBysymbol[r.symbol]?.hourlyDivergence || null;
-      r.rsi_hourly_bars_ago = rsiDivBysymbol[r.symbol]?.hourlyBarsAgo !== "" ? rsiDivBysymbol[r.symbol]?.hourlyBarsAgo : null;
       r.comments = notesBysymbol[r.symbol] || [];
-
-      // Reversal confluence -- bottom-fishing signals that genuinely cluster
-      // together (unlike breakout signals, which conflict with each other
-      // and are already covered by the screeners). Missing data = not satisfied.
-      // Delivery-based leg now uses "Heavy Buying" (accumulation over the
-      // last 30 days per the new ADP-threshold flag) in place of the old
-      // one-off high_dv tag.
-      const reversalChecks = [
-        (r.harmonic_pattern || "").toLowerCase().includes("bullish"),   // Harmonic bullish
-        (r.rsi_daily_divergence || "").toLowerCase() === "bullish",     // RSI daily divergence
-        (r.rsi_weekly_divergence || "").toLowerCase() === "bullish",    // RSI weekly divergence
-        r.buying_selling_verdict === "Heavy Buying",                    // Sustained delivery accumulation
-      ];
-      r.reversal_score = reversalChecks.filter(Boolean).length;
-      r.reversal_total = reversalChecks.length;
-      r.reversal_pct = Math.round((r.reversal_score / r.reversal_total) * 100);
     }
 
     withTarget.sort((a, b) => Math.abs(a.distance_pct) - Math.abs(b.distance_pct));

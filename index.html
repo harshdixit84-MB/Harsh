@@ -325,6 +325,7 @@ table.stock-table {
 
 .stock-row.buyzone { box-shadow: inset 3px 0 0 var(--accent-buy); }
 .stock-row.watch { box-shadow: inset 3px 0 0 var(--accent-watch); }
+.stock-row.held { box-shadow: inset 3px 0 0 #cc7a00; }
 .stock-row.tracking { box-shadow: inset 3px 0 0 transparent; }
 .stock-row.needtarget { box-shadow: inset 3px 0 0 var(--accent-needtarget); }
 .stock-row.archived { opacity: 0.6; box-shadow: inset 3px 0 0 var(--text-secondary); }
@@ -702,6 +703,7 @@ body { background:#ffffff; color:#000000; }
 
 .stock-row.buyzone { box-shadow:inset 4px 0 0 #145a32; }
 .stock-row.watch { box-shadow:inset 4px 0 0 #8b6508; }
+.stock-row.held { box-shadow:inset 4px 0 0 #cc7a00; }
 .stock-row.needtarget { box-shadow:inset 4px 0 0 #145a32; }
 
 .green { border-left:4px solid #145a32; }
@@ -775,6 +777,7 @@ body{background:var(--bg);color:var(--text-primary);}
 .stat-card.blue{border-left:6px solid #1d4ed8;}
 .stock-row.buyzone{box-shadow:inset 5px 0 0 #166534;}
 .stock-row.watch{box-shadow:inset 5px 0 0 #a16207;}
+.stock-row.held{box-shadow:inset 5px 0 0 #cc7a00;}
 .stock-row.needtarget{box-shadow:inset 5px 0 0 #0f766e;}
 
 /* Section minimize buttons */
@@ -1006,7 +1009,11 @@ function classify(stock) {
   if (stock.distance_pct === undefined) return "needtarget";
   const d = Math.abs(stock.distance_pct);
   if (stock.distance_pct <= 0) {
-    return qualityOk(stock) ? "buyzone" : "watch";
+    // "held" is its own bucket, separate from "watch" (genuine near-target
+    // proximity) -- otherwise every quality/regime-blocked stock floods the
+    // Near Target stat and filter alongside stocks that are actually just
+    // approaching their target.
+    return qualityOk(stock) ? "buyzone" : "held";
   }
   if (d <= WATCH_THRESHOLD) return "watch";
   return "tracking";

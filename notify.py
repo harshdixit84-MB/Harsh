@@ -101,6 +101,7 @@ def build_merged_stocks(spreadsheet):
 
         quality_score = _to_int_or_none(r.get("quality_score"))
         quality_flags = r.get("quality_flags", "") or ""
+        market_regime = r.get("market_regime", "") or ""
 
         ema = ema_by_symbol.get(symbol, {})
         ema_cross_signal = _to_bool(ema.get("ema_cross_signal"))
@@ -117,6 +118,7 @@ def build_merged_stocks(spreadsheet):
             "distance_to_sl_pct": distance_to_sl_pct,
             "quality_score": quality_score,
             "quality_flags": quality_flags,
+            "market_regime": market_regime,
             "dv_decision": dv.get("decision", "") or "",
             "dv_cross_state": dv.get("cross_state", "") or "",
             "dv_crossover_age": dv.get("crossover_age", ""),
@@ -242,6 +244,31 @@ def quality_dot(quality_score):
     return "🔴"
 
 
+def compute_verdict(stock):
+    "Turns the pieces you already have (market_regime, quality_score, and the\n    DV_Summary confirmation-aware `decision` field -- which itself only\n    marks something Confirmed once a cross has held CROSS_CONFIRM_DAYS+ days,\n    not on day one) into one plain-language call: BUY-READY / WATCH / AVOID.\n    This is a rule-based verdict -- deterministic and wrong sometimes, same\n    as any single signal -- meant to stop acting on a fresh, unconfirmed\n    cross or a good setup in a bad market regime."
+    regime = stock["market_regime"]
+    decision = stock["dv_decision"]
+    quality = stock["quality_score"]
+    age = stock["dv_crossover_age"]
+    age_str = f"{age}d" if age not in (None, "") else "?d"
+
+    if regime == "Bearish":
+        return ("AVOID", "🚫", "Bearish market regime")
+    if decision == "Confirmed Sell":
+        return ("AVOID", "🚫", f"Confirmed Sell (held {age_str})")
+    if quality is None:
+        return ("WATCH", "⏳", "Quality score not available yet")
+    if quality < 2:
+        return ("AVOID", "🚫", f"Quality {quality}/5 too low")
+    if decision == "Confirmed Buy":
+        return ("BUY-READY", "✅", f"Confirmed Buy, held {age_str} · Quality {quality}/5")
+    if decision == "Early Buy Signal":
+        return ("WATCH", "⏳", f"Early signal only ({age_str}) -- not yet confirmed")
+    if decision == "Early Sell Signal":
+        return ("WATCH", "⏳", f"Early sell signal ({age_str}) -- watch, don't add")
+    return ("WATCH", "⏳", f"No confirmed cross yet · Quality {quality}/5")
+
+
 def format_price_block(stock):
     "Price + target + stop-loss with their distances, grouped together -- these are the actual numbers needed to decide on the trade, shown every time regardless of which filter triggered the alert."
     parts = [f"💰 ₹{stock['price']}"]
@@ -265,6 +292,10 @@ def format_ticker_block(stock, detail_suffix, filter_key):
     quality_str = f"Q{stock['quality_score']}/5" if stock["quality_score"] is not None else "Q -"
 
     lines = [f"{quality_dot(stock['quality_score'])} {symbol_link}  <i>{quality_str}</i>"]
+
+    verdict_label, verdict_emoji, verdict_reason = compute_verdict(stock)
+    lines.append(f"{verdict_emoji} <b>{verdict_label}</b> — {verdict_reason}")
+
     lines.append(format_price_block(stock))
 
     context_bits = []

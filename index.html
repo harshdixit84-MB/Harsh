@@ -1117,7 +1117,7 @@ function renderRow(stock) {
   if (stock.weekly_accumulation) {
     greenTags.push(`<span class="mini-tag cross-bull" title="${stock.weekly_vol_ratio}x normal volume over 3 weeks · bias ${stock.weekly_bias > 0 ? '+' : ''}${stock.weekly_bias} up-vs-down volume days · price ${stock.weekly_price_run_pct > 0 ? '+' : ''}${stock.weekly_price_run_pct}% over that span">📅 3-Week Accumulation</span>`);
   }
-  if (stock.footprint_weighted_score !== null && stock.footprint_weighted_score >= 4) {
+  if (stock.footprint_weighted_score !== null && stock.footprint_weighted_score >= 4 && stock.footprint_volume_component !== null && stock.footprint_pattern_component !== null) {
     greenTags.push(`<span class="mini-tag cross-bull" title="Volume-based: ${stock.footprint_volume_signals || 'none'} · Pattern-based: ${stock.footprint_pattern_signals || 'none'}">🔎 Footprint today: Vol ${stock.footprint_volume_component}/6 + Pattern ${stock.footprint_pattern_component}/3</span>`);
   }
 

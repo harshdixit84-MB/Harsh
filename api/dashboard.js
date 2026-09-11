@@ -103,7 +103,7 @@ module.exports = async (req, res) => {
     try {
       const fpResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "Footprint_Signals!A1:H1000",
+        range: "Footprint_Signals!A1:O1000",
       });
       const fpRows = fpResponse.data.values || [];
       if (fpRows.length > 0) {
@@ -116,7 +116,14 @@ module.exports = async (req, res) => {
             footprintBysymbol[symbol] = {
               score: row[idx("footprint_score")] || "",
               weightedScore: row[idx("footprint_weighted_score")] || "",
-              signals: row[idx("footprint_signals")] || "",
+              volumeComponent: row[idx("footprint_volume_component")] || "",
+              patternComponent: row[idx("footprint_pattern_component")] || "",
+              volumeSignals: row[idx("footprint_volume_signals")] || "",
+              patternSignals: row[idx("footprint_pattern_signals")] || "",
+              weeklyAccumulation: row[idx("weekly_accumulation")] || "",
+              weeklyVolRatio: row[idx("weekly_vol_ratio")] || "",
+              weeklyBias: row[idx("weekly_bias")] || "",
+              weeklyPriceRunPct: row[idx("weekly_price_run_pct")] || "",
               lastDate: row[idx("last_footprint_date")] || "",
               lastWeightedScore: row[idx("last_footprint_weighted_score")] || "",
               daysSince: row[idx("days_since_footprint")] || "",
@@ -245,7 +252,14 @@ module.exports = async (req, res) => {
       const fp = footprintBysymbol[r.symbol];
       r.footprint_score = fp && fp.score !== "" ? parseInt(fp.score) : null;
       r.footprint_weighted_score = fp && fp.weightedScore !== "" ? parseInt(fp.weightedScore) : null;
-      r.footprint_signals = fp?.signals || "";
+      r.footprint_volume_component = fp && fp.volumeComponent !== "" ? parseInt(fp.volumeComponent) : null;
+      r.footprint_pattern_component = fp && fp.patternComponent !== "" ? parseInt(fp.patternComponent) : null;
+      r.footprint_volume_signals = fp?.volumeSignals || "";
+      r.footprint_pattern_signals = fp?.patternSignals || "";
+      r.weekly_accumulation = fp?.weeklyAccumulation === "TRUE" || fp?.weeklyAccumulation === true || fp?.weeklyAccumulation === "true";
+      r.weekly_vol_ratio = fp && fp.weeklyVolRatio !== "" ? parseFloat(fp.weeklyVolRatio) : null;
+      r.weekly_bias = fp && fp.weeklyBias !== "" ? parseInt(fp.weeklyBias) : null;
+      r.weekly_price_run_pct = fp && fp.weeklyPriceRunPct !== "" ? parseFloat(fp.weeklyPriceRunPct) : null;
       r.footprint_last_date = fp?.lastDate || "";
       r.footprint_last_weighted_score = fp && fp.lastWeightedScore !== "" ? parseInt(fp.lastWeightedScore) : null;
       r.footprint_days_since = fp && fp.daysSince !== "" ? parseInt(fp.daysSince) : null;

@@ -59,6 +59,14 @@ WEIGHTS = {
 }
 HIGH_FOOTPRINT_CUTOFF = 4
 
+# ---- Weekly accumulation ----
+WEEKLY_WINDOW = 15          # ~3 trading weeks
+BASELINE_WINDOW = 60        # ~3 prior months, used as the "normal" baseline
+WEEKLY_VOL_RATIO_MIN = 1.25 # 3-week avg volume vs prior baseline
+WEEKLY_MIN_BIAS = 3         # net (up-volume days - down-volume days) over the window
+WEEKLY_MIN_PRICE_RUN_PCT = -5   # allow a mild pullback/base, not a real decline
+WEEKLY_MAX_PRICE_RUN_PCT = 12   # if price already ran further than this, it's a breakout to chase, not accumulation to catch
+
 
 def get_client():
     key_dict = json.loads(os.environ["GOOGLE_SERVICE_ACCOUNT_KEY"])
@@ -127,9 +135,53 @@ def compute_footprint(df):
     prior_high_20 = h.shift(1).rolling(20).max()
     df["breakout_volume"] = (c > prior_high_20) & (v > avg_vol_20 * 2)
 
+    # ---- Weekly accumulation (the actual "big players buy over weeks, not
+    # days" signal) ----
+    # Everything above looks at ONE day at a time -- even weighted, a single
+    # big volume day just means one day. Real accumulation shows up as a
+    # SUSTAINED step-up in volume across a multi-week window, with more
+    # up-volume days than down-volume days (buyers absorbing on strength AND
+    # dips), while price hasn't already run away -- if it had, you'd be
+    # chasing a breakout, not catching accumulation before one.
+    up_vol_day = (c > o) & (v > avg_vol_20)
+    down_vol_day = (c < o) & (v > avg_vol_20)
+
+    weekly_vol_ratio = pd.Series(index=df.index, dtype=float)
+    weekly_bias = pd.Series(index=df.index, dtype=float)
+    weekly_price_run_pct = pd.Series(index=df.index, dtype=float)
+    v_vals, c_vals = v.values, c.values
+    up_vals, down_vals = up_vol_day.values, down_vol_day.values
+
+    for i in range(len(df)):
+        if i < WEEKLY_WINDOW + BASELINE_WINDOW:
+            continue
+        window_vol = v_vals[i - WEEKLY_WINDOW + 1: i + 1].mean()
+        baseline_vol = v_vals[i - WEEKLY_WINDOW - BASELINE_WINDOW + 1: i - WEEKLY_WINDOW + 1].mean()
+        weekly_vol_ratio.iloc[i] = window_vol / baseline_vol if baseline_vol else float("nan")
+
+        up_days = up_vals[i - WEEKLY_WINDOW + 1: i + 1].sum()
+        down_days = down_vals[i - WEEKLY_WINDOW + 1: i + 1].sum()
+        weekly_bias.iloc[i] = up_days - down_days
+
+        weekly_price_run_pct.iloc[i] = (c_vals[i] - c_vals[i - WEEKLY_WINDOW + 1]) / c_vals[i - WEEKLY_WINDOW + 1] * 100
+
+    df["weekly_vol_ratio"] = weekly_vol_ratio
+    df["weekly_bias"] = weekly_bias
+    df["weekly_price_run_pct"] = weekly_price_run_pct
+    df["weekly_accumulation"] = (
+        (weekly_vol_ratio >= WEEKLY_VOL_RATIO_MIN)
+        & (weekly_bias >= WEEKLY_MIN_BIAS)
+        & (weekly_price_run_pct >= WEEKLY_MIN_PRICE_RUN_PCT)
+        & (weekly_price_run_pct <= WEEKLY_MAX_PRICE_RUN_PCT)
+    )
+
     signal_cols = list(WEIGHTS.keys())
+    volume_cols = [k for k, w in WEIGHTS.items() if w == 2]
+    pattern_cols = [k for k, w in WEIGHTS.items() if w == 1]
     df["score"] = df[signal_cols].sum(axis=1).astype(int)
-    df["weighted_score"] = sum(df[k].astype(int) * w for k, w in WEIGHTS.items())
+    df["volume_component"] = sum(df[k].astype(int) * WEIGHTS[k] for k in volume_cols)
+    df["pattern_component"] = sum(df[k].astype(int) * WEIGHTS[k] for k in pattern_cols)
+    df["weighted_score"] = df["volume_component"] + df["pattern_component"]
     return df
 
 
@@ -138,10 +190,13 @@ def main():
     spreadsheet = client.open(SHEET_NAME)
 
     active_symbols = get_active_symbols(spreadsheet)
-    print(f"Scanning {len(active_symbols)} active symbols for footprint signals (daily).")
+    print(f"Scanning {len(active_symbols)} active symbols for footprint signals (daily + weekly accumulation).")
 
     header = [
-        "symbol", "footprint_score", "footprint_weighted_score", "footprint_signals",
+        "symbol", "footprint_score", "footprint_weighted_score",
+        "footprint_volume_component", "footprint_pattern_component",
+        "footprint_volume_signals", "footprint_pattern_signals",
+        "weekly_accumulation", "weekly_vol_ratio", "weekly_bias", "weekly_price_run_pct",
         "last_footprint_date", "last_footprint_weighted_score", "days_since_footprint",
         "last_updated",
     ]
@@ -151,6 +206,8 @@ def main():
     today_str = str(today)
     rows = [header]
     skipped = 0
+    volume_cols = [k for k, w in WEIGHTS.items() if w == 2]
+    pattern_cols = [k for k, w in WEIGHTS.items() if w == 1]
 
     for symbol in active_symbols:
         try:
@@ -159,15 +216,23 @@ def main():
             print(f"{symbol}: history fetch failed ({e})")
             hist = None
 
-        if hist is None or len(hist) < 65:
+        # Needs enough history for the weekly-accumulation baseline
+        # (WEEKLY_WINDOW + BASELINE_WINDOW = 75 rows) plus warmup for the
+        # rolling daily signals on top of that.
+        if hist is None or len(hist) < WEEKLY_WINDOW + BASELINE_WINDOW + 20:
             skipped += 1
-            rows.append([symbol, "", "", "", "", "", "", today_str])
+            rows.append([symbol, "", "", "", "", "", "", "", "", "", "", "", "", "", today_str])
             continue
 
         scored = compute_footprint(hist)
         last = scored.iloc[-1]
-        signal_cols = list(WEIGHTS.keys())
-        last_signals = [k for k in signal_cols if bool(last[k])]
+        volume_signals = [k for k in volume_cols if bool(last[k])]
+        pattern_signals = [k for k in pattern_cols if bool(last[k])]
+
+        weekly_accum = bool(last["weekly_accumulation"]) if pd.notna(last["weekly_accumulation"]) else False
+        weekly_vol_ratio = round(last["weekly_vol_ratio"], 2) if pd.notna(last["weekly_vol_ratio"]) else ""
+        weekly_bias = int(last["weekly_bias"]) if pd.notna(last["weekly_bias"]) else ""
+        weekly_price_run = round(last["weekly_price_run_pct"], 2) if pd.notna(last["weekly_price_run_pct"]) else ""
 
         # Look back a few sessions for the most recent day that actually
         # cleared the "real" bar -- today alone might be quiet even if a
@@ -186,7 +251,14 @@ def main():
             symbol,
             int(last["score"]),
             int(last["weighted_score"]),
-            ", ".join(last_signals),
+            int(last["volume_component"]),
+            int(last["pattern_component"]),
+            ", ".join(volume_signals),
+            ", ".join(pattern_signals),
+            weekly_accum,
+            weekly_vol_ratio,
+            weekly_bias,
+            weekly_price_run,
             str(last_real_date) if last_real_date != "" else "",
             last_real_weighted,
             days_since,
@@ -194,7 +266,12 @@ def main():
         ])
 
         if last["weighted_score"] >= HIGH_FOOTPRINT_CUTOFF:
-            print(f"{symbol}: footprint TODAY, weighted {int(last['weighted_score'])} -- {', '.join(last_signals)}")
+            print(f"{symbol}: footprint TODAY, weighted {int(last['weighted_score'])} "
+                  f"(volume {int(last['volume_component'])}, pattern {int(last['pattern_component'])}) "
+                  f"-- vol: {', '.join(volume_signals) or 'none'} | pattern: {', '.join(pattern_signals) or 'none'}")
+        if weekly_accum:
+            print(f"{symbol}: WEEKLY ACCUMULATION -- {weekly_vol_ratio}x normal volume over 3 weeks, "
+                  f"bias {weekly_bias:+d} up-vs-down volume days, price {weekly_price_run:+.2f}% over that window")
 
     ws.update(rows, "A1")
     print(f"Wrote footprint results for {len(rows) - 1} symbols ({skipped} skipped for insufficient history).")

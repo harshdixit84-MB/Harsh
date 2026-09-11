@@ -87,22 +87,37 @@ function computeSignals(rows) {
 
     const rHigh10 = rollingMax(high, i, 10);
     const rLow10 = rollingMin(low, i, 10);
-    out[i].tightConsolidation = rHigh10 != null && (rHigh10 - rLow10) / close[i] < 0.08;
+    // Tightened from 0.08 -- 8% over 10 days was clearing on almost any
+    // non-trending week for a low-volatility name, not flagging anything
+    // distinctive.
+    out[i].tightConsolidation = rHigh10 != null && (rHigh10 - rLow10) / close[i] < 0.04;
 
     let srTouches = 0;
     if (i >= 10) {
       for (let j = Math.max(0, i - 60); j < i; j++) {
-        if (Math.abs(low[j] - low[i]) / low[i] <= 0.015) srTouches++;
-        if (Math.abs(high[j] - high[i]) / high[i] <= 0.015) srTouches++;
+        // Tightened band (1.5% -> 1%) and raised the bar (3 -> 4 touches) --
+        // at the old settings this fired on almost every range-bound day.
+        if (Math.abs(low[j] - low[i]) / low[i] <= 0.01) srTouches++;
+        if (Math.abs(high[j] - high[i]) / high[i] <= 0.01) srTouches++;
       }
     }
-    out[i].srDefense = srTouches >= 3;
+    out[i].srDefense = srTouches >= 4;
 
     const priorHigh = i > 0 ? rollingMax(high, i - 1, 20) : null;
     out[i].breakoutVolume =
       priorHigh != null && avgVol20 != null && close[i] > priorHigh && volume[i] > avgVol20 * 2;
 
     out[i].score = SIGNAL_META.reduce((s, m) => s + (out[i][m.key] ? 1 : 0), 0);
+    // Volume-based signals (volumeSpike/absorption/breakoutVolume) actually
+    // imply size trading through the stock; the other three are price-shape
+    // patterns that co-occur constantly during any quiet, range-bound
+    // stretch. Weighting them 2x/1x means a day needs either two real
+    // volume signals, or one volume signal plus real pattern confirmation,
+    // to score as meaningful -- three generic pattern signals alone (the
+    // noisy combo we saw on RELIANCE) now caps out at 3, below the
+    // high-footprint cutoff.
+    const WEIGHTS = { volumeSpike: 2, absorption: 2, breakoutVolume: 2, rejectionWick: 1, tightConsolidation: 1, srDefense: 1 };
+    out[i].weightedScore = SIGNAL_META.reduce((s, m) => s + (out[i][m.key] ? WEIGHTS[m.key] : 0), 0);
   }
   return rows.map((r, i) => ({ ...r, ...out[i] }));
 }
@@ -228,23 +243,31 @@ module.exports = async (req, res) => {
     const scored = computeSignals(rows);
     const recent = scored.slice(-60);
     const avgScore = recent.reduce((s, d) => s + d.score, 0) / recent.length;
-    const highScoreDays = recent.filter((d) => d.score >= 3).reverse();
+    const avgWeightedScore = recent.reduce((s, d) => s + d.weightedScore, 0) / recent.length;
+    // Threshold moved from raw score>=3 to weighted score>=4 -- that excludes
+    // the old noisy "3 generic pattern signals, nothing volume-based" combo
+    // (which weights to 3) while still catching a single volume signal
+    // backed by real pattern confirmation, or two volume signals alone.
+    const highScoreDays = recent.filter((d) => d.weightedScore >= 4).reverse();
 
     res.status(200).json({
       symbol,
       candles_fetched: rows.length,
       last_60_sessions: recent.length,
       avg_footprint_score: Number(avgScore.toFixed(2)),
+      avg_weighted_score: Number(avgWeightedScore.toFixed(2)),
       high_footprint_days: highScoreDays.map((d) => ({
         date: d.date,
         close: d.close,
         score: d.score,
+        weighted_score: d.weightedScore,
         signals: SIGNAL_META.filter((m) => d[m.key]).map((m) => m.label),
       })),
       latest_day: {
         date: recent[recent.length - 1].date,
         close: recent[recent.length - 1].close,
         score: recent[recent.length - 1].score,
+        weighted_score: recent[recent.length - 1].weightedScore,
         signals: SIGNAL_META.filter((m) => recent[recent.length - 1][m.key]).map((m) => m.label),
       },
     });

@@ -358,6 +358,7 @@ function renderOpen(trades) {
           ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
+          ${t.footprint_weighted_score !== null ? `<span class="verdict-tag" style="background:rgba(140,100,255,0.15);color:#8c64ff;" title="${t.footprint_signals || (t.footprint_last_date ? 'Last real footprint: ' + t.footprint_last_date : '')}">🔎 Footprint ${t.footprint_weighted_score}/9${t.footprint_weighted_score < 4 && t.footprint_days_since ? ' (last real ' + t.footprint_days_since + 'd ago)' : ''}</span>` : ""}
         </div>
         <div><div class="label">Qty</div>${t.quantity}</div>
         <div><div class="label">Buy</div>₹${t.buy_price}</div>
@@ -389,6 +390,7 @@ function renderClosed(trades) {
           ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
+          ${t.footprint_weighted_score !== null ? `<span class="verdict-tag" style="background:rgba(140,100,255,0.15);color:#8c64ff;" title="${t.footprint_signals || (t.footprint_last_date ? 'Last real footprint: ' + t.footprint_last_date : '')}">🔎 Footprint ${t.footprint_weighted_score}/9${t.footprint_weighted_score < 4 && t.footprint_days_since ? ' (last real ' + t.footprint_days_since + 'd ago)' : ''}</span>` : ""}
         </div>
         <div><div class="label">Qty</div>${t.quantity}</div>
         <div><div class="label">Buy</div>₹${t.buy_price}</div>

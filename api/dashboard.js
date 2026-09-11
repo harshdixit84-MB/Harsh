@@ -99,6 +99,35 @@ module.exports = async (req, res) => {
       // EMA_Signals tab may not exist yet -- proceed without it
     }
 
+    let footprintBysymbol = {};
+    try {
+      const fpResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Footprint_Signals!A1:H1000",
+      });
+      const fpRows = fpResponse.data.values || [];
+      if (fpRows.length > 0) {
+        const fpHeaders = fpRows[0];
+        const idx = (name) => fpHeaders.indexOf(name);
+        const symbolIdx = idx("symbol");
+        fpRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol) {
+            footprintBysymbol[symbol] = {
+              score: row[idx("footprint_score")] || "",
+              weightedScore: row[idx("footprint_weighted_score")] || "",
+              signals: row[idx("footprint_signals")] || "",
+              lastDate: row[idx("last_footprint_date")] || "",
+              lastWeightedScore: row[idx("last_footprint_weighted_score")] || "",
+              daysSince: row[idx("days_since_footprint")] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // Footprint_Signals tab may not exist yet -- proceed without it
+    }
+
     let notesBysymbol = {};
     try {
       const notesResponse = await sheets.spreadsheets.values.get({
@@ -212,6 +241,14 @@ module.exports = async (req, res) => {
       r.adp_recent_bias = dv?.recentBias || "";
       r.buying_selling_verdict = dv?.buyingSellingVerdict || "";
       r.dv_decision = dv?.decision || "";
+
+      const fp = footprintBysymbol[r.symbol];
+      r.footprint_score = fp && fp.score !== "" ? parseInt(fp.score) : null;
+      r.footprint_weighted_score = fp && fp.weightedScore !== "" ? parseInt(fp.weightedScore) : null;
+      r.footprint_signals = fp?.signals || "";
+      r.footprint_last_date = fp?.lastDate || "";
+      r.footprint_last_weighted_score = fp && fp.lastWeightedScore !== "" ? parseInt(fp.lastWeightedScore) : null;
+      r.footprint_days_since = fp && fp.daysSince !== "" ? parseInt(fp.daysSince) : null;
 
       const emaSig = emaSignalsBysymbol[r.symbol] || {};
       const truthy = (v) => v === true || v === "TRUE" || v === "true";

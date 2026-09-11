@@ -1114,6 +1114,9 @@ function renderRow(stock) {
   if (stock.ema_retest_signal) {
     greenTags.push(`<span class="mini-tag cross-bull">〰️ EMA${stock.ema_retest_touched} Retest → ₹${stock.ema_retest_target}</span>`);
   }
+  if (stock.footprint_weighted_score !== null && stock.footprint_weighted_score >= 4) {
+    greenTags.push(`<span class="mini-tag cross-bull" title="${stock.footprint_signals}">🔎 Footprint today ${stock.footprint_weighted_score}/9</span>`);
+  }
 
   // 2. Group Red Elements
   const redTags = [];
@@ -1126,6 +1129,9 @@ function renderRow(stock) {
     neutralTags.push(`<span class="mini-tag" style="color:#ffa500;border-color:rgba(255,165,0,0.4);" title="Price hit your target but held back from Confirmed">⚠ Held (${why})</span>`);
   }
   if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
+  if (stock.footprint_last_date && stock.footprint_days_since !== null && stock.footprint_days_since > 0) {
+    neutralTags.push(`<span class="mini-tag" title="Last confirmed footprint day: ${stock.footprint_last_date}">🔎 Last footprint ${stock.footprint_days_since}d ago (${stock.footprint_last_weighted_score}/9)</span>`);
+  }
   if (stock.at_52w_retest) neutralTags.push(`<span class="mini-tag retest">🎯 52W Retest</span>`);
   (stock.source || "").split(",").filter(Boolean).forEach((s) => {
     neutralTags.push(`<span class="mini-tag">${s}</span>`);

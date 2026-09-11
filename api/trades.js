@@ -81,9 +81,43 @@ module.exports = async (req, res) => {
       // screener list -- proceed without it, badges just won't show
     }
 
+    let footprintBysymbol = {};
+    try {
+      const fpResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Footprint_Signals!A1:H1000",
+      });
+      const fpRows = fpResponse.data.values || [];
+      if (fpRows.length > 0) {
+        const fpHeaders = fpRows[0];
+        const idx = (name) => fpHeaders.indexOf(name);
+        const symbolIdx = idx("symbol");
+        fpRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol) {
+            footprintBysymbol[symbol] = {
+              weightedScore: row[idx("footprint_weighted_score")] || "",
+              signals: row[idx("footprint_signals")] || "",
+              lastDate: row[idx("last_footprint_date")] || "",
+              lastWeightedScore: row[idx("last_footprint_weighted_score")] || "",
+              daysSince: row[idx("days_since_footprint")] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // Footprint_Signals tab may not exist yet -- proceed without it, badges just won't show
+    }
+
     function attachDvInfo(t) {
       t.high_dv = dvSummaryBysymbol[t.symbol]?.highDv || false;
       t.buying_selling_verdict = dvSummaryBysymbol[t.symbol]?.buyingSellingVerdict || "";
+      const fp = footprintBysymbol[t.symbol];
+      t.footprint_weighted_score = fp && fp.weightedScore !== "" ? parseInt(fp.weightedScore) : null;
+      t.footprint_signals = fp?.signals || "";
+      t.footprint_last_date = fp?.lastDate || "";
+      t.footprint_last_weighted_score = fp && fp.lastWeightedScore !== "" ? parseInt(fp.lastWeightedScore) : null;
+      t.footprint_days_since = fp && fp.daysSince !== "" ? parseInt(fp.daysSince) : null;
       return t;
     }
 

@@ -1,25 +1,27 @@
 """
-XABCD harmonic pattern scan.
+XABCD harmonic pattern scan -- PREDICTIVE version.
 
-Identifies the classic X-A-B-C-D harmonic structure (Gartley, Bat,
-Butterfly, Crab, or a generic AB=CD) from CONFIRMED swing points only --
-using a percentage zigzag, so point D is never the still-forming extreme
-of today's price, only a point price has already reversed away from by
-ZIGZAG_PCT. That's what "confirm point D" means here: D is only reported
-once the market has already turned away from it, not projected in
-advance.
+The moment C confirms (via a percentage zigzag), this projects the
+Potential Reversal Zone (PRZ) for D BEFORE D has formed -- using the
+already-known X-A-B-C ratios to narrow down which pattern(s) (Gartley,
+Bat, Butterfly, Crab) are still geometrically possible, then projecting
+each one's own Fibonacci CD/BC and AD/XA ranges forward from C and A.
+This is the standard way harmonic patterns are actually traded: you plan
+the zone while price is still moving toward it, not after D has already
+completed and reversed (which would mean finding out only after the move
+is over).
 
 IMPORTANT -- bullish/bearish naming, checked deliberately because the
 Pine Script version had these two swapped:
-  - BULLISH pattern: X, B, D are swing LOWS; A, C are swing HIGHS.
-    D is the lowest point -- the pattern says "buy here, expect a move
-    UP toward C/A". This is bullish because the TRADE is a buy.
-  - BEARISH pattern: X, B, D are swing HIGHS; A, C are swing LOWS.
-    D is the highest point -- the pattern says "sell here, expect a move
-    DOWN toward C/A". This is bearish because the TRADE is a sell.
-  Direction is derived directly from the pivot TYPE at D (low -> Bullish,
-  high -> Bearish), not from any separately-tracked flag -- so the two
-  can't drift out of sync with each other the way they did before.
+  - BULLISH pattern: X, B are swing LOWS; A, C are swing HIGHS. D is
+    projected to be a LOW -- "buy once price enters the PRZ, expect a
+    move UP toward C/A". Bullish because the TRADE is a buy.
+  - BEARISH pattern: X, B are swing HIGHS; A, C are swing LOWS. D is
+    projected to be a HIGH -- "sell once price enters the PRZ, expect a
+    move DOWN toward C/A". Bearish because the TRADE is a sell.
+  Direction is derived directly from C's pivot type (C is a high -> D
+  will be a low -> Bullish; C is a low -> D will be a high -> Bearish),
+  never from a separately-tracked flag, so the two can't drift apart.
 
 Environment variable required: GOOGLE_SERVICE_ACCOUNT_KEY
 """
@@ -138,80 +140,118 @@ def _in_range(value, bounds):
     return lo <= value <= hi
 
 
-def _classify_pattern(x, a, b, c, d):
-    "x, a, b, c, d are prices (floats). Returns the matched pattern name, or None."
-    xa = abs(a - x)
-    ab = abs(b - a)
-    bc = abs(c - b)
-    cd = abs(d - c)
-    ad = abs(d - a)
+def find_predictive_setup(df):
+    """
+    Uses the last 4 CONFIRMED zigzag pivots -- X, A, B, C -- to PROJECT
+    the Potential Reversal Zone (PRZ) for D, before D has formed at all.
+
+    This is the actual way harmonic patterns are traded: the moment C
+    confirms, you already know the AB/XA and BC/AB ratios, which narrows
+    down which pattern(s) (Gartley/Bat/Butterfly/Crab) are still
+    geometrically possible. Each surviving pattern's own CD/BC and AD/XA
+    Fibonacci ranges then project a price zone for where D should
+    complete -- while price is still moving from C, not after it has
+    already reversed. Waiting for D to fully confirm (the old version of
+    this script) means finding out about the move only after it's over.
+
+    Returns a dict if at least one pattern is still geometrically valid
+    given X-A-B-C, else None.
+    """
+    pivots = _zigzag_pivots(df, ZIGZAG_PCT)
+    if len(pivots) < 4:
+        return None
+
+    x_date, x_price, x_kind = pivots[-4]
+    a_date, a_price, a_kind = pivots[-3]
+    b_date, b_price, b_kind = pivots[-2]
+    c_date, c_price, c_kind = pivots[-1]
+
+    xa = abs(a_price - x_price)
+    ab = abs(b_price - a_price)
+    bc = abs(c_price - b_price)
     if xa == 0 or ab == 0 or bc == 0:
         return None
 
     ab_xa = ab / xa
     bc_ab = bc / ab
-    cd_bc = cd / bc
-    ad_xa = ad / xa
 
+    # D continues the strict alternation opposite of C: if C is a high,
+    # D will be a low (Bullish -- buy at D, expect a move up). If C is a
+    # low, D will be a high (Bearish -- sell at D, expect a move down).
+    # Same deliberate direct-from-pivot-type derivation as before, so
+    # this can't end up swapped either.
+    direction = "Bullish" if c_kind == "high" else "Bearish"
+
+    best = None  # tightest (smallest-range) PRZ among still-valid patterns
     for name, ab_range, bc_range, cd_range, ad_range in PATTERN_DEFINITIONS:
-        if _in_range(ab_xa, ab_range) and _in_range(bc_ab, bc_range) and _in_range(cd_bc, cd_range) and _in_range(ad_xa, ad_range):
-            return name
+        if not (_in_range(ab_xa, ab_range) and _in_range(bc_ab, bc_range)):
+            continue  # this pattern type is already ruled out by X-A-B-C alone
 
-    # Generic AB=CD fallback: the CD leg is roughly the same size as AB
-    # (a looser, much more common pattern than the 4 named ones above).
-    if 0.8 <= (cd / ab) <= 1.27:
-        return "AB=CD"
+        cd_lo, cd_hi = cd_range
+        ad_lo, ad_hi = ad_range
 
-    return None
+        if direction == "Bullish":
+            # CD leg projects DOWN from C; AD leg projects DOWN from A.
+            d_from_cd = [c_price - cd_lo * bc, c_price - cd_hi * bc]
+            d_from_ad = [a_price - ad_lo * xa, a_price - ad_hi * xa]
+        else:
+            # CD leg projects UP from C; AD leg projects UP from A.
+            d_from_cd = [c_price + cd_lo * bc, c_price + cd_hi * bc]
+            d_from_ad = [a_price + ad_lo * xa, a_price + ad_hi * xa]
 
+        prz_candidates = d_from_cd + d_from_ad
+        prz_low, prz_high = min(prz_candidates), max(prz_candidates)
 
-def find_harmonic_setup(df):
-    """
-    Looks at the last 5 confirmed zigzag pivots for a completed XABCD
-    pattern. Returns a dict if one is found, else None.
-    """
-    pivots = _zigzag_pivots(df, ZIGZAG_PCT)
-    if len(pivots) < 5:
+        candidate = {
+            "pattern": name,
+            "direction": direction,
+            "prz_low": prz_low,
+            "prz_high": prz_high,
+            "x_date": x_date, "x_price": x_price,
+            "a_date": a_date, "a_price": a_price,
+            "b_date": b_date, "b_price": b_price,
+            "c_date": c_date, "c_price": c_price,
+        }
+        if best is None or (prz_high - prz_low) < (best["prz_high"] - best["prz_low"]):
+            best = candidate
+
+    if best is None:
         return None
 
-    x_date, x_price, x_kind = pivots[-5]
-    a_date, a_price, a_kind = pivots[-4]
-    b_date, b_price, b_kind = pivots[-3]
-    c_date, c_price, c_kind = pivots[-2]
-    d_date, d_price, d_kind = pivots[-1]
+    prz_mid = (best["prz_low"] + best["prz_high"]) / 2
+    current_price = float(df["Close"].iloc[-1])
 
-    pattern_name = _classify_pattern(x_price, a_price, b_price, c_price, d_price)
-    if pattern_name is None:
-        return None
-
-    # Direction comes directly from D's pivot kind -- see the module
-    # docstring for why this is deliberately not a separate flag.
-    if d_kind == "low":
-        direction = "Bullish"
-        stop_loss = x_price * (1 - STOP_BUFFER_PCT / 100)
-        target_1 = d_price + 0.382 * (a_price - d_price)
-        target_2 = d_price + 0.618 * (a_price - d_price)
-        target_3 = a_price
+    if best["direction"] == "Bullish":
+        stop_loss = best["x_price"] * (1 - STOP_BUFFER_PCT / 100)
+        target_1 = prz_mid + 0.382 * (best["a_price"] - prz_mid)
+        target_2 = prz_mid + 0.618 * (best["a_price"] - prz_mid)
+        target_3 = best["a_price"]
+        # How far current price still has to fall to reach the PRZ (0 or
+        # negative once price has already entered the zone).
+        distance_to_prz_pct = (current_price - best["prz_high"]) / current_price * 100
     else:
-        direction = "Bearish"
-        stop_loss = x_price * (1 + STOP_BUFFER_PCT / 100)
-        target_1 = d_price - 0.382 * (d_price - a_price)
-        target_2 = d_price - 0.618 * (d_price - a_price)
-        target_3 = a_price
+        stop_loss = best["x_price"] * (1 + STOP_BUFFER_PCT / 100)
+        target_1 = prz_mid - 0.382 * (prz_mid - best["a_price"])
+        target_2 = prz_mid - 0.618 * (prz_mid - best["a_price"])
+        target_3 = best["a_price"]
+        distance_to_prz_pct = (best["prz_low"] - current_price) / current_price * 100
 
     return {
-        "pattern": pattern_name,
-        "direction": direction,
+        "pattern": best["pattern"],
+        "direction": best["direction"],
         "x_date": str(x_date.date()), "x_price": round(float(x_price), 2),
         "a_date": str(a_date.date()), "a_price": round(float(a_price), 2),
         "b_date": str(b_date.date()), "b_price": round(float(b_price), 2),
         "c_date": str(c_date.date()), "c_price": round(float(c_price), 2),
-        "d_date": str(d_date.date()), "d_price": round(float(d_price), 2),
+        "prz_low": round(float(min(best["prz_low"], best["prz_high"])), 2),
+        "prz_high": round(float(max(best["prz_low"], best["prz_high"])), 2),
+        "current_price": round(current_price, 2),
+        "distance_to_prz_pct": round(float(distance_to_prz_pct), 2),
         "stop_loss": round(float(stop_loss), 2),
         "target_1": round(float(target_1), 2),
         "target_2": round(float(target_2), 2),
         "target_3": round(float(target_3), 2),
-        "days_since_d": (date.today() - d_date.date()).days,
+        "days_since_c": (date.today() - c_date.date()).days,
     }
 
 
@@ -225,9 +265,10 @@ def main():
     header = [
         "symbol", "pattern", "direction",
         "x_date", "x_price", "a_date", "a_price", "b_date", "b_price",
-        "c_date", "c_price", "d_date", "d_price",
+        "c_date", "c_price",
+        "prz_low", "prz_high", "current_price", "distance_to_prz_pct",
         "stop_loss", "target_1", "target_2", "target_3",
-        "days_since_d", "last_updated",
+        "days_since_c", "last_updated",
     ]
     ws = get_or_create_sheet(spreadsheet, HARMONIC_SHEET, header)
 
@@ -246,7 +287,7 @@ def main():
             rows.append([symbol] + [""] * (len(header) - 2) + [today_str])
             continue
 
-        setup = find_harmonic_setup(hist)
+        setup = find_predictive_setup(hist)
         if setup is None:
             rows.append([symbol] + [""] * (len(header) - 2) + [today_str])
             continue
@@ -256,15 +297,16 @@ def main():
             symbol, setup["pattern"], setup["direction"],
             setup["x_date"], setup["x_price"], setup["a_date"], setup["a_price"],
             setup["b_date"], setup["b_price"], setup["c_date"], setup["c_price"],
-            setup["d_date"], setup["d_price"],
+            setup["prz_low"], setup["prz_high"], setup["current_price"], setup["distance_to_prz_pct"],
             setup["stop_loss"], setup["target_1"], setup["target_2"], setup["target_3"],
-            setup["days_since_d"], today_str,
+            setup["days_since_c"], today_str,
         ])
-        print(f"{symbol}: {setup['direction']} {setup['pattern']} -- D confirmed {setup['days_since_d']}d ago at {setup['d_price']}, "
-              f"targets {setup['target_1']}/{setup['target_2']}/{setup['target_3']}, stop {setup['stop_loss']}")
+        print(f"{symbol}: {setup['direction']} {setup['pattern']} -- C confirmed {setup['days_since_c']}d ago, "
+              f"PRZ {setup['prz_low']}-{setup['prz_high']} ({setup['distance_to_prz_pct']}% away), "
+              f"projected targets {setup['target_1']}/{setup['target_2']}/{setup['target_3']}, stop {setup['stop_loss']}")
 
     ws.update(rows, "A1")
-    print(f"Wrote harmonic pattern results for {len(rows) - 1} symbols ({found} with a confirmed pattern).")
+    print(f"Wrote harmonic pattern results for {len(rows) - 1} symbols ({found} with a live predicted pattern).")
 
 
 if __name__ == "__main__":

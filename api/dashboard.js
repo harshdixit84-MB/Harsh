@@ -140,7 +140,7 @@ module.exports = async (req, res) => {
     try {
       const hpResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "Harmonic_Patterns!A1:S1000",
+        range: "Harmonic_Patterns!A1:U1000",
       });
       const hpRows = hpResponse.data.values || [];
       if (hpRows.length > 0) {
@@ -154,11 +154,12 @@ module.exports = async (req, res) => {
               pattern: row[idx("pattern")],
               direction: row[idx("direction")],
               xPrice: row[idx("x_price")], aPrice: row[idx("a_price")],
-              bPrice: row[idx("b_price")], cPrice: row[idx("c_price")],
-              dPrice: row[idx("d_price")], dDate: row[idx("d_date")],
+              bPrice: row[idx("b_price")], cPrice: row[idx("c_price")], cDate: row[idx("c_date")],
+              przLow: row[idx("prz_low")], przHigh: row[idx("prz_high")],
+              currentPrice: row[idx("current_price")], distanceToPrzPct: row[idx("distance_to_prz_pct")],
               stopLoss: row[idx("stop_loss")],
               target1: row[idx("target_1")], target2: row[idx("target_2")], target3: row[idx("target_3")],
-              daysSinceD: row[idx("days_since_d")],
+              daysSinceC: row[idx("days_since_c")],
             };
           }
         });
@@ -309,13 +310,16 @@ module.exports = async (req, res) => {
         r.harmonic_a = parseFloat(hp.aPrice);
         r.harmonic_b = parseFloat(hp.bPrice);
         r.harmonic_c = parseFloat(hp.cPrice);
-        r.harmonic_d = parseFloat(hp.dPrice);
-        r.harmonic_d_date = hp.dDate;
+        r.harmonic_c_date = hp.cDate;
+        r.harmonic_prz_low = parseFloat(hp.przLow);
+        r.harmonic_prz_high = parseFloat(hp.przHigh);
+        r.harmonic_current_price = parseFloat(hp.currentPrice);
+        r.harmonic_distance_to_prz_pct = parseFloat(hp.distanceToPrzPct);
         r.harmonic_stop_loss = parseFloat(hp.stopLoss);
         r.harmonic_target_1 = parseFloat(hp.target1);
         r.harmonic_target_2 = parseFloat(hp.target2);
         r.harmonic_target_3 = parseFloat(hp.target3);
-        r.harmonic_days_since_d = hp.daysSinceD !== "" ? parseInt(hp.daysSinceD) : null;
+        r.harmonic_days_since_c = hp.daysSinceC !== "" ? parseInt(hp.daysSinceC) : null;
       } else {
         r.harmonic_pattern = null;
       }

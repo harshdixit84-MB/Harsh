@@ -1,0 +1,14 @@
+{
+  "name": "tv-chart-bridge",
+  "version": "1.0.0",
+  "description": "Minimal CDP bridge to read OHLCV/quotes and screenshot charts from your own TradingView Desktop app",
+  "type": "module",
+  "license": "MIT",
+  "main": "chart.js",
+  "scripts": {
+    "example": "node example.js"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.2"
+  }
+}

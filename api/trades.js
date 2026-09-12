@@ -1,5 +1,5 @@
 const { google } = require("googleapis");
-const { computeVerdict } = require("../lib/verdict");
+const { computeVerdict, isBigMoveSetup } = require("../lib/verdict");
 
 async function getLivePrice(symbol) {
   try {
@@ -164,6 +164,7 @@ module.exports = async (req, res) => {
       const v = computeVerdict(t);
       t.verdict = v.verdict;
       t.verdict_reason = v.reason;
+      t.big_move_setup = isBigMoveSetup(t);
       return t;
     }
 

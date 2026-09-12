@@ -1,5 +1,5 @@
 const { google } = require("googleapis");
-const { computeVerdict } = require("../lib/verdict");
+const { computeVerdict, isBigMoveSetup } = require("../lib/verdict");
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -268,6 +268,7 @@ module.exports = async (req, res) => {
       const v = computeVerdict(r);
       r.verdict = v.verdict;
       r.verdict_reason = v.reason;
+      r.big_move_setup = isBigMoveSetup(r);
 
       const emaSig = emaSignalsBysymbol[r.symbol] || {};
       const truthy = (v) => v === true || v === "TRUE" || v === "true";

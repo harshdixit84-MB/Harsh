@@ -243,6 +243,7 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 .verdict-tag.buy-ready { background: #166534; color: #ffffff; border: 2px solid #0f4c26; font-weight: 800; }
 .verdict-tag.watch { background: #ffa500; color: #1a1206; border: 2px solid #b8860b; font-weight: 800; }
 .verdict-tag.avoid { background: #991b1b; color: #ffffff; border: 2px solid #6b1414; font-weight: 800; }
+.verdict-tag.big-move { background: linear-gradient(90deg, #ffd60a, #ffa500); color: #1a1206; border: 2px solid #b8860b; font-weight: 800; box-shadow: 0 0 6px rgba(255, 214, 10, 0.5); }
 
 @media (max-width: 700px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -347,6 +348,8 @@ function renderOpen(trades) {
     container.innerHTML = '<div class="empty">No open positions yet.</div>';
     return;
   }
+  // Big Move Setups float to the top regardless of the trades' natural order.
+  trades = [...trades].sort((a, b) => (b.big_move_setup ? 1 : 0) - (a.big_move_setup ? 1 : 0));
 
   container.innerHTML = trades.map((t) => {
     const hasPrice = t.current_price !== null && t.current_price !== undefined;
@@ -358,7 +361,8 @@ function renderOpen(trades) {
         <div>
           <div class="label">Symbol</div>
              <div class="symbol">${t.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${t.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a><button class="analyze-btn" data-symbol="${t.symbol}" title="Analyze ${t.symbol}">📊 Analyse</button></div>
-          ${t.verdict ? (() => { const m = { "BUY-READY": ["buy-ready", "✅"], "WATCH": ["watch", "⏳"], "AVOID": ["avoid", "🚫"] }[t.verdict] || ["", ""]; return `<span class="verdict-tag ${m[0]}" title="${t.verdict_reason || ''}">${m[1]} ${t.verdict}</span>`; })() : ""}
+          ${t.big_move_setup ? `<span class="verdict-tag big-move" title="Confirmed cross + 3-week accumulation + Quality ${t.quality_score}/5">🚀 Big Move Setup</span>` : ""}
+          ${t.verdict ? (() => { const m = { "BUY-READY": ["buy-ready", "✅"], "WATCH": ["watch", "⏳"], "AVOID": ["avoid", "🚫"] }[t.verdict] || ["", ""]; return `<span class="verdict-tag ${m[0]}">${m[1]} ${t.verdict}${t.verdict_reason ? " — " + t.verdict_reason : ""}</span>`; })() : ""}
           ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
@@ -385,6 +389,8 @@ function renderClosed(trades) {
     container.innerHTML = '<div class="empty">No closed trades yet.</div>';
     return;
   }
+  // Same pin-to-top for consistency with the open-positions list.
+  trades = [...trades].sort((a, b) => (b.big_move_setup ? 1 : 0) - (a.big_move_setup ? 1 : 0));
 
   container.innerHTML = trades.map((t) => {
     const plCls = t.pl_amount >= 0 ? "gain" : "loss";
@@ -393,7 +399,8 @@ function renderClosed(trades) {
         <div>
           <div class="label">Symbol</div>
              <div class="symbol">${t.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${t.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a><button class="analyze-btn" data-symbol="${t.symbol}" title="Analyze ${t.symbol}">📊 Analyse</button></div>
-          ${t.verdict ? (() => { const m = { "BUY-READY": ["buy-ready", "✅"], "WATCH": ["watch", "⏳"], "AVOID": ["avoid", "🚫"] }[t.verdict] || ["", ""]; return `<span class="verdict-tag ${m[0]}" title="${t.verdict_reason || ''}">${m[1]} ${t.verdict}</span>`; })() : ""}
+          ${t.big_move_setup ? `<span class="verdict-tag big-move" title="Confirmed cross + 3-week accumulation + Quality ${t.quality_score}/5">🚀 Big Move Setup</span>` : ""}
+          ${t.verdict ? (() => { const m = { "BUY-READY": ["buy-ready", "✅"], "WATCH": ["watch", "⏳"], "AVOID": ["avoid", "🚫"] }[t.verdict] || ["", ""]; return `<span class="verdict-tag ${m[0]}">${m[1]} ${t.verdict}${t.verdict_reason ? " — " + t.verdict_reason : ""}</span>`; })() : ""}
           ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}

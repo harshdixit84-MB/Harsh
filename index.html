@@ -415,6 +415,13 @@ table.stock-table {
   border: 1px solid #7f1d1d !important;
   font-weight: 800 !important;
 }
+.mini-tag.big-move-badge {
+  color: #1a1206 !important;
+  background: linear-gradient(90deg, #ffd60a, #ffa500) !important;
+  border: 1px solid #b8860b !important;
+  font-weight: 800 !important;
+  box-shadow: 0 0 6px rgba(255, 214, 10, 0.5);
+}
 
 .quality-badge {
   font-size: 10px;
@@ -1121,13 +1128,27 @@ function verdictBadge(stock) {
   // status below, which is about YOUR manually-set buy_target price being
   // hit -- this verdict is about the EMA/delivery cross + footprint
   // evidence, independent of any specific target price.
+  // Reason is shown INLINE, not just as a hover tooltip -- a badge that
+  // reads "AVOID" next to a high quality score with no visible reason is
+  // exactly the kind of thing that looked like a bug (it wasn't -- it was
+  // an invisible Bearish-regime override).
   if (!stock.verdict) return "";
   const meta = {
     "BUY-READY": { emoji: "✅", cls: "verdict-buy" },
     "WATCH": { emoji: "⏳", cls: "verdict-watch" },
     "AVOID": { emoji: "🚫", cls: "verdict-avoid" },
   }[stock.verdict] || { emoji: "", cls: "" };
-  return `<span class="mini-tag ${meta.cls}" title="${stock.verdict_reason || ''}">${meta.emoji} ${stock.verdict}</span>`;
+  return `<span class="mini-tag ${meta.cls}">${meta.emoji} ${stock.verdict}${stock.verdict_reason ? ` — ${stock.verdict_reason}` : ""}</span>`;
+}
+
+function bigMoveBadge(stock) {
+  // The specific "catch a big move" combo: BUY-READY + weeks of real
+  // accumulation (not just one good day) + a strong quality score. Every
+  // big-move setup is also BUY-READY, but not the reverse -- this is the
+  // narrower, higher-conviction subset, made visually distinct so it's easy
+  // to spot in a scan of many rows without reading every badge.
+  if (!stock.big_move_setup) return "";
+  return `<span class="mini-tag big-move-badge" title="Confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5">🚀 Big Move Setup</span>`;
 }
 
 function renderRow(stock) {
@@ -1139,6 +1160,7 @@ function renderRow(stock) {
 
   // 1. Group Green Elements
   const greenTags = [];
+  greenTags.push(bigMoveBadge(stock));
   greenTags.push(verdictBadge(stock));
   if (stock.buying_selling_verdict === "Heavy Buying") greenTags.push(`<span class="mini-tag dv-buying" title="Heavy Buying">Heavy Buying</span>`);
   if (stock.ema_cross_signal) {
@@ -1171,9 +1193,6 @@ function renderRow(stock) {
   if (stock.footprint_last_date && stock.footprint_days_since !== null && stock.footprint_days_since > 0) {
     neutralTags.push(`<span class="mini-tag" title="Last confirmed footprint day: ${stock.footprint_last_date}">🔎 Last footprint ${stock.footprint_days_since}d ago (${stock.footprint_last_weighted_score}/9)</span>`);
   }  if (stock.at_52w_retest) neutralTags.push(`<span class="mini-tag retest">🎯 52W Retest</span>`);
-  (stock.source || "").split(",").filter(Boolean).forEach((s) => {
-    neutralTags.push(`<span class="mini-tag">${s}</span>`);
-  });
 
   const allGroupedTags = [...greenTags, ...redTags, ...neutralTags].join("");
 
@@ -1267,6 +1286,10 @@ function computeFilteredStocks() {
   } else {
     filtered.sort((a, b) => (b.quality_score ?? -1) - (a.quality_score ?? -1));
   }
+
+  // Big Move Setups always float to the top, on top of whatever sort/filter
+  // is active -- the whole point is not having to hunt for them.
+  filtered.sort((a, b) => (b.big_move_setup ? 1 : 0) - (a.big_move_setup ? 1 : 0));
 
   return filtered;
 }

@@ -142,6 +142,37 @@ module.exports = async (req, res) => {
       // Footprint_Signals tab may not exist yet -- proceed without it, badges just won't show
     }
 
+    let harmonicBysymbol = {};
+    try {
+      const hpResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Harmonic_Patterns!A1:S1000",
+      });
+      const hpRows = hpResponse.data.values || [];
+      if (hpRows.length > 0) {
+        const hpHeaders = hpRows[0];
+        const idx = (name) => hpHeaders.indexOf(name);
+        const symbolIdx = idx("symbol");
+        hpRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol && row[idx("pattern")]) {
+            harmonicBysymbol[symbol] = {
+              pattern: row[idx("pattern")],
+              direction: row[idx("direction")],
+              xPrice: row[idx("x_price")], aPrice: row[idx("a_price")],
+              bPrice: row[idx("b_price")], cPrice: row[idx("c_price")],
+              dPrice: row[idx("d_price")], dDate: row[idx("d_date")],
+              stopLoss: row[idx("stop_loss")],
+              target1: row[idx("target_1")], target2: row[idx("target_2")], target3: row[idx("target_3")],
+              daysSinceD: row[idx("days_since_d")],
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // Harmonic_Patterns tab may not exist yet -- proceed without it
+    }
+
     function attachDvInfo(t) {
       t.buying_selling_verdict = dvSummaryBysymbol[t.symbol]?.buyingSellingVerdict || "";
       t.dv_decision = dvSummaryBysymbol[t.symbol]?.decision || "";
@@ -165,6 +196,25 @@ module.exports = async (req, res) => {
       t.verdict = v.verdict;
       t.verdict_reason = v.reason;
       t.big_move_setup = isBigMoveSetup(t);
+
+      const hp = harmonicBysymbol[t.symbol];
+      if (hp) {
+        t.harmonic_pattern = hp.pattern;
+        t.harmonic_direction = hp.direction;
+        t.harmonic_x = parseFloat(hp.xPrice);
+        t.harmonic_a = parseFloat(hp.aPrice);
+        t.harmonic_b = parseFloat(hp.bPrice);
+        t.harmonic_c = parseFloat(hp.cPrice);
+        t.harmonic_d = parseFloat(hp.dPrice);
+        t.harmonic_d_date = hp.dDate;
+        t.harmonic_stop_loss = parseFloat(hp.stopLoss);
+        t.harmonic_target_1 = parseFloat(hp.target1);
+        t.harmonic_target_2 = parseFloat(hp.target2);
+        t.harmonic_target_3 = parseFloat(hp.target3);
+        t.harmonic_days_since_d = hp.daysSinceD !== "" ? parseInt(hp.daysSinceD) : null;
+      } else {
+        t.harmonic_pattern = null;
+      }
       return t;
     }
 

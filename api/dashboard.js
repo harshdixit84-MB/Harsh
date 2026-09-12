@@ -136,6 +136,37 @@ module.exports = async (req, res) => {
       // Footprint_Signals tab may not exist yet -- proceed without it
     }
 
+    let harmonicBysymbol = {};
+    try {
+      const hpResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Harmonic_Patterns!A1:S1000",
+      });
+      const hpRows = hpResponse.data.values || [];
+      if (hpRows.length > 0) {
+        const hpHeaders = hpRows[0];
+        const idx = (name) => hpHeaders.indexOf(name);
+        const symbolIdx = idx("symbol");
+        hpRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol && row[idx("pattern")]) {
+            harmonicBysymbol[symbol] = {
+              pattern: row[idx("pattern")],
+              direction: row[idx("direction")],
+              xPrice: row[idx("x_price")], aPrice: row[idx("a_price")],
+              bPrice: row[idx("b_price")], cPrice: row[idx("c_price")],
+              dPrice: row[idx("d_price")], dDate: row[idx("d_date")],
+              stopLoss: row[idx("stop_loss")],
+              target1: row[idx("target_1")], target2: row[idx("target_2")], target3: row[idx("target_3")],
+              daysSinceD: row[idx("days_since_d")],
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // Harmonic_Patterns tab may not exist yet -- proceed without it
+    }
+
     let notesBysymbol = {};
     try {
       const notesResponse = await sheets.spreadsheets.values.get({
@@ -269,6 +300,25 @@ module.exports = async (req, res) => {
       r.verdict = v.verdict;
       r.verdict_reason = v.reason;
       r.big_move_setup = isBigMoveSetup(r);
+
+      const hp = harmonicBysymbol[r.symbol];
+      if (hp) {
+        r.harmonic_pattern = hp.pattern;
+        r.harmonic_direction = hp.direction;
+        r.harmonic_x = parseFloat(hp.xPrice);
+        r.harmonic_a = parseFloat(hp.aPrice);
+        r.harmonic_b = parseFloat(hp.bPrice);
+        r.harmonic_c = parseFloat(hp.cPrice);
+        r.harmonic_d = parseFloat(hp.dPrice);
+        r.harmonic_d_date = hp.dDate;
+        r.harmonic_stop_loss = parseFloat(hp.stopLoss);
+        r.harmonic_target_1 = parseFloat(hp.target1);
+        r.harmonic_target_2 = parseFloat(hp.target2);
+        r.harmonic_target_3 = parseFloat(hp.target3);
+        r.harmonic_days_since_d = hp.daysSinceD !== "" ? parseInt(hp.daysSinceD) : null;
+      } else {
+        r.harmonic_pattern = null;
+      }
 
       const emaSig = emaSignalsBysymbol[r.symbol] || {};
       const truthy = (v) => v === true || v === "TRUE" || v === "true";

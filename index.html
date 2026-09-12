@@ -1151,6 +1151,22 @@ function bigMoveBadge(stock) {
   return `<span class="mini-tag big-move-badge" title="Confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5">🚀 Big Move Setup</span>`;
 }
 
+function harmonicBadge(stock) {
+  // Confirmed XABCD harmonic pattern (Gartley/Bat/Butterfly/Crab/AB=CD).
+  // Direction comes straight from whether D is a swing low (Bullish) or
+  // swing high (Bearish) -- double-checked deliberately, since the old
+  // Pine Script version had bullish/bearish swapped.
+  if (!stock.harmonic_pattern) return "";
+  // Only surface it while it's still fresh -- an XABCD confirmed weeks ago
+  // isn't something to act on today.
+  if (stock.harmonic_days_since_d === null || stock.harmonic_days_since_d > 15) return "";
+  const isBullish = stock.harmonic_direction === "Bullish";
+  const cls = isBullish ? "verdict-buy" : "verdict-avoid";
+  const emoji = isBullish ? "📐🟢" : "📐🔴";
+  const title = `X ₹${stock.harmonic_x} → A ₹${stock.harmonic_a} → B ₹${stock.harmonic_b} → C ₹${stock.harmonic_c} → D ₹${stock.harmonic_d} (${stock.harmonic_d_date}) · Stop ₹${stock.harmonic_stop_loss} · Targets ₹${stock.harmonic_target_1} / ₹${stock.harmonic_target_2} / ₹${stock.harmonic_target_3}`;
+  return `<span class="mini-tag ${cls}" title="${title}">${emoji} ${stock.harmonic_direction} ${stock.harmonic_pattern} @ D</span>`;
+}
+
 function renderRow(stock) {
   const cls = classify(stock);
 
@@ -1161,6 +1177,7 @@ function renderRow(stock) {
   // 1. Group Green Elements
   const greenTags = [];
   greenTags.push(bigMoveBadge(stock));
+  greenTags.push(harmonicBadge(stock));
   greenTags.push(verdictBadge(stock));
   if (stock.buying_selling_verdict === "Heavy Buying") greenTags.push(`<span class="mini-tag dv-buying" title="Heavy Buying">Heavy Buying</span>`);
   if (stock.ema_cross_signal) {

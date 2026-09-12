@@ -613,6 +613,23 @@ setInterval(loadTrades, 5 * 60 * 1000);
       html += "<div class='analyzer-kv'><span>Status</span><span>" + escapeHtml(result.momentum_confirmation.status) + "</span></div>";
     }
 
+    var chart = result.chart_read;
+    if(chart && !chart.error){
+      var biasColor = { bullish: "#0d6e38", bearish: "#b91c1c", neutral: "#64748b" }[chart.todays_candle_bias] || "inherit";
+      html += "<div class='analyzer-section-title'>\u{1F4CA} Chart Read</div>";
+      html += "<div class='analyzer-kv'><span>Trend</span><span><b>" + escapeHtml(chart.trend) + "</b></span></div>";
+      if(chart.nearest_support !== null){
+        html += "<div class='analyzer-kv'><span>Support</span><span>&#8377;" + chart.nearest_support + " (" + chart.distance_to_support_pct + "% below)</span></div>";
+      }
+      if(chart.nearest_resistance !== null){
+        html += "<div class='analyzer-kv'><span>Resistance</span><span>&#8377;" + chart.nearest_resistance + " (" + chart.distance_to_resistance_pct + "% above)</span></div>";
+      }
+      html += "<div class='analyzer-kv'><span>Today's candle</span><span style='color:" + biasColor + ";font-weight:700;'>" + escapeHtml(chart.todays_candle_pattern) + " (" + escapeHtml(chart.todays_candle_bias) + ")</span></div>";
+      html += "<div class='analyzer-kv'><span>RSI(14)</span><span>" + chart.rsi_14 + " \u2014 " + escapeHtml(chart.rsi_zone) + "</span></div>";
+      html += "<div class='analyzer-kv'><span>Volume</span><span>" + escapeHtml(chart.volume_vs_20d_avg) + "</span></div>";
+      html += "<div style='font-size:12px;font-style:italic;margin-top:6px;color:#475569;'>Reversal watch: " + escapeHtml(chart.reversal_watch) + "</div>";
+    }
+
     if(result.strategy_ranking){
       html += "<div class='analyzer-section-title'>Strategy Ranking (win rate)</div>";
       result.strategy_ranking.forEach(function(r){

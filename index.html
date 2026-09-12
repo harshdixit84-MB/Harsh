@@ -1639,6 +1639,21 @@ function renderAnalyzeResult(result) {
     html += `<div style="margin-bottom:10px;">Momentum (MACD): ${result.momentum_confirmation.status}</div>`;
   }
 
+  const chart = result.chart_read;
+  if (chart && !chart.error) {
+    const biasColor = { bullish: "var(--accent-buy, #0d6e38)", bearish: "var(--accent-loss, #b91c1c)", neutral: "var(--text-secondary, #666)" }[chart.todays_candle_bias] || "inherit";
+    html += `<div style="margin-bottom:10px; padding:10px; border:1px solid var(--border,#ddd); border-radius:8px;">
+      <div style="font-weight:700; margin-bottom:6px;">📊 Chart Read</div>
+      <div>Trend: <b>${chart.trend}</b></div>
+      ${chart.nearest_support !== null ? `<div>Support: ₹${chart.nearest_support} (${chart.distance_to_support_pct}% below)</div>` : ""}
+      ${chart.nearest_resistance !== null ? `<div>Resistance: ₹${chart.nearest_resistance} (${chart.distance_to_resistance_pct}% above)</div>` : ""}
+      <div>Today's candle: <span style="color:${biasColor}; font-weight:700;">${chart.todays_candle_pattern}</span> (${chart.todays_candle_bias})</div>
+      <div>RSI(14): ${chart.rsi_14} — ${chart.rsi_zone}</div>
+      <div>Volume: ${chart.volume_vs_20d_avg}</div>
+      <div style="margin-top:6px; font-style:italic;">Reversal watch: ${chart.reversal_watch}</div>
+    </div>`;
+  }
+
   if (result.strategy_ranking) {
     html += `<div style="font-size:11px; color:var(--text-secondary); margin-bottom:6px;">Ranking by backtested win rate:</div>`;
     result.strategy_ranking.forEach((r) => {

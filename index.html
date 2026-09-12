@@ -397,6 +397,25 @@ table.stock-table {
   font-weight: 800 !important;
 }
 
+.mini-tag.verdict-buy {
+  color: #ffffff !important;
+  background: #0d6e38 !important;
+  border: 1px solid #064220 !important;
+  font-weight: 800 !important;
+}
+.mini-tag.verdict-watch {
+  color: #1a1206 !important;
+  background: #ffa500 !important;
+  border: 1px solid #b8860b !important;
+  font-weight: 800 !important;
+}
+.mini-tag.verdict-avoid {
+  color: #ffffff !important;
+  background: #b91c1c !important;
+  border: 1px solid #7f1d1d !important;
+  font-weight: 800 !important;
+}
+
 .quality-badge {
   font-size: 10px;
   padding: 1px 6px;
@@ -1095,6 +1114,22 @@ function renderQualityRow(stock) {
   `;
 }
 
+function verdictBadge(stock) {
+  // Same tiering as notify.py's compute_verdict() / lib/verdict.js -- keeps
+  // Telegram, this dashboard, and the P/L tracker all showing the same call
+  // for the same stock. This is separate from the "Confirmed"/"Watching"
+  // status below, which is about YOUR manually-set buy_target price being
+  // hit -- this verdict is about the EMA/delivery cross + footprint
+  // evidence, independent of any specific target price.
+  if (!stock.verdict) return "";
+  const meta = {
+    "BUY-READY": { emoji: "✅", cls: "verdict-buy" },
+    "WATCH": { emoji: "⏳", cls: "verdict-watch" },
+    "AVOID": { emoji: "🚫", cls: "verdict-avoid" },
+  }[stock.verdict] || { emoji: "", cls: "" };
+  return `<span class="mini-tag ${meta.cls}" title="${stock.verdict_reason || ''}">${meta.emoji} ${stock.verdict}</span>`;
+}
+
 function renderRow(stock) {
   const cls = classify(stock);
 
@@ -1104,6 +1139,7 @@ function renderRow(stock) {
 
   // 1. Group Green Elements
   const greenTags = [];
+  greenTags.push(verdictBadge(stock));
   if (stock.buying_selling_verdict === "Heavy Buying") greenTags.push(`<span class="mini-tag dv-buying" title="Heavy Buying">Heavy Buying</span>`);
   if (stock.ema_cross_signal) {
     greenTags.push(`<span class="mini-tag cross-bull">📈 20/50 Cross+Vol → ₹${stock.ema_cross_target}</span>`);

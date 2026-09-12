@@ -1,4 +1,5 @@
 const { google } = require("googleapis");
+const { computeVerdict } = require("../lib/verdict");
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -263,6 +264,10 @@ module.exports = async (req, res) => {
       r.footprint_last_date = fp?.lastDate || "";
       r.footprint_last_weighted_score = fp && fp.lastWeightedScore !== "" ? parseInt(fp.lastWeightedScore) : null;
       r.footprint_days_since = fp && fp.daysSince !== "" ? parseInt(fp.daysSince) : null;
+
+      const v = computeVerdict(r);
+      r.verdict = v.verdict;
+      r.verdict_reason = v.reason;
 
       const emaSig = emaSignalsBysymbol[r.symbol] || {};
       const truthy = (v) => v === true || v === "TRUE" || v === "true";

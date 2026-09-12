@@ -240,6 +240,9 @@ button.action-btn.saving { opacity: 0.5; pointer-events: none; }
 }
 .verdict-tag.buying { background: #166534; color: #ffffff; border: 2px solid #0f4c26; }
 .verdict-tag.selling { background: #991b1b; color: #ffffff; border: 2px solid #6b1414; }
+.verdict-tag.buy-ready { background: #166534; color: #ffffff; border: 2px solid #0f4c26; font-weight: 800; }
+.verdict-tag.watch { background: #ffa500; color: #1a1206; border: 2px solid #b8860b; font-weight: 800; }
+.verdict-tag.avoid { background: #991b1b; color: #ffffff; border: 2px solid #6b1414; font-weight: 800; }
 
 @media (max-width: 700px) {
   .stats { grid-template-columns: repeat(2, 1fr); }
@@ -355,6 +358,7 @@ function renderOpen(trades) {
         <div>
           <div class="label">Symbol</div>
              <div class="symbol">${t.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${t.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a><button class="analyze-btn" data-symbol="${t.symbol}" title="Analyze ${t.symbol}">📊 Analyse</button></div>
+          ${t.verdict ? (() => { const m = { "BUY-READY": ["buy-ready", "✅"], "WATCH": ["watch", "⏳"], "AVOID": ["avoid", "🚫"] }[t.verdict] || ["", ""]; return `<span class="verdict-tag ${m[0]}" title="${t.verdict_reason || ''}">${m[1]} ${t.verdict}</span>`; })() : ""}
           ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}
@@ -389,6 +393,7 @@ function renderClosed(trades) {
         <div>
           <div class="label">Symbol</div>
              <div class="symbol">${t.symbol}<a href="https://www.tradingview.com/chart/?symbol=NSE:${t.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a><button class="analyze-btn" data-symbol="${t.symbol}" title="Analyze ${t.symbol}">📊 Analyse</button></div>
+          ${t.verdict ? (() => { const m = { "BUY-READY": ["buy-ready", "✅"], "WATCH": ["watch", "⏳"], "AVOID": ["avoid", "🚫"] }[t.verdict] || ["", ""]; return `<span class="verdict-tag ${m[0]}" title="${t.verdict_reason || ''}">${m[1]} ${t.verdict}</span>`; })() : ""}
           ${t.high_dv ? `<span class="high-dv-tag">⬤ High DV</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Buying" ? `<span class="verdict-tag buying">Heavy Buying</span>` : ""}
           ${t.buying_selling_verdict === "Heavy Selling" ? `<span class="verdict-tag selling">Heavy Selling</span>` : ""}

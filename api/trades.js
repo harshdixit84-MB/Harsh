@@ -1,4 +1,5 @@
 const { google } = require("googleapis");
+const { computeVerdict } = require("../lib/verdict");
 
 async function getLivePrice(symbol) {
   try {
@@ -56,22 +57,22 @@ module.exports = async (req, res) => {
     try {
       const dvResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "DV_Summary!A1:G1000",
+        range: "DV_Summary!A1:L1000",
       });
       const dvRows = dvResponse.data.values || [];
       if (dvRows.length > 0) {
         const dvHeaders = dvRows[0];
         const dvSymbolIdx = dvHeaders.indexOf("symbol");
-        const tagIdx = dvHeaders.indexOf("high_dv_tag");
         const verdictIdx = dvHeaders.indexOf("buying_selling_verdict");
+        const decisionIdx = dvHeaders.indexOf("decision");
         dvRows.slice(1).forEach((row) => {
           const symbol = row[dvSymbolIdx];
-          const tag = row[tagIdx];
           const verdict = verdictIdx !== -1 ? row[verdictIdx] : "";
+          const decision = decisionIdx !== -1 ? row[decisionIdx] : "";
           if (symbol) {
             dvSummaryBysymbol[symbol] = {
-              highDv: tag === "TRUE" || tag === "true" || tag === true,
               buyingSellingVerdict: verdict || "",
+              decision: decision || "",
             };
           }
         });
@@ -79,6 +80,31 @@ module.exports = async (req, res) => {
     } catch (e) {
       // DV_Summary tab may not exist yet, or symbol isn't in the tracked
       // screener list -- proceed without it, badges just won't show
+    }
+
+    let scanBysymbol = {};
+    try {
+      const scanResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "Sheet1!A1:AF1000",
+      });
+      const scanRows = scanResponse.data.values || [];
+      if (scanRows.length > 0) {
+        const scanHeaders = scanRows[0];
+        const idx = (name) => scanHeaders.indexOf(name);
+        const symbolIdx = idx("symbol");
+        scanRows.slice(1).forEach((row) => {
+          const symbol = row[symbolIdx];
+          if (symbol) {
+            scanBysymbol[symbol] = {
+              qualityScore: row[idx("quality_score")],
+              marketRegime: row[idx("market_regime")],
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // Sheet1 lookup failed -- verdict will just show "Quality score not available yet"
     }
 
     let footprintBysymbol = {};
@@ -117,8 +143,11 @@ module.exports = async (req, res) => {
     }
 
     function attachDvInfo(t) {
-      t.high_dv = dvSummaryBysymbol[t.symbol]?.highDv || false;
       t.buying_selling_verdict = dvSummaryBysymbol[t.symbol]?.buyingSellingVerdict || "";
+      t.dv_decision = dvSummaryBysymbol[t.symbol]?.decision || "";
+      const scan = scanBysymbol[t.symbol];
+      t.quality_score = scan && scan.qualityScore !== undefined && scan.qualityScore !== "" ? parseInt(scan.qualityScore) : null;
+      t.market_regime = scan?.marketRegime || "";
       const fp = footprintBysymbol[t.symbol];
       t.footprint_weighted_score = fp && fp.weightedScore !== "" ? parseInt(fp.weightedScore) : null;
       t.footprint_volume_component = fp && fp.volumeComponent !== "" ? parseInt(fp.volumeComponent) : null;
@@ -132,6 +161,9 @@ module.exports = async (req, res) => {
       t.footprint_last_date = fp?.lastDate || "";
       t.footprint_last_weighted_score = fp && fp.lastWeightedScore !== "" ? parseInt(fp.lastWeightedScore) : null;
       t.footprint_days_since = fp && fp.daysSince !== "" ? parseInt(fp.daysSince) : null;
+      const v = computeVerdict(t);
+      t.verdict = v.verdict;
+      t.verdict_reason = v.reason;
       return t;
     }
 

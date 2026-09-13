@@ -903,6 +903,8 @@ LIVE
 
 <div class="toolbar">
 <input type="text" id="stock-search" placeholder="Search by symbol or name…" />
+<input type="text" id="manual-analyze-input" placeholder="Analyze any symbol…" style="margin-left:8px;" />
+<button id="manual-analyze-btn" class="analyze-btn" style="margin-left:4px;">Analyze</button>
 
 <div class="quick-row">
 <label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
@@ -912,6 +914,9 @@ LIVE
 <label class="chip-check" id="chip-emapullback"><input type="checkbox" data-quick="emaPullback"><span>EMA Pullback</span></label>
 <label class="chip-check" id="chip-emaretest"><input type="checkbox" data-quick="emaRetest"><span>EMA Retest</span></label>
 <label class="chip-check" id="chip-retest52w"><input type="checkbox" data-quick="retest52w"><span>🎯 52W Retest</span></label>
+<label class="chip-check" id="chip-dpoint"><input type="checkbox" data-quick="dPoint"><span>📐 D Point</span></label>
+<label class="chip-check" id="chip-buyers"><input type="checkbox" data-quick="bigBuyers"><span>🔎 Big Players Buying</span></label>
+<label class="chip-check" id="chip-sellers"><input type="checkbox" data-quick="bigSellers"><span>🔎 Big Players Selling</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 <button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
 </div>
@@ -1005,7 +1010,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, retest52w: false };
+let quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, retest52w: false, dPoint: false, bigBuyers: false, bigSellers: false };
 let buysellFilter = "all";
 let decisionFilter = "all";
 let sourceFilter = "all";
@@ -1204,10 +1209,6 @@ function renderRow(stock) {
 
   // 3. Neutral / Other Tags
   const neutralTags = [];
-  if (stock.distance_pct !== undefined && stock.distance_pct <= 0 && !qualityOk(stock)) {
-    const why = stock.market_regime === "Bearish" ? "Bearish market regime" : `Quality ${stock.quality_score}/5`;
-    neutralTags.push(`<span class="mini-tag" style="color:#ffa500;border-color:rgba(255,165,0,0.4);" title="Price hit your target but held back from Confirmed">⚠ Held (${why})</span>`);
-  }
   if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
   if (stock.footprint_last_date && stock.footprint_days_since !== null && stock.footprint_days_since > 0) {
     neutralTags.push(`<span class="mini-tag" title="Last confirmed footprint day: ${stock.footprint_last_date}">🔎 Big players ${(stock.footprint_last_direction || '').toUpperCase()} ${stock.footprint_days_since}d ago</span>`);
@@ -1292,6 +1293,9 @@ function computeFilteredStocks() {
   if (quickFilters.emaPullback) filtered = filtered.filter((s) => !!s.ema_pullback_signal);
   if (quickFilters.emaRetest) filtered = filtered.filter((s) => !!s.ema_retest_signal);
   if (quickFilters.retest52w) filtered = filtered.filter((s) => !!s.at_52w_retest);
+  if (quickFilters.dPoint) filtered = filtered.filter((s) => !!s.harmonic_pattern && s.harmonic_days_since_c !== null && s.harmonic_days_since_c <= 20);
+  if (quickFilters.bigBuyers) filtered = filtered.filter((s) => s.footprint_weighted_score !== null && s.footprint_weighted_score >= 4 && s.footprint_direction === "Buying");
+  if (quickFilters.bigSellers) filtered = filtered.filter((s) => s.footprint_weighted_score !== null && s.footprint_weighted_score >= 4 && s.footprint_direction === "Selling");
 
   if (currentSearch.trim() !== "") {
     const q = currentSearch.trim().toLowerCase();
@@ -1513,7 +1517,7 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, retest52w: false };
+  quickFilters = { neartarget: false, nearsl: false, needtarget: false, emaCross: false, emaPullback: false, emaRetest: false, retest52w: false, dPoint: false, bigBuyers: false, bigSellers: false };
   document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");
@@ -1596,6 +1600,16 @@ document.getElementById("close-watchlist").addEventListener("click", () => {
 });
 document.getElementById("watchlist-overlay").addEventListener("click", (e) => {
   if (e.target.id === "watchlist-overlay") e.target.classList.remove("open");
+});
+
+function runManualAnalyze() {
+  const symbol = document.getElementById("manual-analyze-input").value.trim().toUpperCase();
+  if (!symbol) return;
+  openAnalyze(symbol);
+}
+document.getElementById("manual-analyze-btn").addEventListener("click", runManualAnalyze);
+document.getElementById("manual-analyze-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") runManualAnalyze();
 });
 
 document.getElementById("watchlist-rows").addEventListener("click", async (e) => {

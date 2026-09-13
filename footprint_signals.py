@@ -182,6 +182,15 @@ def compute_footprint(df):
     df["volume_component"] = sum(df[k].astype(int) * WEIGHTS[k] for k in volume_cols)
     df["pattern_component"] = sum(df[k].astype(int) * WEIGHTS[k] for k in pattern_cols)
     df["weighted_score"] = df["volume_component"] + df["pattern_component"]
+
+    # Plain-language direction for whichever day gets reported -- a score
+    # tells you a footprint happened, not which way. Close > open on that
+    # day means the size that traded pushed price up (players buying);
+    # close < open means it pushed price down (players selling).
+    df["direction"] = pd.Series(
+        ["Buying" if cv > ov else ("Selling" if cv < ov else "Neutral") for cv, ov in zip(c, o)],
+        index=df.index,
+    )
     return df
 
 
@@ -195,9 +204,9 @@ def main():
     header = [
         "symbol", "footprint_score", "footprint_weighted_score",
         "footprint_volume_component", "footprint_pattern_component",
-        "footprint_volume_signals", "footprint_pattern_signals",
+        "footprint_volume_signals", "footprint_pattern_signals", "footprint_direction",
         "weekly_accumulation", "weekly_vol_ratio", "weekly_bias", "weekly_price_run_pct",
-        "last_footprint_date", "last_footprint_weighted_score", "days_since_footprint",
+        "last_footprint_date", "last_footprint_weighted_score", "last_footprint_direction", "days_since_footprint",
         "last_updated",
     ]
     ws = get_or_create_sheet(spreadsheet, FOOTPRINT_SHEET, header)
@@ -221,13 +230,14 @@ def main():
         # rolling daily signals on top of that.
         if hist is None or len(hist) < WEEKLY_WINDOW + BASELINE_WINDOW + 20:
             skipped += 1
-            rows.append([symbol, "", "", "", "", "", "", "", "", "", "", "", "", "", today_str])
+            rows.append([symbol] + [""] * (len(header) - 2) + [today_str])
             continue
 
         scored = compute_footprint(hist)
         last = scored.iloc[-1]
         volume_signals = [k for k in volume_cols if bool(last[k])]
         pattern_signals = [k for k in pattern_cols if bool(last[k])]
+        today_direction = last["direction"]
 
         weekly_accum = bool(last["weekly_accumulation"]) if pd.notna(last["weekly_accumulation"]) else False
         weekly_vol_ratio = round(last["weekly_vol_ratio"], 2) if pd.notna(last["weekly_vol_ratio"]) else ""
@@ -244,8 +254,9 @@ def main():
             last_real_date = last_real.name.date()
             days_since = (today - last_real_date).days
             last_real_weighted = int(last_real["weighted_score"])
+            last_real_direction = last_real["direction"]
         else:
-            last_real_date, days_since, last_real_weighted = "", "", ""
+            last_real_date, days_since, last_real_weighted, last_real_direction = "", "", "", ""
 
         rows.append([
             symbol,
@@ -255,18 +266,20 @@ def main():
             int(last["pattern_component"]),
             ", ".join(volume_signals),
             ", ".join(pattern_signals),
+            today_direction,
             weekly_accum,
             weekly_vol_ratio,
             weekly_bias,
             weekly_price_run,
             str(last_real_date) if last_real_date != "" else "",
             last_real_weighted,
+            last_real_direction,
             days_since,
             today_str,
         ])
 
         if last["weighted_score"] >= HIGH_FOOTPRINT_CUTOFF:
-            print(f"{symbol}: footprint TODAY, weighted {int(last['weighted_score'])} "
+            print(f"{symbol}: footprint TODAY -- big players {today_direction.upper()}, weighted {int(last['weighted_score'])} "
                   f"(volume {int(last['volume_component'])}, pattern {int(last['pattern_component'])}) "
                   f"-- vol: {', '.join(volume_signals) or 'none'} | pattern: {', '.join(pattern_signals) or 'none'}")
         if weekly_accum:

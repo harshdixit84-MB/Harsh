@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sideways Range</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#ffffff;
+  --surface-1:#ffffff;
+  --border: #cbd5e1;
+  --text-primary:#111827;
+  --text-secondary:#475569;
+  --accent-tracking: #1d4ed8;
+  --accent-long: #166534;
+  --accent-short: #991b1b;
+  --accent-pending: #a16207;
+  --accent-entered: #0e7490;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: "IBM Plex Mono", monospace;
+  min-height: 100vh;
+}
+
+.wrap { max-width: 900px; margin: 0 auto; padding: 32px 20px 60px; }
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #94a3b8;
+}
+
+.title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 26px; color: #0f172a; }
+.subtitle { color: var(--text-secondary); font-size: 12px; margin-top: 4px; }
+.back-link {
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: none;
+  background: #ffffff;
+  border: 2px solid #94a3b8;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.back-link:hover { color: var(--text-primary); border-color: #111827; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.stat-box {
+  background: var(--surface-1);
+  border: 2px solid #334155;
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: 0 3px 10px rgba(15,23,42,.06);
+}
+.stat-box .label { font-family: "Space Grotesk", sans-serif; color: var(--text-primary); font-size: 15px; font-weight: 600; letter-spacing: 0.01em; margin-bottom: 6px; }
+.stat-box .num { font-family: "IBM Plex Mono", monospace; color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+
+.dash-section { margin: 0 0 18px 0; }
+.dash-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #eef3f8;
+  border: 2px solid #334155;
+  border-radius: 9px 9px 0 0;
+  color: #0f172a;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.dash-section-body {
+  border-left: 2px solid #334155;
+  border-right: 2px solid #334155;
+  border-bottom: 2px solid #334155;
+  border-radius: 0 0 9px 9px;
+  padding: 14px;
+  background: #ffffff;
+}
+.dash-section.minimized .dash-section-head { border-radius: 9px; border-bottom: 2px solid #334155; }
+.dash-section.minimized .dash-section-body { display: none; }
+.dash-min-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 30px;
+  border: 2px solid #0f172a;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 24px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.dash-min-btn:hover { background: #dbeafe; border-color: #1d4ed8; color: #1d4ed8; }
+.dash-min-btn .dash-icon { display: block; transform: translateY(-1px); }
+
+.rows { display: flex; flex-direction: column; gap: 6px; }
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  background: var(--surface-1);
+  border: 2px solid #334155;
+  border-left: 6px solid #334155;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 12px;
+  box-shadow: 0 3px 10px rgba(15,23,42,.06);
+}
+.row.long-row { border-left-color: var(--accent-long); }
+.row.short-row { border-left-color: var(--accent-short); }
+
+.row-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.row .symbol { font-weight: 600; font-size: 14px; }
+.row .label { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+.row-fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.row-fields .field { min-width: 0; }
+.row-fields .val { font-size: 12px; font-weight: 500; }
+.row-note { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+.tv-link {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  background: #ffffff;
+  border: 2px solid #94a3b8;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.tv-link:hover { color: var(--accent-tracking); border-color: var(--accent-tracking); }
+
+.status-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  font-weight: 800;
+}
+.status-tag.pending { background: var(--accent-pending); color: #fff; border: 2px solid #7c4a05; }
+.status-tag.entered { background: var(--accent-entered); color: #fff; border: 2px solid #0b4a58; }
+.dir-tag { color: #fff; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-left: 6px; }
+.dir-tag.long { background: var(--accent-long); border: 2px solid #0f4c26; }
+.dir-tag.short { background: var(--accent-short); border: 2px solid #6b1414; }
+
+.empty { color: var(--text-secondary); text-align: center; padding: 30px 0; font-size: 13px; }
+.note-banner {
+  background: #fff7ed;
+  border: 2px solid #c2410c;
+  color: #7c2d12;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 700px) {
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .row-fields { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<div>
+<div class="title">Sideways Range</div>
+<div class="subtitle">Wyckoff Spring (long) / Upthrust (short) · weekly · price action &amp; volume only</div>
+</div>
+<a href="/" class="back-link">← Back to dashboard</a>
+</header>
+
+<div id="not-run-banner" class="note-banner" style="display:none;">
+No data yet — the weekly scan (<code>sideways_signals.py</code>, Fridays after close) hasn't run yet, or hasn't run since this page was added. Trigger it manually from the repo's Actions tab ("Sideways Range signals (weekly)" → Run workflow) to populate this.
+</div>
+
+<div class="stats">
+<div class="stat-box">
+<div class="label">Pending Entry</div>
+<div class="num" id="stat-pending">–</div>
+</div>
+<div class="stat-box">
+<div class="label">Entered</div>
+<div class="num" id="stat-entered">–</div>
+</div>
+<div class="stat-box">
+<div class="label">Long / Short</div>
+<div class="num" id="stat-longshort">–</div>
+</div>
+<div class="stat-box">
+<div class="label">Last Scan</div>
+<div class="num" id="stat-updated">–</div>
+</div>
+</div>
+
+<div class="dash-section" id="dash-section-live-setups">
+<div class="dash-section-head">
+<span>LIVE SETUPS</span>
+<button class="dash-min-btn" type="button" title="Minimize"><span class="dash-icon">−</span></button>
+</div>
+<div class="dash-section-body">
+<div class="rows" id="live-rows">
+<div class="empty">Loading…</div>
+</div>
+</div>
+</div>
+
+<div class="dash-section minimized" id="dash-section-all-scanned">
+<div class="dash-section-head">
+<span>ALL SCANNED SYMBOLS (no setup)</span>
+<button class="dash-min-btn" type="button" title="Minimize"><span class="dash-icon">−</span></button>
+</div>
+<div class="dash-section-body">
+<div class="rows" id="scanned-rows">
+<div class="empty">Loading…</div>
+</div>
+</div>
+</div>
+
+</div>
+
+<script>
+function tvLink(symbol) {
+  return `<a href="https://www.tradingview.com/chart/?symbol=NSE:${symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>`;
+}
+
+function renderSetupRow(s) {
+  const statusClass = s.status === "PENDING_ENTRY" ? "pending" : "entered";
+  const rowClass = s.direction === "LONG" ? "long-row" : "short-row";
+  const dirClass = s.direction === "LONG" ? "long" : "short";
+  const statusLabel = s.status === "PENDING_ENTRY" ? "Pending Entry" : "Entered";
+  const entryVal = s.status === "PENDING_ENTRY" ? "Next week's open" : (s.entryPrice || "–");
+
+  return `
+<div class="row ${rowClass}">
+  <div class="row-top">
+    <div class="symbol">${s.symbol}${tvLink(s.symbol)}<span class="dir-tag ${dirClass}">${s.direction}</span></div>
+    <span class="status-tag ${statusClass}">${statusLabel}</span>
+  </div>
+  <div class="row-fields">
+    <div class="field"><div class="label">Entry</div><div class="val">${entryVal}</div></div>
+    <div class="field"><div class="label">Stop-loss</div><div class="val">${s.stopLoss || "–"}</div></div>
+    <div class="field"><div class="label">Target</div><div class="val">${s.target || "–"}</div></div>
+    <div class="field"><div class="label">Pattern week</div><div class="val">${(s.patternWeek || "–").split(" ")[0]}</div></div>
+  </div>
+  <div class="row-fields">
+    <div class="field"><div class="label">Range resistance</div><div class="val">${s.rangeResistance || "–"}</div></div>
+    <div class="field"><div class="label">Range support</div><div class="val">${s.rangeSupport || "–"}</div></div>
+    <div class="field"><div class="label">Range width</div><div class="val">${s.rangeWidthPct ? s.rangeWidthPct + "%" : "–"}</div></div>
+    <div class="field"><div class="label">Volume trend</div><div class="val">${s.volumeTrend || "–"}</div></div>
+  </div>
+  ${s.entryNote ? `<div class="row-note">${s.entryNote}</div>` : ""}
+</div>`;
+}
+
+function renderScannedRow(s) {
+  return `
+<div class="row">
+  <div class="row-top">
+    <div class="symbol">${s.symbol}${tvLink(s.symbol)}</div>
+    <span style="color:var(--text-secondary);font-size:11px;">No setup</span>
+  </div>
+</div>`;
+}
+
+async function loadSideways() {
+  try {
+    const res = await fetch("/api/sideways?t=" + Date.now(), { cache: "no-store" });
+    const data = await res.json();
+
+    if (data.error) {
+      document.getElementById("live-rows").innerHTML = `<div class="empty">Error: ${data.error}</div>`;
+      return;
+    }
+
+    document.getElementById("stat-pending").textContent = data.summary.pending;
+    document.getElementById("stat-entered").textContent = data.summary.entered;
+    document.getElementById("stat-longshort").textContent = `${data.summary.longCount} / ${data.summary.shortCount}`;
+    document.getElementById("stat-updated").textContent = data.summary.lastUpdated || "–";
+
+    if (data.summary.notRunYet) {
+      document.getElementById("not-run-banner").style.display = "block";
+    }
+
+    const liveRowsEl = document.getElementById("live-rows");
+    liveRowsEl.innerHTML = data.setups.length === 0
+      ? `<div class="empty">No live setups right now.</div>`
+      : data.setups.map(renderSetupRow).join("");
+
+    const scannedNoSetup = data.allSymbols.filter(
+      (s) => s.status !== "PENDING_ENTRY" && s.status !== "ENTERED"
+    );
+    const scannedRowsEl = document.getElementById("scanned-rows");
+    scannedRowsEl.innerHTML = scannedNoSetup.length === 0
+      ? `<div class="empty">Nothing scanned yet.</div>`
+      : scannedNoSetup.map(renderScannedRow).join("");
+  } catch (e) {
+    document.getElementById("live-rows").innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`;
+  }
+}
+
+document.querySelectorAll(".dash-min-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    btn.closest(".dash-section").classList.toggle("minimized");
+  });
+});
+
+loadSideways();
+setInterval(loadSideways, 60000);
+</script>
+</body>
+</html>

@@ -27,7 +27,9 @@ Three ingredients, each pure price/volume:
 A DOWNTREND (or UPTREND) call requires structure AND at least one volume
 confirmation. Structure alone is downgraded to *_UNCONFIRMED -- this is
 deliberate, to avoid calling a trend on price shape alone, which is the
-most common way naive trend-following whipsaws.
+most common way naive trend-following whipsaws. A SIDEWAYS call is
+downgraded the same way if volume is building hard in one direction
+(that's usually a brewing breakout, not a stable range).
 """
 
 import pandas as pd
@@ -199,6 +201,13 @@ def classify_regime(daily_df: pd.DataFrame) -> dict:
     if regime == "UPTREND":
         if volume_trend["read"] == "SELLING_PRESSURE_EXPANDING":
             regime = "UPTREND_UNCONFIRMED"
+    if regime == "SIDEWAYS":
+        # A real range should NOT show volume building hard in one
+        # direction -- that's usually the early signature of a brewing
+        # breakout, not a stable range. Require a BALANCED or
+        # INCONCLUSIVE read; either EXPANDING read downgrades it.
+        if volume_trend["read"] in ("SELLING_PRESSURE_EXPANDING", "BUYING_PRESSURE_EXPANDING"):
+            regime = "SIDEWAYS_UNCONFIRMED"
 
     return {
         "regime": regime,

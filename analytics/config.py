@@ -39,3 +39,15 @@ DISTRIBUTION_ALERT_COUNT = 4            # 4+ distribution weeks in the window = 
 VOLUME_TREND_WINDOW_WEEKS = 4           # weeks used to compare up-week vs down-week volume
 DOWNTREND_SOW_LOOKAHEAD_WEEKS = 3       # weeks after an Upthrust to look for a Sign-of-Weakness break
 DOWNTREND_MIN_AVG_VOLUME = 500_000      # liquidity filter, same floor as the other strategies
+
+# ---- Sideways Range settings (Wyckoff Spring/Upthrust at range edges) ----
+# Price action + volume only, WEEKLY bars only. Trades BOTH directions
+# (long off support via Spring, short off resistance via Upthrust)
+# inside a confirmed SIDEWAYS regime -- unlike Downtrend Short, exits
+# on a FIXED target at the opposite side of the range, not a trailing
+# stop, since a range's edge (not "let it run") IS the edge being
+# traded. First-pass defaults -- not yet validated against real data.
+RANGE_LOOKBACK_WEEKS = 10               # weeks used to define the current range's support/resistance
+RANGE_MAX_WIDTH_PCT = 0.18              # resistance-to-support width must be <= 18% to count as a tradeable range, not just a failed trend read
+RANGE_CONFIRM_LOOKAHEAD_WEEKS = 3       # weeks after a Spring/Upthrust to look for SOS/SOW confirmation
+RANGE_MIN_AVG_VOLUME = 500_000          # liquidity filter, same floor as the other strategies

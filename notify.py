@@ -1,8 +1,9 @@
 """
-Checks every tracked stock (active AND archived) against 7 signal filters --
+Checks every tracked stock (active AND archived) against 8 signal filters --
 Near Target, Near Stoploss, Need Target Set, 20/50 EMA Crossover + Volume
 Breakout, EMA Pullback, EMA Retest (first touch since latest crossover),
-and Downtrend Short (Upthrust + Sign of Weakness, weekly) -- and sends ONE collective Telegram message per filter, listing EVERY
+Downtrend Short (Upthrust + Sign of Weakness, weekly), and Sideways Range
+(Spring/Upthrust at range edges, weekly) -- and sends ONE collective Telegram message per filter, listing EVERY
 ticker currently matching that filter. Runs every scheduled hour during the
 day and resends the full current list each time (not just new entries) --
 so whenever you check your phone, the latest message for each filter shows
@@ -65,8 +66,9 @@ def build_merged_stocks(spreadsheet):
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
     ema_by_symbol = read_tab_by_symbol(spreadsheet, "EMA_Signals")
     downtrend_by_symbol = read_tab_by_symbol(spreadsheet, "Downtrend_Signals")
+    sideways_by_symbol = read_tab_by_symbol(spreadsheet, "Sideways_Signals")
     print(f"Side tabs: DV_Summary={len(dv_by_symbol)}, EMA_Signals={len(ema_by_symbol)}, "
-          f"Downtrend_Signals={len(downtrend_by_symbol)} symbol(s).")
+          f"Downtrend_Signals={len(downtrend_by_symbol)}, Sideways_Signals={len(sideways_by_symbol)} symbol(s).")
 
     stocks = []
     skipped_no_symbol = 0
@@ -113,6 +115,9 @@ def build_merged_stocks(spreadsheet):
         downtrend = downtrend_by_symbol.get(symbol, {})
         downtrend_status = downtrend.get("downtrend_status", "") or ""
 
+        sideways = sideways_by_symbol.get(symbol, {})
+        sideways_status = sideways.get("sideways_status", "") or ""
+
         stocks.append({
             "symbol": symbol,
             "source": r.get("source", ""),
@@ -142,6 +147,12 @@ def build_merged_stocks(spreadsheet):
             "downtrend_entry_note": downtrend.get("downtrend_entry_note", "") or "",
             "downtrend_stop_loss": downtrend.get("downtrend_stop_loss", ""),
             "downtrend_sow_break_week": downtrend.get("downtrend_sow_break_week", "") or "",
+            "sideways_status": sideways_status,
+            "sideways_direction": sideways.get("sideways_direction", "") or "",
+            "sideways_entry_price": sideways.get("sideways_entry_price", ""),
+            "sideways_entry_note": sideways.get("sideways_entry_note", "") or "",
+            "sideways_stop_loss": sideways.get("sideways_stop_loss", ""),
+            "sideways_target": sideways.get("sideways_target", ""),
         })
 
     print(f"Built {len(stocks)} usable stock record(s) "
@@ -188,6 +199,14 @@ def compute_signals(s):
              else f" (entered {s['downtrend_entry_price']}, stop {s['downtrend_stop_loss']})"
              if s["downtrend_status"] == "ENTERED" else ""),
         ),
+        "sideways_range": (
+            s["sideways_status"] in ("PENDING_ENTRY", "ENTERED"),
+            (f" ({s['sideways_direction']}, target {s['sideways_target']} → {s['sideways_entry_note']})"
+             if s["sideways_status"] == "PENDING_ENTRY"
+             else f" ({s['sideways_direction']}, entered {s['sideways_entry_price']}, "
+                  f"stop {s['sideways_stop_loss']}, target {s['sideways_target']})"
+             if s["sideways_status"] == "ENTERED" else ""),
+        ),
     }
 
 
@@ -199,6 +218,7 @@ FILTER_DISPLAY_NAMES = {
     "ema_pullback": "↩️ EMA Pullback",
     "ema_retest": "〰️ EMA Retest (Past Crossover)",
     "downtrend_short": "📉 Downtrend Short (Upthrust + SOW)",
+    "sideways_range": "↔️ Sideways Range (Spring/Upthrust)",
 }
 
 

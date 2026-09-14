@@ -1,0 +1,33 @@
+name: Downtrend Short signals (weekly)
+
+# Runs once a week, Friday evening IST -- after Friday's close, since
+# the underlying strategy resamples to WEEKLY bars and never acts on a
+# single day's data. Also gives a manual "Run workflow" button under
+# the Actions tab for on-demand runs.
+on:
+  schedule:
+    - cron: "30 11 * * 5"   # 11:30 UTC Friday = 5:00 PM IST Friday, after market close
+  workflow_dispatch: {}
+
+permissions:
+  contents: read   # this workflow only writes to the Google Sheet, not to the repo
+
+jobs:
+  downtrend-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install gspread google-auth yfinance pandas
+
+      - name: Scan for Downtrend Short setups
+        run: python downtrend_signals.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}

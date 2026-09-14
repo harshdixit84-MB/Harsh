@@ -27,3 +27,15 @@ CROSSOVER_MIN_AVG_VOLUME = 500_000
 BREAKOUT_LOOKBACK_DAYS = 20      # N-day high the close must break above
 BREAKOUT_VOLUME_MULT = 1.5       # breakout-day volume vs its 20-day average
 BREAKOUT_MIN_AVG_VOLUME = 500_000
+
+# ---- Downtrend Short settings (Wyckoff Upthrust + Sign of Weakness) ----
+# Price action + volume only, WEEKLY bars only (no daily decisions, no
+# RSI/MACD/ADX). First-pass defaults -- not yet validated against real
+# NSE weekly data; revisit once that's available.
+ZIGZAG_THRESHOLD = 0.03                # 3% reversal required to register a new weekly swing point (filters weekly noise)
+DISTRIBUTION_DECLINE_THRESHOLD = 0.005  # 0.5% weekly decline to qualify as a "distribution week"
+DISTRIBUTION_WINDOW_WEEKS = 8           # rolling window (weeks) to count distribution weeks
+DISTRIBUTION_ALERT_COUNT = 4            # 4+ distribution weeks in the window = real warning, not noise
+VOLUME_TREND_WINDOW_WEEKS = 4           # weeks used to compare up-week vs down-week volume
+DOWNTREND_SOW_LOOKAHEAD_WEEKS = 3       # weeks after an Upthrust to look for a Sign-of-Weakness break
+DOWNTREND_MIN_AVG_VOLUME = 500_000      # liquidity filter, same floor as the other strategies

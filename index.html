@@ -907,8 +907,6 @@ LIVE
 
 <div class="toolbar">
 <input type="text" id="stock-search" placeholder="Search by symbol or name…" />
-<input type="text" id="manual-analyze-input" placeholder="Analyze any symbol…" style="margin-left:8px;" />
-<button id="manual-analyze-btn" class="analyze-btn" style="margin-left:4px;">Analyze</button>
 
 <div class="quick-row">
 <label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
@@ -1228,6 +1226,7 @@ function renderRow(stock) {
           <span class="symbol">${stock.symbol}</span>
           ${stock.quality_score !== null && stock.quality_score !== undefined ? `<button class="quality-badge ${stock.quality_score >= 4 ? "q-high" : stock.quality_score >= 2 ? "q-mid" : "q-low"}" data-symbol="${stock.symbol}" title="Breakout quality — click for breakdown">Q ${stock.quality_score}/5</button>` : ""}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
+          <button class="analyze-btn" data-symbol="${stock.symbol}" title="Analyze ${stock.symbol}">📊 Analyse</button>
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
         <div class="name">${stock.name || ""}</div>
@@ -1416,6 +1415,11 @@ async function saveValueField(btn) {
 }
 
 document.getElementById("rows").addEventListener("click", async (e) => {
+  if (e.target.classList.contains("analyze-btn")) {
+    openAnalyze(e.target.dataset.symbol);
+    return;
+  }
+
   if (e.target.classList.contains("notes-toggle")) {
     const symbol = e.target.dataset.symbol;
     if (expandedNotes.has(symbol)) {
@@ -1604,16 +1608,6 @@ document.getElementById("close-watchlist").addEventListener("click", () => {
 });
 document.getElementById("watchlist-overlay").addEventListener("click", (e) => {
   if (e.target.id === "watchlist-overlay") e.target.classList.remove("open");
-});
-
-function runManualAnalyze() {
-  const symbol = document.getElementById("manual-analyze-input").value.trim().toUpperCase();
-  if (!symbol) return;
-  openAnalyze(symbol);
-}
-document.getElementById("manual-analyze-btn").addEventListener("click", runManualAnalyze);
-document.getElementById("manual-analyze-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") runManualAnalyze();
 });
 
 document.getElementById("watchlist-rows").addEventListener("click", async (e) => {

@@ -641,8 +641,38 @@ setInterval(loadTrades, 5 * 60 * 1000);
       });
     }
 
+    if(result.narrative){
+      if(result.narrative.error){
+        html += "<div style='margin-top:12px;font-size:12px;color:#64748b;'>\u{1F9E0} AI Narrative unavailable: " + escapeHtml(result.narrative.error) + "</div>";
+      } else {
+        html += "<div class='analyzer-section-title'>\u{1F9E0} AI Narrative</div>";
+        html += "<div style='white-space:pre-wrap;line-height:1.5;font-size:13px;'>" + escapeHtml(result.narrative.text) + "</div>";
+        html += "<div style='margin-top:6px;font-size:11px;color:#64748b;'>Explains the chart above &mdash; the trade numbers stay whatever's shown above, this doesn't change them.</div>";
+      }
+    } else {
+      html += "<div style='margin-top:12px;'><button class='analyze-btn' id='load-narrative-btn' data-symbol='" + escapeHtml(result.symbol) + "'>\u{1F9E0} Get AI Narrative</button></div>";
+    }
+
     content.innerHTML = html;
   }
+
+  function loadNarrative(symbol, btn){
+    btn.disabled = true;
+    btn.textContent = "Generating\u2026 up to 30s more";
+    fetch(API_URL + "?symbol=" + encodeURIComponent(symbol) + "&narrative=true")
+      .then(function(res){ return res.json(); })
+      .then(function(result){ renderReport(result); })
+      .catch(function(err){
+        btn.disabled = false;
+        btn.textContent = "\u{1F9E0} Get AI Narrative";
+        alert("Could not generate narrative: " + err.message);
+      });
+  }
+
+  content.addEventListener("click", function(e){
+    var btn = e.target.closest("#load-narrative-btn");
+    if(btn){ loadNarrative(btn.dataset.symbol, btn); }
+  });
 
   function runAnalysis(symbol, btnEl){
     var originalText = btnEl ? btnEl.innerHTML : "";

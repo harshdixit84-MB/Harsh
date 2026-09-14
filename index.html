@@ -911,8 +911,6 @@ LIVE
 
 <div class="toolbar">
 <input type="text" id="stock-search" placeholder="Search by symbol or name…" />
-<input type="text" id="manual-analyze-input" placeholder="Analyze any symbol…" style="margin-left:8px;" />
-<button id="manual-analyze-btn" class="analyze-btn" style="margin-left:4px;">Analyze</button>
 
 <div class="quick-row">
 <label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
@@ -1232,6 +1230,7 @@ function renderRow(stock) {
           <span class="symbol">${stock.symbol}</span>
           ${stock.quality_score !== null && stock.quality_score !== undefined ? `<button class="quality-badge ${stock.quality_score >= 4 ? "q-high" : stock.quality_score >= 2 ? "q-mid" : "q-low"}" data-symbol="${stock.symbol}" title="Breakout quality — click for breakdown">Q ${stock.quality_score}/5</button>` : ""}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
+          <button class="analyze-btn" data-symbol="${stock.symbol}" title="Analyze ${stock.symbol}">📊 Analyse</button>
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
         <div class="name">${stock.name || ""}</div>
@@ -1420,6 +1419,11 @@ async function saveValueField(btn) {
 }
 
 document.getElementById("rows").addEventListener("click", async (e) => {
+  if (e.target.classList.contains("analyze-btn")) {
+    openAnalyze(e.target.dataset.symbol);
+    return;
+  }
+
   if (e.target.classList.contains("notes-toggle")) {
     const symbol = e.target.dataset.symbol;
     if (expandedNotes.has(symbol)) {
@@ -1610,16 +1614,6 @@ document.getElementById("watchlist-overlay").addEventListener("click", (e) => {
   if (e.target.id === "watchlist-overlay") e.target.classList.remove("open");
 });
 
-function runManualAnalyze() {
-  const symbol = document.getElementById("manual-analyze-input").value.trim().toUpperCase();
-  if (!symbol) return;
-  openAnalyze(symbol);
-}
-document.getElementById("manual-analyze-btn").addEventListener("click", runManualAnalyze);
-document.getElementById("manual-analyze-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") runManualAnalyze();
-});
-
 document.getElementById("watchlist-rows").addEventListener("click", async (e) => {
   const symbol = e.target.dataset.symbol;
   if (!symbol) return;
@@ -1704,6 +1698,20 @@ function renderAnalyzeResult(result) {
     });
   }
 
+  if (result.narrative) {
+    if (result.narrative.error) {
+      html += `<div style="margin-top:12px; font-size:12px; color:var(--text-secondary,#666);">🧠 AI Narrative unavailable: ${result.narrative.error}</div>`;
+    } else {
+      html += `<div style="margin-top:12px; padding:10px; border:1px solid var(--border,#ddd); border-radius:8px; background:var(--surface-1,#f5f5f4);">
+        <div style="font-weight:700; margin-bottom:6px;">🧠 AI Narrative</div>
+        <div style="white-space:pre-wrap; line-height:1.5;">${result.narrative.text}</div>
+        <div style="margin-top:6px; font-size:11px; color:var(--text-secondary,#666);">Explains the chart above — the trade numbers stay whatever's shown above, this doesn't change them.</div>
+      </div>`;
+    }
+  } else {
+    html += `<div style="margin-top:12px;"><button class="analyze-btn" id="load-narrative-btn" data-symbol="${result.symbol}">🧠 Get AI Narrative</button></div>`;
+  }
+
   return html;
 }
 
@@ -1720,6 +1728,28 @@ async function openAnalyze(symbol) {
     document.getElementById("analyze-body").innerHTML = `<div class="empty">⚠️ Could not reach the analysis service: ${err.message}</div>`;
   }
 }
+
+async function loadNarrative(symbol, btn) {
+  // Separate, opt-in call (adds &narrative=true) -- the plain Analyze
+  // click never pays for the LLM call, only this explicit button does.
+  btn.disabled = true;
+  btn.textContent = "Generating… up to 30s more";
+  try {
+    const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}&narrative=true`);
+    const result = await res.json();
+    document.getElementById("analyze-body").innerHTML = renderAnalyzeResult(result);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "🧠 Get AI Narrative";
+    alert("Could not generate narrative: " + err.message);
+  }
+}
+
+document.getElementById("analyze-body").addEventListener("click", (e) => {
+  if (e.target.id === "load-narrative-btn") {
+    loadNarrative(e.target.dataset.symbol, e.target);
+  }
+});
 
 document.getElementById("close-analyze").addEventListener("click", () => {
   document.getElementById("analyze-overlay").classList.remove("open");

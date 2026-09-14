@@ -1,8 +1,8 @@
 """
-Checks every tracked stock (active AND archived) against 6 signal filters --
+Checks every tracked stock (active AND archived) against 7 signal filters --
 Near Target, Near Stoploss, Need Target Set, 20/50 EMA Crossover + Volume
-Breakout, EMA Pullback, and EMA Retest (first touch since latest crossover)
--- and sends ONE collective Telegram message per filter, listing EVERY
+Breakout, EMA Pullback, EMA Retest (first touch since latest crossover),
+and Downtrend Short (Upthrust + Sign of Weakness, weekly) -- and sends ONE collective Telegram message per filter, listing EVERY
 ticker currently matching that filter. Runs every scheduled hour during the
 day and resends the full current list each time (not just new entries) --
 so whenever you check your phone, the latest message for each filter shows
@@ -64,7 +64,9 @@ def build_merged_stocks(spreadsheet):
     print(f"Sheet1: read {len(main_rows)} row(s).")
     dv_by_symbol = read_tab_by_symbol(spreadsheet, "DV_Summary")
     ema_by_symbol = read_tab_by_symbol(spreadsheet, "EMA_Signals")
-    print(f"Side tabs: DV_Summary={len(dv_by_symbol)}, EMA_Signals={len(ema_by_symbol)} symbol(s).")
+    downtrend_by_symbol = read_tab_by_symbol(spreadsheet, "Downtrend_Signals")
+    print(f"Side tabs: DV_Summary={len(dv_by_symbol)}, EMA_Signals={len(ema_by_symbol)}, "
+          f"Downtrend_Signals={len(downtrend_by_symbol)} symbol(s).")
 
     stocks = []
     skipped_no_symbol = 0
@@ -108,6 +110,9 @@ def build_merged_stocks(spreadsheet):
         ema_pullback_signal = _to_bool(ema.get("ema_pullback_signal"))
         ema_retest_signal = _to_bool(ema.get("ema_retest_signal"))
 
+        downtrend = downtrend_by_symbol.get(symbol, {})
+        downtrend_status = downtrend.get("downtrend_status", "") or ""
+
         stocks.append({
             "symbol": symbol,
             "source": r.get("source", ""),
@@ -132,6 +137,11 @@ def build_merged_stocks(spreadsheet):
             "ema_retest_touched": ema.get("ema_retest_touched_ema", "") or "",
             "ema_retest_days_since_cross": ema.get("ema_retest_days_since_cross", ""),
             "ema_retest_target": ema.get("ema_retest_target", ""),
+            "downtrend_status": downtrend_status,
+            "downtrend_entry_price": downtrend.get("downtrend_entry_price", ""),
+            "downtrend_entry_note": downtrend.get("downtrend_entry_note", "") or "",
+            "downtrend_stop_loss": downtrend.get("downtrend_stop_loss", ""),
+            "downtrend_sow_break_week": downtrend.get("downtrend_sow_break_week", "") or "",
         })
 
     print(f"Built {len(stocks)} usable stock record(s) "
@@ -171,6 +181,13 @@ def compute_signals(s):
             s["ema_retest_signal"],
             f" (touching {s['ema_retest_touched']} EMA, crossed {s['ema_retest_days_since_cross']}d ago → target ₹{s['ema_retest_target']})" if s["ema_retest_signal"] else "",
         ),
+        "downtrend_short": (
+            s["downtrend_status"] in ("PENDING_ENTRY", "ENTERED"),
+            (f" (SOW break week {s['downtrend_sow_break_week']} → {s['downtrend_entry_note']})"
+             if s["downtrend_status"] == "PENDING_ENTRY"
+             else f" (entered {s['downtrend_entry_price']}, stop {s['downtrend_stop_loss']})"
+             if s["downtrend_status"] == "ENTERED" else ""),
+        ),
     }
 
 
@@ -181,6 +198,7 @@ FILTER_DISPLAY_NAMES = {
     "ema_crossover_volume": "📈 20/50 EMA Crossover + Volume Breakout",
     "ema_pullback": "↩️ EMA Pullback",
     "ema_retest": "〰️ EMA Retest (Past Crossover)",
+    "downtrend_short": "📉 Downtrend Short (Upthrust + SOW)",
 }
 
 

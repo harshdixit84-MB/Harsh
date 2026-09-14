@@ -1,0 +1,32 @@
+name: Sideways Range signals (weekly)
+
+# Runs once a week, Friday evening IST -- same schedule and reasoning as
+# downtrend-signals.yml (the strategy resamples to WEEKLY bars and never
+# acts on a single day's data). Manual "Run workflow" button included.
+on:
+  schedule:
+    - cron: "35 11 * * 5"   # 11:35 UTC Friday = 5:05 PM IST Friday, after market close (staggered 5 min after the downtrend scan)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sideways-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install gspread google-auth yfinance pandas
+
+      - name: Scan for Sideways Range setups
+        run: python sideways_signals.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}

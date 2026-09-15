@@ -114,6 +114,38 @@ def find_swings(weekly_df: pd.DataFrame, threshold: float = ZIGZAG_THRESHOLD) ->
     return df
 
 
+def _persistent_direction(weekly_df: pd.DataFrame, window: int = 12, threshold: float = 0.70) -> str:
+    """
+    Fallback structure read for trends too clean for the zigzag to
+    resolve. The zigzag only registers a pivot after a `threshold`
+    reversal, so a steady trend that never pulls back that much yields
+    just ONE swing high and ONE swing low -- not enough for the
+    HH/HL vs LH/LL comparison, which then falls through to SIDEWAYS.
+    That's exactly backwards: the cleanest, most persistent trends were
+    being classified as ranges.
+
+    This checks the recent `window` weeks directly: if the large
+    majority of weekly closes moved in one direction AND the window's
+    net move is meaningful, call the trend. Still pure price action.
+    """
+    recent = weekly_df.tail(window)
+    if len(recent) < 6:
+        return "SIDEWAYS"
+
+    changes = recent["Close"].diff().dropna()
+    if changes.empty:
+        return "SIDEWAYS"
+
+    up_share = (changes > 0).mean()
+    net_move = (recent["Close"].iloc[-1] - recent["Close"].iloc[0]) / recent["Close"].iloc[0]
+
+    if up_share >= threshold and net_move > 0.05:
+        return "UPTREND"
+    if (1 - up_share) >= threshold and net_move < -0.05:
+        return "DOWNTREND"
+    return "SIDEWAYS"
+
+
 def classify_structure(weekly_df: pd.DataFrame, n_swings: int = 3) -> dict:
     swung = find_swings(weekly_df)
     highs = swung[swung["swing_high"]].tail(n_swings)
@@ -126,14 +158,21 @@ def classify_structure(weekly_df: pd.DataFrame, n_swings: int = 3) -> dict:
         return all(s.iloc[i] > s.iloc[i + 1] for i in range(len(s) - 1))
 
     structure = "SIDEWAYS"
+    resolved_by = "zigzag"
     if len(highs) >= 2 and len(lows) >= 2:
         if is_rising(highs["High"]) and is_rising(lows["Low"]):
             structure = "UPTREND"
         elif is_falling(highs["High"]) and is_falling(lows["Low"]):
             structure = "DOWNTREND"
+    else:
+        # Not enough pivots for a swing-sequence read -- fall back to
+        # the persistence check rather than defaulting to SIDEWAYS.
+        structure = _persistent_direction(weekly_df)
+        resolved_by = "persistence_fallback"
 
     return {
         "structure": structure,
+        "resolved_by": resolved_by,
         "recent_swing_highs": highs[["week_end", "High"]].to_dict("records"),
         "recent_swing_lows": lows[["week_end", "Low"]].to_dict("records"),
     }

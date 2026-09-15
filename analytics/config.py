@@ -51,3 +51,16 @@ RANGE_LOOKBACK_WEEKS = 10               # weeks used to define the current range
 RANGE_MAX_WIDTH_PCT = 0.18              # resistance-to-support width must be <= 18% to count as a tradeable range, not just a failed trend read
 RANGE_CONFIRM_LOOKAHEAD_WEEKS = 3       # weeks after a Spring/Upthrust to look for SOS/SOW confirmation
 RANGE_MIN_AVG_VOLUME = 500_000          # liquidity filter, same floor as the other strategies
+
+# ---- Uptrend Long settings (Wyckoff Backup/LPS pullback continuation) ----
+# Price action + volume only, WEEKLY bars only. The LONG mirror of
+# Downtrend Short: buys the first low-volume pullback (Last Point of
+# Support) into a confirmed uptrend after a high-volume Sign of
+# Strength leg, rather than chasing the breakout itself. Exits by
+# trailing the stop under weekly swing structure -- no fixed target,
+# same reasoning as Downtrend Short (a trend has no natural target).
+# First-pass defaults -- not yet validated against real NSE data.
+UPTREND_SOS_LOOKBACK_WEEKS = 8      # how far back to look for the high-volume Sign-of-Strength leg that precedes a valid pullback
+UPTREND_LPS_LOOKAHEAD_WEEKS = 4     # weeks after an SOS to look for the Last-Point-of-Support pullback
+UPTREND_PULLBACK_VOL_MULT = 0.85    # pullback volume must be BELOW this multiple of the SOS leg's volume (drying-up supply, not real selling)
+UPTREND_MIN_AVG_VOLUME = 500_000    # liquidity filter, same floor as the other strategies

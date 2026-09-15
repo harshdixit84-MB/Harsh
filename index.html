@@ -1724,23 +1724,40 @@ function renderAnalyzeResult(result) {
   return html;
 }
 
-async function openAnalyze(symbol) {
+function openAnalyze(symbol) {
+  // No automatic fetch on open -- neither the plan nor the narrative call
+  // Angel/the LLM until the person explicitly clicks one of these buttons.
+  // This keeps Angel SmartAPI load fully on-demand (see daily-scan.yml,
+  // which was disabled for the same shared-rate-limit reason).
   document.getElementById("analyze-title").textContent = `Analyze — ${symbol}`;
-  document.getElementById("analyze-body").innerHTML = '<div class="loading">Analyzing… this can take up to 30 seconds.</div>';
+  document.getElementById("analyze-body").innerHTML = `
+    <div style="margin-bottom:14px;">Choose what to load for <b>${symbol}</b>:</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="analyze-btn" id="get-plan-btn" data-symbol="${symbol}">📊 Get Plan</button>
+      <button class="analyze-btn" id="get-narrative-btn" data-symbol="${symbol}">🧠 Get AI Narrative</button>
+    </div>
+  `;
   document.getElementById("analyze-overlay").classList.add("open");
+}
 
+async function fetchPlan(symbol, btn) {
+  btn.disabled = true;
+  btn.textContent = "Loading… up to 30s";
   try {
     const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}`);
     const result = await res.json();
     document.getElementById("analyze-body").innerHTML = renderAnalyzeResult(result);
   } catch (err) {
-    document.getElementById("analyze-body").innerHTML = `<div class="empty">⚠️ Could not reach the analysis service: ${err.message}</div>`;
+    btn.disabled = false;
+    btn.textContent = "📊 Get Plan";
+    alert("Could not fetch plan: " + err.message);
   }
 }
 
 async function loadNarrative(symbol, btn) {
-  // Separate, opt-in call (adds &narrative=true) -- the plain Analyze
-  // click never pays for the LLM call, only this explicit button does.
+  // Separate, opt-in call (adds &narrative=true) -- only fires when this
+  // explicit button is clicked, whether that's from the initial screen
+  // or after a plan has already been loaded.
   btn.disabled = true;
   btn.textContent = "Generating… up to 30s more";
   try {
@@ -1755,7 +1772,9 @@ async function loadNarrative(symbol, btn) {
 }
 
 document.getElementById("analyze-body").addEventListener("click", (e) => {
-  if (e.target.id === "load-narrative-btn") {
+  if (e.target.id === "get-plan-btn") {
+    fetchPlan(e.target.dataset.symbol, e.target);
+  } else if (e.target.id === "get-narrative-btn" || e.target.id === "load-narrative-btn") {
     loadNarrative(e.target.dataset.symbol, e.target);
   }
 });

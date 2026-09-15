@@ -1,0 +1,32 @@
+name: Uptrend Long signals (weekly)
+
+# Runs once a week, Friday evening IST -- same schedule and reasoning as
+# downtrend-signals.yml / sideways-signals.yml (WEEKLY bars, never acts
+# on a single day's data). Staggered 5 min after the sideways scan.
+on:
+  schedule:
+    - cron: "40 11 * * 5"   # 11:40 UTC Friday = 5:10 PM IST Friday, after market close
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  uptrend-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install gspread google-auth yfinance pandas
+
+      - name: Scan for Uptrend Long setups
+        run: python uptrend_signals.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}

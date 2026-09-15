@@ -455,8 +455,8 @@ table.stock-table {
 }
 .modal-overlay.open { display: flex; }
 .modal-box {
-  background: var(--bg-card, #12172b);
-  border: 1px solid var(--border, #2a3352);
+  background: var(--surface-1, #ffffff);
+  border: 1px solid var(--border, #cbd5e1);
   border-radius: 10px;
   width: min(720px, 92vw);
   max-height: 82vh;
@@ -484,12 +484,12 @@ table.stock-table {
 .modal-close:hover { opacity: 1; }
 .modal-body { padding: 14px 18px; overflow-y: auto; }
 .watchlist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.watchlist-table th { text-align: left; padding: 6px 8px; font-size: 11px; color: #D9D9D9; border-bottom: 1px solid var(--border, #2a3352); }
-.watchlist-table td { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
-.watchlist-symbol { color: #ffffff; }
+.watchlist-table th { text-align: left; padding: 6px 8px; font-size: 11px; color: var(--text-secondary, #475569); border-bottom: 1px solid var(--border, #cbd5e1); }
+.watchlist-table td { padding: 8px; border-bottom: 1px solid var(--border, #e2e8f0); vertical-align: middle; }
+.watchlist-symbol { color: var(--text-primary, #111827); }
 .remove-watch-btn {
-  background: rgba(192,57,43,0.18);
-  color: #e5626b;
+  background: #fee2e2;
+  color: #991b1b;
   border: none;
   border-radius: 5px;
   padding: 4px 9px;
@@ -498,8 +498,8 @@ table.stock-table {
   cursor: pointer;
 }
 .analyze-btn {
-  background: rgba(37,99,235,0.18);
-  color: #6ea8fe;
+  background: #dbeafe;
+  color: #1d4ed8;
   border: none;
   border-radius: 5px;
   padding: 4px 9px;
@@ -1702,7 +1702,7 @@ function renderAnalyzeResult(result) {
     if (result.narrative.error) {
       html += `<div style="margin-top:12px; font-size:12px; color:var(--text-secondary,#666);">🧠 AI Narrative unavailable: ${result.narrative.error}</div>`;
     } else {
-      html += `<div style="margin-top:12px; padding:10px; border:1px solid var(--border,#ddd); border-radius:8px; background:var(--surface-1,#f5f5f4);">
+      html += `<div style="margin-top:12px; padding:10px; border:1px solid var(--border,#cbd5e1); border-radius:8px; background:var(--surface-2,#f8fafc);">
         <div style="font-weight:700; margin-bottom:6px;">🧠 AI Narrative</div>
         <div style="white-space:pre-wrap; line-height:1.5;">${result.narrative.text}</div>
         <div style="margin-top:6px; font-size:11px; color:var(--text-secondary,#666);">Explains the chart above — the trade numbers stay whatever's shown above, this doesn't change them.</div>

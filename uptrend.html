@@ -290,7 +290,7 @@ function renderScannedRow(s) {
 
 async function loadUptrend() {
   try {
-    const res = await fetch("/api/uptrend?t=" + Date.now(), { cache: "no-store" });
+    const res = await fetch("/api/strategy-signals?strategy=uptrend&t=" + Date.now(), { cache: "no-store" });
     const data = await res.json();
 
     if (data.error) {

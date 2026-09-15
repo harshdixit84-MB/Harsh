@@ -293,7 +293,7 @@ function renderScannedRow(s) {
 
 async function loadSideways() {
   try {
-    const res = await fetch("/api/sideways?t=" + Date.now(), { cache: "no-store" });
+    const res = await fetch("/api/strategy-signals?strategy=sideways&t=" + Date.now(), { cache: "no-store" });
     const data = await res.json();
 
     if (data.error) {

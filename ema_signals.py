@@ -23,6 +23,13 @@ Detects EMA-based setups on DAILY charts for actively tracked stocks:
      sheet (see auto_add_to_watchlist) -- this is the automatic entry point
      into the watchlist for tickers sourced from the 52-week breakout scan.
 
+  4. "Short Term Long" badge -- a dashboard flag, not a trade plan: 20/50 EMA
+     bullish crossover within the last SHORT_TERM_LONG_LOOKBACK_DAYS bars,
+     a full bullish EMA stack as of today (20 and 50 both above 100, 100
+     above 200), and today's close sitting 0.5%-1% above EMA50 (inclusive)
+     -- close enough to the line to still be a reasonable entry, not already
+     extended away from it.
+
 (1) and (2) are ports of the logic already running in the nse-stock-chatbot
 repo (core/ema_crossover.py and core/strategy.py respectively) -- same
 ratios, same thresholds -- just adapted here to scan every actively tracked
@@ -82,6 +89,20 @@ PULLBACK_MIN_AVG_VOLUME = 500_000
 RETEST_CROSSOVER_LOOKBACK_DAYS = 30   # how far back to look for the crossover itself
 RETEST_EMA_TOLERANCE_PCT = 2.0        # how close price must be to count as "touching" the line
 RETEST_MIN_AVG_VOLUME = 500_000
+
+# ---- "Short Term Long" badge: a RECENT 20/50 EMA bullish crossover, a full
+#      bullish EMA stack (20 and 50 both above 100, 100 above 200 -- i.e.
+#      the longer-term trend agrees), and today's close sitting in a narrow
+#      band just above the 50 EMA -- close enough to still be a reasonable
+#      entry near the line, not already extended away from it. This is a
+#      dashboard BADGE only (no entry/stop/target computed) -- it flags
+#      candidates worth a closer look, it doesn't replace the other three
+#      signals above. ----
+EMA_MID = 100
+EMA_LONG = 200
+SHORT_TERM_LONG_LOOKBACK_DAYS = 10        # how far back "recent" crossover means
+SHORT_TERM_LONG_MIN_ABOVE_EMA50_PCT = 0.5
+SHORT_TERM_LONG_MAX_ABOVE_EMA50_PCT = 1.0
 
 
 def get_client():
@@ -332,6 +353,65 @@ def check_ema_retest(df):
     }
 
 
+def check_short_term_long(df):
+    """Badge check (no trade plan, just flags candidates): 20/50 EMA
+    bullish crossover within the last SHORT_TERM_LONG_LOOKBACK_DAYS bars,
+    a full bullish stack as of TODAY (EMA20 and EMA50 both above EMA100,
+    EMA100 above EMA200), and today's close sitting
+    SHORT_TERM_LONG_MIN/MAX_ABOVE_EMA50_PCT above EMA50 (inclusive).
+
+    Note: EMA200 needs a long warm-up to be fully accurate -- with the same
+    ~1y history window used elsewhere in this file, it's had a few dozen
+    bars less than ideal to settle. Good enough for a dashboard badge; if
+    you ever want a more precise EMA200, HISTORY_PERIOD would need
+    lengthening (at the cost of a slower scan, since it's a shared fetch)."""
+    if df is None or len(df) < EMA_LONG + SHORT_TERM_LONG_LOOKBACK_DAYS + 1:
+        return None
+
+    df = df.copy()
+    df["EMA20"] = df["Close"].ewm(span=EMA_FAST, adjust=False).mean()
+    df["EMA50"] = df["Close"].ewm(span=EMA_SLOW, adjust=False).mean()
+    df["EMA100"] = df["Close"].ewm(span=EMA_MID, adjust=False).mean()
+    df["EMA200"] = df["Close"].ewm(span=EMA_LONG, adjust=False).mean()
+
+    ema20_arr = df["EMA20"].values
+    ema50_arr = df["EMA50"].values
+    ema100_arr = df["EMA100"].values
+    ema200_arr = df["EMA200"].values
+    close_arr = df["Close"].values
+    last_idx = len(df) - 1
+
+    ema20, ema50 = ema20_arr[last_idx], ema50_arr[last_idx]
+    ema100, ema200 = ema100_arr[last_idx], ema200_arr[last_idx]
+    close = close_arr[last_idx]
+
+    # Full bullish stack, as of today -- also implicitly requires the 20/50
+    # crossover (found below) to still be "up" right now, not flipped back.
+    if not (ema20 > ema50 and ema20 > ema100 and ema50 > ema100 and ema100 > ema200):
+        return None
+
+    pct_above_ema50 = (close - ema50) / ema50 * 100
+    if not (SHORT_TERM_LONG_MIN_ABOVE_EMA50_PCT <= pct_above_ema50 <= SHORT_TERM_LONG_MAX_ABOVE_EMA50_PCT):
+        return None
+
+    # 20/50 EMA must have bullish-crossed within the last N trading days.
+    cross_idx = None
+    for i in range(last_idx, max(last_idx - SHORT_TERM_LONG_LOOKBACK_DAYS, 1) - 1, -1):
+        crossed_up = ema20_arr[i - 1] <= ema50_arr[i - 1] and ema20_arr[i] > ema50_arr[i]
+        if crossed_up:
+            cross_idx = i
+            break
+    if cross_idx is None:
+        return None
+
+    return {
+        "days_since_cross": int(last_idx - cross_idx),
+        "pct_above_ema50": round(float(pct_above_ema50), 2),
+        "ema100": round(float(ema100), 2),
+        "ema200": round(float(ema200), 2),
+    }
+
+
 def auto_add_to_watchlist(spreadsheet, symbols):
     "Sets watchlisted=True on the main sheet for symbols that just triggered check_ema_retest's first-touch-since-latest-crossover gate. Only touches rows that aren't already watchlisted -- never re-adds a symbol a person manually removed, since the gate itself only fires once per crossover anyway."
     if not symbols:
@@ -369,7 +449,7 @@ def main():
     spreadsheet = client.open(SHEET_NAME)
 
     active_symbols = get_active_symbols(spreadsheet)
-    print(f"Scanning {len(active_symbols)} active symbols for EMA Crossover+Volume Breakout, EMA Pullback, and EMA Retest (daily).")
+    print(f"Scanning {len(active_symbols)} active symbols for EMA Crossover+Volume Breakout, EMA Pullback, EMA Retest, and Short Term Long badge (daily).")
 
     header = [
         "symbol",
@@ -378,6 +458,7 @@ def main():
         "ema_pullback_target", "ema_pullback_rr", "ema_pullback_pct",
         "ema_retest_signal", "ema_retest_touched_ema", "ema_retest_days_since_cross", "ema_retest_entry",
         "ema_retest_stop", "ema_retest_target", "ema_retest_rr",
+        "st_long_signal", "st_long_days_since_cross", "st_long_pct_above_ema50", "st_long_ema100", "st_long_ema200",
         "last_updated",
     ]
     ws = get_or_create_sheet(spreadsheet, EMA_SHEET, header)
@@ -395,7 +476,7 @@ def main():
             print(f"{symbol}: history fetch failed ({e})")
             hist = None
 
-        cross, pullback, retest = None, None, None
+        cross, pullback, retest, st_long = None, None, None, None
         if hist is not None and not hist.empty:
             # Hard freshness gate -- a signal only counts if it's based on TODAY's
             # confirmed bar. If Yahoo's latest bar is still yesterday's (e.g. this
@@ -406,6 +487,7 @@ def main():
                 cross = check_ema_crossover_volume(hist)
                 pullback = check_ema_pullback(hist)
                 retest = check_ema_retest(hist)
+                st_long = check_short_term_long(hist)
             else:
                 stale_count += 1
 
@@ -419,6 +501,8 @@ def main():
             bool(retest), retest["touched_ema"] if retest else "", retest["days_since_cross"] if retest else "",
             retest["entry_price"] if retest else "", retest["stop_loss"] if retest else "",
             retest["target"] if retest else "", retest["reward_risk_ratio"] if retest else "",
+            bool(st_long), st_long["days_since_cross"] if st_long else "", st_long["pct_above_ema50"] if st_long else "",
+            st_long["ema100"] if st_long else "", st_long["ema200"] if st_long else "",
             today_str,
         ])
 
@@ -429,6 +513,8 @@ def main():
         if retest:
             print(f"{symbol}: first EMA touch since latest crossover (touching {retest['touched_ema']} EMA, crossed {retest['days_since_cross']}d ago) -- entry {retest['entry_price']}, target {retest['target']} -- auto-adding to watchlist")
             first_touch_symbols.append(symbol)
+        if st_long:
+            print(f"{symbol}: Short Term Long badge -- crossed {st_long['days_since_cross']}d ago, {st_long['pct_above_ema50']}% above EMA50")
 
     ws.update(rows, "A1")
     print(f"Wrote EMA signal results for {len(rows) - 1} symbols ({stale_count} skipped for stale/non-today data).")

@@ -98,11 +98,45 @@ module.exports = async (req, res) => {
     const symbolIdx = idx("symbol");
     const lastUpdatedIdx = idx("last_updated");
 
+    // Short Term Long badge is computed once in EMA_Signals (shared across
+    // every dashboard, not per-strategy) -- fetch and merge it in here too,
+    // same pattern as api/dashboard.js and api/trades.js use.
+    let stLongBysymbol = {};
+    try {
+      const emaResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "EMA_Signals!A1:AF1000",
+      });
+      const emaRows = emaResponse.data.values || [];
+      if (emaRows.length > 0) {
+        const emaHeaders = emaRows[0];
+        const emaIdx = (name) => emaHeaders.indexOf(name);
+        const emaSymbolIdx = emaIdx("symbol");
+        const truthy = (v) => v === true || v === "TRUE" || v === "true";
+        emaRows.slice(1).forEach((row) => {
+          const symbol = row[emaSymbolIdx];
+          if (symbol) {
+            stLongBysymbol[symbol] = {
+              signal: truthy(row[emaIdx("st_long_signal")]),
+              daysSinceCross: row[emaIdx("st_long_days_since_cross")] || "",
+              pctAboveEma50: row[emaIdx("st_long_pct_above_ema50")] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // EMA_Signals tab may not exist yet -- proceed without the badge
+    }
+
     const records = rows.slice(1).filter((r) => r[symbolIdx]).map((row) => {
       const rec = { symbol: row[symbolIdx] || "", lastUpdated: row[lastUpdatedIdx] || "" };
       for (const [jsKey, colName] of cfg.fields) {
         rec[jsKey] = row[idx(cfg.prefix + colName)] || "";
       }
+      const stLong = stLongBysymbol[rec.symbol];
+      rec.stLongSignal = stLong ? stLong.signal : false;
+      rec.stLongDaysSinceCross = stLong && stLong.daysSinceCross !== "" ? parseInt(stLong.daysSinceCross) : null;
+      rec.stLongPctAboveEma50 = stLong && stLong.pctAboveEma50 !== "" ? parseFloat(stLong.pctAboveEma50) : null;
       return rec;
     });
 

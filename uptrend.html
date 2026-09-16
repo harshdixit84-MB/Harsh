@@ -245,9 +245,15 @@ No data yet — the weekly scan (<code>uptrend_signals.py</code>, Fridays after 
 
 </div>
 
+<script src="/badge-utils.js"></script>
+<script src="/analyze-widget.js"></script>
 <script>
 function tvLink(symbol) {
   return `<a href="https://www.tradingview.com/chart/?symbol=NSE:${symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>`;
+}
+
+function analyzeBtn(symbol) {
+  return `<button class="analyze-btn" data-symbol="${symbol}" title="Analyze ${symbol}">📊 Analyze</button>`;
 }
 
 function renderSetupRow(s) {
@@ -259,7 +265,7 @@ function renderSetupRow(s) {
   return `
 <div class="row ${rowClass}">
   <div class="row-top">
-    <div class="symbol">${s.symbol}${tvLink(s.symbol)}<span class="long-tag">LONG</span></div>
+    <div class="symbol">${s.symbol}${tvLink(s.symbol)}${analyzeBtn(s.symbol)}<span class="long-tag">LONG</span> ${renderStLongBadge(s.stLongSignal, s.stLongDaysSinceCross, s.stLongPctAboveEma50)}</div>
     <span class="status-tag ${statusClass}">${statusLabel}</span>
   </div>
   <div class="row-fields">
@@ -282,7 +288,7 @@ function renderScannedRow(s) {
   return `
 <div class="row">
   <div class="row-top">
-    <div class="symbol">${s.symbol}${tvLink(s.symbol)}</div>
+    <div class="symbol">${s.symbol}${tvLink(s.symbol)}${analyzeBtn(s.symbol)} ${renderStLongBadge(s.stLongSignal, s.stLongDaysSinceCross, s.stLongPctAboveEma50)}</div>
     <span style="color:var(--text-secondary);font-size:11px;">No setup</span>
   </div>
 </div>`;
@@ -330,6 +336,12 @@ document.querySelectorAll(".dash-min-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     btn.closest(".dash-section").classList.toggle("minimized");
   });
+});
+
+document.body.addEventListener("click", (e) => {
+  if (e.target.classList.contains("analyze-btn") && e.target.dataset.symbol && !e.target.closest("#analyze-body")) {
+    openAnalyze(e.target.dataset.symbol);
+  }
 });
 
 loadUptrend();

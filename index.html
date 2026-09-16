@@ -449,45 +449,6 @@ table.stock-table {
 
 .watch-check { width: 15px; height: 15px; cursor: pointer; accent-color: #ffd60a; vertical-align: middle; }
 
-.modal-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  z-index: 1000;
-  align-items: center;
-  justify-content: center;
-}
-.modal-overlay.open { display: flex; }
-.modal-box {
-  background: var(--surface-1, #ffffff);
-  border: 1px solid var(--border, #cbd5e1);
-  border-radius: 10px;
-  width: min(720px, 92vw);
-  max-height: 82vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border, #2a3352);
-  font-weight: 700;
-  font-size: 15px;
-}
-.modal-close {
-  background: transparent;
-  border: none;
-  color: inherit;
-  font-size: 16px;
-  cursor: pointer;
-  opacity: 0.7;
-}
-.modal-close:hover { opacity: 1; }
-.modal-body { padding: 14px 18px; overflow-y: auto; }
 .watchlist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .watchlist-table th { text-align: left; padding: 6px 8px; font-size: 11px; color: var(--text-secondary, #475569); border-bottom: 1px solid var(--border, #cbd5e1); }
 .watchlist-table td { padding: 8px; border-bottom: 1px solid var(--border, #e2e8f0); vertical-align: middle; }
@@ -502,18 +463,7 @@ table.stock-table {
   font-weight: 700;
   cursor: pointer;
 }
-.analyze-btn {
-  background: #dbeafe;
-  color: #1d4ed8;
-  border: none;
-  border-radius: 5px;
-  padding: 4px 9px;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
 .bought-check { width: 16px; height: 16px; cursor: pointer; accent-color: #3ddc8a; }
-.verdict-strategy-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 2px 0; }
 
 
 .notes-toggle {
@@ -1022,6 +972,8 @@ LIVE
   </div>
 </div>
 
+<script src="/badge-utils.js"></script>
+<script src="/analyze-widget.js"></script>
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
@@ -1228,6 +1180,7 @@ function renderRow(stock) {
   if (stock.footprint_last_date && stock.footprint_days_since !== null && stock.footprint_days_since > 0) {
     neutralTags.push(`<span class="mini-tag" title="Last confirmed footprint day: ${stock.footprint_last_date}">🔎 Big players ${(stock.footprint_last_direction || '').toUpperCase()} ${stock.footprint_days_since}d ago</span>`);
   }  if (stock.at_52w_retest) neutralTags.push(`<span class="mini-tag retest">🎯 52W Retest</span>`);
+  if (stock.st_long_signal) neutralTags.push(renderStLongBadge(stock.st_long_signal, stock.st_long_days_since_cross, stock.st_long_pct_above_ema50));
 
   const allGroupedTags = [...greenTags, ...redTags, ...neutralTags].join("");
 
@@ -1591,7 +1544,7 @@ function renderWatchlistModal() {
 
   container.innerHTML = watched.map((s) => `
     <tr data-symbol="${s.symbol}">
-      <td><b class="watchlist-symbol">${s.symbol}</b></td>
+      <td><b class="watchlist-symbol">${s.symbol}</b> ${renderStLongBadge(s.st_long_signal, s.st_long_days_since_cross, s.st_long_pct_above_ema50)}</td>
       <td><a href="https://www.tradingview.com/chart/?symbol=NSE:${s.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a></td>
       <td><button class="analyze-btn" data-symbol="${s.symbol}">Analyze</button></td>
       <td class="mono-cell">
@@ -1646,144 +1599,6 @@ document.getElementById("watchlist-rows").addEventListener("change", (e) => {
     const symbol = e.target.dataset.symbol;
     setWatchlistField(symbol, "bought", e.target.checked, e.target);
   }
-});
-
-// ---- Analyze (calls the nse-stock-chatbot API) ----
-
-const ANALYZE_API_BASE = "https://nse-stock-chatbot.vercel.app/api";
-
-function renderAnalyzeResult(result) {
-  if (result.error) {
-    return `<div class="empty">⚠️ ${result.error}</div>`;
-  }
-
-  let html = `<div style="margin-bottom:10px;"><b>${result.symbol}</b> — as of ${result.as_of}<br/>Last close: ₹${result.last_close}</div>`;
-
-  if (result.verdict === "BUY") {
-    const p = result.trade_plan;
-    const bt = result.backtest;
-    html += `<div style="margin-bottom:10px;">
-      <span class="bs-pill buy">✅ BUY via ${result.strategy}</span><br/><br/>
-      Entry: ₹${p.entry_price} · Stop: ₹${p.stop_loss} · Target: ₹${p.target}<br/>
-      Risk:Reward = 1:${p.reward_risk_ratio}<br/>
-      Backtest: ${bt.win_rate_pct}% win rate over ${bt.signals} signals, profit factor ${bt.profit_factor}
-      ${bt.low_sample_warning ? '<br/>⚠️ Small sample size -- treat with caution' : ""}
-    </div>`;
-  } else if (result.verdict === "BUY_NO_TRACK_RECORD") {
-    const p = result.trade_plan;
-    html += `<div style="margin-bottom:10px;">
-      <span class="bs-pill buy">⚠️ ${result.strategy} setup active (no track record yet)</span><br/><br/>
-      Entry: ₹${p.entry_price} · Stop: ₹${p.stop_loss} · Target: ₹${p.target}
-    </div>`;
-  } else {
-    html += `<div style="margin-bottom:10px;">No active setup today.</div>`;
-  }
-
-  if (result.momentum_confirmation) {
-    html += `<div style="margin-bottom:10px;">Momentum (MACD): ${result.momentum_confirmation.status}</div>`;
-  }
-
-  const chart = result.chart_read;
-  if (chart && !chart.error) {
-    const biasColor = { bullish: "var(--accent-buy, #0d6e38)", bearish: "var(--accent-loss, #b91c1c)", neutral: "var(--text-secondary, #666)" }[chart.todays_candle_bias] || "inherit";
-    html += `<div style="margin-bottom:10px; padding:10px; border:1px solid var(--border,#ddd); border-radius:8px;">
-      <div style="font-weight:700; margin-bottom:6px;">📊 Chart Read</div>
-      <div>Trend: <b>${chart.trend}</b></div>
-      ${chart.nearest_support !== null ? `<div>Support: ₹${chart.nearest_support} (${chart.distance_to_support_pct}% below)</div>` : ""}
-      ${chart.nearest_resistance !== null ? `<div>Resistance: ₹${chart.nearest_resistance} (${chart.distance_to_resistance_pct}% above)</div>` : ""}
-      <div>Today's candle: <span style="color:${biasColor}; font-weight:700;">${chart.todays_candle_pattern}</span> (${chart.todays_candle_bias})</div>
-      <div>RSI(14): ${chart.rsi_14} — ${chart.rsi_zone}</div>
-      <div>Volume: ${chart.volume_vs_20d_avg}</div>
-      <div style="margin-top:6px; font-style:italic;">Reversal watch: ${chart.reversal_watch}</div>
-    </div>`;
-  }
-
-  if (result.strategy_ranking) {
-    html += `<div style="font-size:11px; color:var(--text-secondary); margin-bottom:6px;">Ranking by backtested win rate:</div>`;
-    result.strategy_ranking.forEach((r) => {
-      const flag = r.active_today ? "🟢" : "⚪";
-      const wr = r.win_rate_pct !== null ? `${r.win_rate_pct}%` : "n/a";
-      html += `<div class="verdict-strategy-row">${flag} ${r.strategy}: ${wr} (${r.signals} signals)</div>`;
-    });
-  }
-
-  if (result.narrative) {
-    if (result.narrative.error) {
-      html += `<div style="margin-top:12px; font-size:12px; color:var(--text-secondary,#666);">🧠 AI Narrative unavailable: ${result.narrative.error}</div>`;
-    } else {
-      html += `<div style="margin-top:12px; padding:10px; border:1px solid var(--border,#cbd5e1); border-radius:8px; background:var(--surface-2,#f8fafc);">
-        <div style="font-weight:700; margin-bottom:6px;">🧠 AI Narrative</div>
-        <div style="white-space:pre-wrap; line-height:1.5;">${result.narrative.text}</div>
-        <div style="margin-top:6px; font-size:11px; color:var(--text-secondary,#666);">Explains the chart above — the trade numbers stay whatever's shown above, this doesn't change them.</div>
-      </div>`;
-    }
-  } else {
-    html += `<div style="margin-top:12px;"><button class="analyze-btn" id="load-narrative-btn" data-symbol="${result.symbol}">🧠 Get AI Narrative</button></div>`;
-  }
-
-  return html;
-}
-
-function openAnalyze(symbol) {
-  // No automatic fetch on open -- neither the plan nor the narrative call
-  // Angel/the LLM until the person explicitly clicks one of these buttons.
-  // This keeps Angel SmartAPI load fully on-demand (see daily-scan.yml,
-  // which was disabled for the same shared-rate-limit reason).
-  document.getElementById("analyze-title").textContent = `Analyze — ${symbol}`;
-  document.getElementById("analyze-body").innerHTML = `
-    <div style="margin-bottom:14px;">Choose what to load for <b>${symbol}</b>:</div>
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-      <button class="analyze-btn" id="get-plan-btn" data-symbol="${symbol}">📊 Get Plan</button>
-      <button class="analyze-btn" id="get-narrative-btn" data-symbol="${symbol}">🧠 Get AI Narrative</button>
-    </div>
-  `;
-  document.getElementById("analyze-overlay").classList.add("open");
-}
-
-async function fetchPlan(symbol, btn) {
-  btn.disabled = true;
-  btn.textContent = "Loading… up to 30s";
-  try {
-    const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}`);
-    const result = await res.json();
-    document.getElementById("analyze-body").innerHTML = renderAnalyzeResult(result);
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = "📊 Get Plan";
-    alert("Could not fetch plan: " + err.message);
-  }
-}
-
-async function loadNarrative(symbol, btn) {
-  // Separate, opt-in call (adds &narrative=true) -- only fires when this
-  // explicit button is clicked, whether that's from the initial screen
-  // or after a plan has already been loaded.
-  btn.disabled = true;
-  btn.textContent = "Generating… up to 30s more";
-  try {
-    const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}&narrative=true`);
-    const result = await res.json();
-    document.getElementById("analyze-body").innerHTML = renderAnalyzeResult(result);
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = "🧠 Get AI Narrative";
-    alert("Could not generate narrative: " + err.message);
-  }
-}
-
-document.getElementById("analyze-body").addEventListener("click", (e) => {
-  if (e.target.id === "get-plan-btn") {
-    fetchPlan(e.target.dataset.symbol, e.target);
-  } else if (e.target.id === "get-narrative-btn" || e.target.id === "load-narrative-btn") {
-    loadNarrative(e.target.dataset.symbol, e.target);
-  }
-});
-
-document.getElementById("close-analyze").addEventListener("click", () => {
-  document.getElementById("analyze-overlay").classList.remove("open");
-});
-document.getElementById("analyze-overlay").addEventListener("click", (e) => {
-  if (e.target.id === "analyze-overlay") e.target.classList.remove("open");
 });
 
 loadDashboard();

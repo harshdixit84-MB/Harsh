@@ -176,6 +176,33 @@ module.exports = async (req, res) => {
       // Harmonic_Patterns tab may not exist yet -- proceed without it
     }
 
+    let stLongBysymbol = {};
+    try {
+      const emaResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SHEET_ID,
+        range: "EMA_Signals!A1:AF1000",
+      });
+      const emaRows = emaResponse.data.values || [];
+      if (emaRows.length > 0) {
+        const emaHeaders = emaRows[0];
+        const emaIdx = (name) => emaHeaders.indexOf(name);
+        const emaSymbolIdx = emaIdx("symbol");
+        const truthy = (v) => v === true || v === "TRUE" || v === "true";
+        emaRows.slice(1).forEach((row) => {
+          const symbol = row[emaSymbolIdx];
+          if (symbol) {
+            stLongBysymbol[symbol] = {
+              signal: truthy(row[emaIdx("st_long_signal")]),
+              daysSinceCross: row[emaIdx("st_long_days_since_cross")] || "",
+              pctAboveEma50: row[emaIdx("st_long_pct_above_ema50")] || "",
+            };
+          }
+        });
+      }
+    } catch (e) {
+      // EMA_Signals tab may not exist yet -- proceed without the badge
+    }
+
     function attachDvInfo(t) {
       t.buying_selling_verdict = dvSummaryBysymbol[t.symbol]?.buyingSellingVerdict || "";
       t.dv_decision = dvSummaryBysymbol[t.symbol]?.decision || "";
@@ -223,6 +250,11 @@ module.exports = async (req, res) => {
       } else {
         t.harmonic_pattern = null;
       }
+
+      const stLong = stLongBysymbol[t.symbol];
+      t.st_long_signal = stLong ? stLong.signal : false;
+      t.st_long_days_since_cross = stLong && stLong.daysSinceCross !== "" ? parseInt(stLong.daysSinceCross) : null;
+      t.st_long_pct_above_ema50 = stLong && stLong.pctAboveEma50 !== "" ? parseFloat(stLong.pctAboveEma50) : null;
       return t;
     }
 

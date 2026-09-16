@@ -62,7 +62,7 @@ module.exports = async (req, res) => {
     try {
       const emaResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SHEET_ID,
-        range: "EMA_Signals!A1:U1000",
+        range: "EMA_Signals!A1:AF1000",
       });
       const emaRows = emaResponse.data.values || [];
       if (emaRows.length > 0) {
@@ -92,6 +92,9 @@ module.exports = async (req, res) => {
               retestStop: row[idx("ema_retest_stop")] || "",
               retestTarget: row[idx("ema_retest_target")] || "",
               retestRR: row[idx("ema_retest_rr")] || "",
+              stLongSignal: row[idx("st_long_signal")] || "",
+              stLongDaysSinceCross: row[idx("st_long_days_since_cross")] || "",
+              stLongPctAboveEma50: row[idx("st_long_pct_above_ema50")] || "",
             };
           }
         });
@@ -349,6 +352,9 @@ module.exports = async (req, res) => {
       r.ema_retest_stop = emaSig.retestStop || "";
       r.ema_retest_target = emaSig.retestTarget || "";
       r.ema_retest_rr = emaSig.retestRR || "";
+      r.st_long_signal = truthy(emaSig.stLongSignal);
+      r.st_long_days_since_cross = emaSig.stLongDaysSinceCross || "";
+      r.st_long_pct_above_ema50 = emaSig.stLongPctAboveEma50 !== "" ? parseFloat(emaSig.stLongPctAboveEma50) : null;
       r.comments = notesBysymbol[r.symbol] || [];
     }
 

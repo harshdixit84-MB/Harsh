@@ -371,6 +371,7 @@ table.stock-table {
 .verdict-tag.hold { background: var(--accent-watch); }
 .verdict-tag.sell { background: var(--accent-loss); }
 .verdict-reason { font-size: 11.5px; color: var(--text-primary); line-height: 1.4; }
+.caution-row { font-size: 10.5px; color: var(--accent-watch); font-style: italic; margin-top: -2px; }
 .rows-toolbar { display: flex; justify-content: flex-end; padding: 8px 10px 0; }
 
 @media (max-width: 640px) {
@@ -1106,32 +1107,47 @@ function renderQualityRow(stock) {
 
 function computeFinalVerdict(stock) {
   // Single BUY / HOLD / SELL call + one plain-language reason, replacing the
-  // old pile of ~10 separate badges. Built on top of the EXISTING server-side
-  // verdict (notify.py's compute_verdict() / lib/verdict.js -- the same call
-  // already shown to Telegram and the P/L tracker) rather than reinventing
-  // that logic here: stock.verdict is checked FIRST, and the raw signals
-  // below are only a fallback for stocks that don't have one yet.
+  // old pile of ~10 separate badges, PLUS a separate market-caution note
+  // (see marketCautionNote below) rather than letting the broad market
+  // silently override every individual stock's own call.
+  //
+  // IMPORTANT: lib/verdict.js's compute_verdict() checks market_regime
+  // FIRST and returns an immediate blanket "AVOID" for every stock the
+  // instant the market itself is Bearish -- before it ever looks at that
+  // stock's own decision/quality/footprint. So when market_regime is
+  // "Bearish", stock.verdict/verdict_reason carry NO stock-specific
+  // information at all (every stock gets the identical "Bearish market
+  // regime" AVOID). In that state we skip the server verdict entirely and
+  // fall straight to this stock's own raw signals below -- that's the only
+  // way to judge THIS stock's own setup when the market-wide gate has
+  // pre-empted the server's per-stock read.
 
-  // 1. Heavy Selling always overrides everything else -- a safety signal.
+  // 1. Heavy Selling always overrides everything else -- this is about
+  //    THIS stock's own delivery-volume behavior today, not the market.
   if (stock.buying_selling_verdict === "Heavy Selling") {
     return { label: "SELL", reason: "Heavy institutional selling detected today." };
   }
 
-  // 2. Authoritative server verdict, if present.
-  if (stock.verdict === "BUY-READY") {
-    const bigMove = stock.big_move_setup
-      ? ` Also a Big Move Setup — confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5.`
-      : "";
-    return { label: "BUY", reason: (stock.verdict_reason || "EMA/delivery cross and footprint evidence line up.") + bigMove };
-  }
-  if (stock.verdict === "AVOID") {
-    return { label: "SELL", reason: stock.verdict_reason || "Cross/footprint evidence points the wrong way." };
-  }
-  if (stock.verdict === "WATCH") {
-    return { label: "HOLD", reason: stock.verdict_reason || "Setup is developing but not confirmed yet." };
+  // 2. Authoritative server verdict -- but only when it's actually
+  //    stock-specific (i.e. the market-wide regime gate didn't pre-empt it).
+  if (stock.market_regime !== "Bearish") {
+    if (stock.verdict === "BUY-READY") {
+      const bigMove = stock.big_move_setup
+        ? ` Also a Big Move Setup — confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5.`
+        : "";
+      return { label: "BUY", reason: (stock.verdict_reason || "EMA/delivery cross and footprint evidence line up.") + bigMove };
+    }
+    if (stock.verdict === "AVOID") {
+      return { label: "SELL", reason: stock.verdict_reason || "Cross/footprint evidence points the wrong way." };
+    }
+    if (stock.verdict === "WATCH") {
+      return { label: "HOLD", reason: stock.verdict_reason || "Setup is developing but not confirmed yet." };
+    }
   }
 
-  // 3. No server verdict yet -- fall back to the raw signals, strongest first.
+  // 3. No usable server verdict (either none yet, or the market regime
+  //    gate pre-empted it above) -- judge this stock on its own raw
+  //    signals, strongest first.
   if (stock.harmonic_pattern && stock.harmonic_days_since_c !== null && stock.harmonic_days_since_c <= 20) {
     if (stock.harmonic_direction === "Bullish") {
       return { label: "BUY", reason: `Harmonic ${stock.harmonic_pattern} projects a bullish reversal zone at ₹${stock.harmonic_prz_low}-₹${stock.harmonic_prz_high}, ${stock.harmonic_distance_to_prz_pct}% away.` };
@@ -1174,10 +1190,23 @@ function computeFinalVerdict(stock) {
   return { label: "HOLD", reason: "No strong signal either way right now — just tracking." };
 }
 
+function marketCautionNote(stock) {
+  // Shown ALONGSIDE the stock's own verdict, regardless of what that
+  // verdict is -- even a stock with a genuinely strong BUY setup is riskier
+  // to take when the broader market itself is Bearish, and that context
+  // deserves to stay visible rather than being the thing that silently
+  // determines the verdict.
+  if (stock.market_regime === "Bearish") {
+    return "⚠️ Market regime: Bearish — this call is against the broader trend.";
+  }
+  return "";
+}
+
 function renderVerdictBadge(stock) {
   const { label, reason } = computeFinalVerdict(stock);
   const cls = label === "BUY" ? "buy" : label === "SELL" ? "sell" : "hold";
-  return `<div class="verdict-row"><span class="verdict-tag ${cls}">${label}</span><span class="verdict-reason">${reason}</span></div>`;
+  const caution = marketCautionNote(stock);
+  return `<div class="verdict-row"><span class="verdict-tag ${cls}">${label}</span><span class="verdict-reason">${reason}</span></div>${caution ? `<div class="caution-row">${caution}</div>` : ""}`;
 }
 
 function renderRow(stock) {

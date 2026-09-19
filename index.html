@@ -356,6 +356,21 @@ table.stock-table {
 .row-fields .label { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
 .row-fields .val { font-size: 12px; font-weight: 500; }
 .row-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.verdict-row { display: flex; align-items: center; gap: 8px; margin-top: 2px; flex-wrap: wrap; }
+.verdict-tag {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  color: #ffffff;
+}
+.verdict-tag.buy { background: var(--accent-buy); }
+.verdict-tag.hold { background: var(--accent-watch); }
+.verdict-tag.sell { background: var(--accent-loss); }
+.verdict-reason { font-size: 11.5px; color: var(--text-primary); line-height: 1.4; }
 .rows-toolbar { display: flex; justify-content: flex-end; padding: 8px 10px 0; }
 
 @media (max-width: 640px) {
@@ -1095,52 +1110,80 @@ function renderQualityRow(stock) {
   `;
 }
 
-function verdictBadge(stock) {
-  // Same tiering as notify.py's compute_verdict() / lib/verdict.js -- keeps
-  // Telegram, this dashboard, and the P/L tracker all showing the same call
-  // for the same stock. This is separate from the "Confirmed"/"Watching"
-  // status below, which is about YOUR manually-set buy_target price being
-  // hit -- this verdict is about the EMA/delivery cross + footprint
-  // evidence, independent of any specific target price.
-  // Reason is shown INLINE, not just as a hover tooltip -- a badge that
-  // reads "AVOID" next to a high quality score with no visible reason is
-  // exactly the kind of thing that looked like a bug (it wasn't -- it was
-  // an invisible Bearish-regime override).
-  if (!stock.verdict) return "";
-  const meta = {
-    "BUY-READY": { emoji: "✅", cls: "verdict-buy" },
-    "WATCH": { emoji: "⏳", cls: "verdict-watch" },
-    "AVOID": { emoji: "🚫", cls: "verdict-avoid" },
-  }[stock.verdict] || { emoji: "", cls: "" };
-  return `<span class="mini-tag ${meta.cls}">${meta.emoji} ${stock.verdict}${stock.verdict_reason ? ` — ${stock.verdict_reason}` : ""}</span>`;
+function computeFinalVerdict(stock) {
+  // Single BUY / HOLD / SELL call + one plain-language reason, replacing the
+  // old pile of ~10 separate badges. Built on top of the EXISTING server-side
+  // verdict (notify.py's compute_verdict() / lib/verdict.js -- the same call
+  // already shown to Telegram and the P/L tracker) rather than reinventing
+  // that logic here: stock.verdict is checked FIRST, and the raw signals
+  // below are only a fallback for stocks that don't have one yet.
+
+  // 1. Heavy Selling always overrides everything else -- a safety signal.
+  if (stock.buying_selling_verdict === "Heavy Selling") {
+    return { label: "SELL", reason: "Heavy institutional selling detected today." };
+  }
+
+  // 2. Authoritative server verdict, if present.
+  if (stock.verdict === "BUY-READY") {
+    const bigMove = stock.big_move_setup
+      ? ` Also a Big Move Setup — confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5.`
+      : "";
+    return { label: "BUY", reason: (stock.verdict_reason || "EMA/delivery cross and footprint evidence line up.") + bigMove };
+  }
+  if (stock.verdict === "AVOID") {
+    return { label: "SELL", reason: stock.verdict_reason || "Cross/footprint evidence points the wrong way." };
+  }
+  if (stock.verdict === "WATCH") {
+    return { label: "HOLD", reason: stock.verdict_reason || "Setup is developing but not confirmed yet." };
+  }
+
+  // 3. No server verdict yet -- fall back to the raw signals, strongest first.
+  if (stock.harmonic_pattern && stock.harmonic_days_since_c !== null && stock.harmonic_days_since_c <= 20) {
+    if (stock.harmonic_direction === "Bullish") {
+      return { label: "BUY", reason: `Harmonic ${stock.harmonic_pattern} projects a bullish reversal zone at ₹${stock.harmonic_prz_low}-₹${stock.harmonic_prz_high}, ${stock.harmonic_distance_to_prz_pct}% away.` };
+    }
+    return { label: "SELL", reason: `Harmonic ${stock.harmonic_pattern} projects a bearish reversal zone at ₹${stock.harmonic_prz_low}-₹${stock.harmonic_prz_high}.` };
+  }
+
+  const emaSignalText = stock.ema_cross_signal ? `20/50 EMA cross with volume, target ₹${stock.ema_cross_target}`
+    : stock.ema_pullback_signal ? `EMA Pullback (${stock.ema_pullback_pattern}), target ₹${stock.ema_pullback_target}`
+    : stock.ema_retest_signal ? `EMA${stock.ema_retest_touched} Retest, target ₹${stock.ema_retest_target}`
+    : null;
+
+  if (emaSignalText && stock.buying_selling_verdict === "Heavy Buying") {
+    return { label: "BUY", reason: `Heavy buying today, confirmed by an active ${emaSignalText}.` };
+  }
+  if (emaSignalText) {
+    const hasQuality = stock.quality_score !== null && stock.quality_score !== undefined;
+    if (hasQuality && stock.quality_score >= 3) {
+      return { label: "BUY", reason: `${emaSignalText}.` };
+    }
+    return { label: "HOLD", reason: `${emaSignalText} fired, but breakout quality is weak (${hasQuality ? stock.quality_score : "?"}/5) — needs confirmation.` };
+  }
+
+  if (stock.weekly_accumulation && stock.footprint_direction === "Buying" && stock.footprint_weighted_score !== null && stock.footprint_weighted_score >= 4) {
+    return { label: "BUY", reason: "3-week volume accumulation confirmed by today's big-player buying footprint." };
+  }
+
+  if (stock.st_long_signal) {
+    return { label: "BUY", reason: "Price sustaining above 20/50 EMA since the last bullish cross." };
+  }
+
+  if (stock.at_52w_retest) {
+    return { label: "HOLD", reason: "Sitting at a 52-week retest — waiting for confirmation before entry." };
+  }
+
+  if (stock.archived) {
+    return { label: "HOLD", reason: "No longer an active setup — kept for reference." };
+  }
+
+  return { label: "HOLD", reason: "No strong signal either way right now — just tracking." };
 }
 
-function bigMoveBadge(stock) {
-  // The specific "catch a big move" combo: BUY-READY + weeks of real
-  // accumulation (not just one good day) + a strong quality score. Every
-  // big-move setup is also BUY-READY, but not the reverse -- this is the
-  // narrower, higher-conviction subset, made visually distinct so it's easy
-  // to spot in a scan of many rows without reading every badge.
-  if (!stock.big_move_setup) return "";
-  return `<span class="mini-tag big-move-badge" title="Confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5">🚀 Big Move Setup</span>`;
-}
-
-function harmonicBadge(stock) {
-  // Predictive XABCD harmonic pattern -- projects the Potential Reversal
-  // Zone (PRZ) for D the moment C confirms, BEFORE D has formed.
-  // Direction comes straight from whether C is a swing high (D will be a
-  // low -> Bullish) or swing low (D will be a high -> Bearish) --
-  // double-checked deliberately, since the old Pine Script version had
-  // bullish/bearish swapped.
-  if (!stock.harmonic_pattern) return "";
-  // Only surface it while C is still recent -- an X-A-B-C confirmed
-  // weeks ago with no D yet is a pattern that's probably not playing out.
-  if (stock.harmonic_days_since_c === null || stock.harmonic_days_since_c > 20) return "";
-  const isBullish = stock.harmonic_direction === "Bullish";
-  const cls = isBullish ? "verdict-buy" : "verdict-avoid";
-  const emoji = isBullish ? "📐🟢" : "📐🔴";
-  const title = `X ₹${stock.harmonic_x} → A ₹${stock.harmonic_a} → B ₹${stock.harmonic_b} → C ₹${stock.harmonic_c} (${stock.harmonic_c_date}) · PRZ ₹${stock.harmonic_prz_low}-₹${stock.harmonic_prz_high} (${stock.harmonic_distance_to_prz_pct}% away) · Stop ₹${stock.harmonic_stop_loss} · Targets once D confirms: ₹${stock.harmonic_target_1} / ₹${stock.harmonic_target_2} / ₹${stock.harmonic_target_3}`;
-  return `<span class="mini-tag ${cls}" title="${title}">${emoji} ${stock.harmonic_direction} ${stock.harmonic_pattern} PRZ ₹${stock.harmonic_prz_low}-${stock.harmonic_prz_high}</span>`;
+function renderVerdictBadge(stock) {
+  const { label, reason } = computeFinalVerdict(stock);
+  const cls = label === "BUY" ? "buy" : label === "SELL" ? "sell" : "hold";
+  return `<div class="verdict-row"><span class="verdict-tag ${cls}">${label}</span><span class="verdict-reason">${reason}</span></div>`;
 }
 
 function renderRow(stock) {
@@ -1150,41 +1193,7 @@ function renderRow(stock) {
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
-  // 1. Group Green Elements
-  const greenTags = [];
-  greenTags.push(bigMoveBadge(stock));
-  greenTags.push(harmonicBadge(stock));
-  greenTags.push(verdictBadge(stock));
-  if (stock.buying_selling_verdict === "Heavy Buying") greenTags.push(`<span class="mini-tag dv-buying" title="Heavy Buying">Heavy Buying</span>`);
-  if (stock.ema_cross_signal) {
-    greenTags.push(`<span class="mini-tag cross-bull">📈 20/50 Cross+Vol → ₹${stock.ema_cross_target}</span>`);
-  }
-  if (stock.ema_pullback_signal) {
-    greenTags.push(`<span class="mini-tag cross-bull">↩️ EMA Pullback (${stock.ema_pullback_pattern}) → ₹${stock.ema_pullback_target}</span>`);
-  }
-  if (stock.ema_retest_signal) {
-    greenTags.push(`<span class="mini-tag cross-bull">〰️ EMA${stock.ema_retest_touched} Retest → ₹${stock.ema_retest_target}</span>`);
-  }
-  if (stock.weekly_accumulation) {
-    greenTags.push(`<span class="mini-tag cross-bull" title="${stock.weekly_vol_ratio}x normal volume over 3 weeks · bias ${stock.weekly_bias > 0 ? '+' : ''}${stock.weekly_bias} up-vs-down volume days · price ${stock.weekly_price_run_pct > 0 ? '+' : ''}${stock.weekly_price_run_pct}% over that span">📅 3-Week Accumulation</span>`);
-  }
-  if (stock.footprint_weighted_score !== null && stock.footprint_weighted_score >= 4 && stock.footprint_volume_component !== null && stock.footprint_pattern_component !== null) {
-    greenTags.push(`<span class="mini-tag cross-bull" title="Volume-based: ${stock.footprint_volume_signals || 'none'} · Pattern-based: ${stock.footprint_pattern_signals || 'none'}">🔎 Big players ${(stock.footprint_direction || '').toUpperCase()} today: Vol ${stock.footprint_volume_component}/6 + Pattern ${stock.footprint_pattern_component}/3</span>`);
-  }
-
-  // 2. Group Red Elements
-  const redTags = [];
-  if (stock.buying_selling_verdict === "Heavy Selling") redTags.push(`<span class="mini-tag dv-selling" title="Heavy Selling">Heavy Selling</span>`);
-
-  // 3. Neutral / Other Tags
-  const neutralTags = [];
-  if (stock.archived) neutralTags.push(`<span class="mini-tag archived">Archived</span>`);
-  if (stock.footprint_last_date && stock.footprint_days_since !== null && stock.footprint_days_since > 0) {
-    neutralTags.push(`<span class="mini-tag" title="Last confirmed footprint day: ${stock.footprint_last_date}">🔎 Big players ${(stock.footprint_last_direction || '').toUpperCase()} ${stock.footprint_days_since}d ago</span>`);
-  }  if (stock.at_52w_retest) neutralTags.push(`<span class="mini-tag retest">🎯 52W Retest</span>`);
-  if (stock.st_long_signal) neutralTags.push(renderStLongBadge(stock.st_long_signal, stock.st_long_days_since_cross, stock.st_long_pct_above_ema50));
-
-  const allGroupedTags = [...greenTags, ...redTags, ...neutralTags].join("");
+  const verdictHtml = renderVerdictBadge(stock);
 
   return `
     <div class="row stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
@@ -1218,7 +1227,7 @@ function renderRow(stock) {
           <div class="val">${(stock.source || "").split(",").filter(Boolean).join(", ") || "-"}</div>
         </div>
       </div>
-      ${allGroupedTags ? `<div class="row-badges">${allGroupedTags}</div>` : ""}
+      ${verdictHtml}
     </div>
     ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
     ${expandedQuality.has(stock.symbol) ? renderQualityRow(stock) : ""}

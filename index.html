@@ -335,6 +335,33 @@ table.stock-table {
 .stock-row.needtarget { box-shadow: inset 3px 0 0 var(--accent-needtarget); }
 .stock-row.archived { opacity: 0.6; box-shadow: inset 3px 0 0 var(--text-secondary); }
 
+/* Card-based scanner layout (mirrors uptrend.html's row/row-fields structure).
+   Each row is BOTH .row (new card look) and .stock-row (existing classification
+   coloring via box-shadow, kept as-is below and in the theme-override blocks
+   further down this file) -- so buyzone/watch/held/needtarget/archived accent
+   colors keep working across every theme layer with no extra rules needed. */
+#rows { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.row {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.row-top { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.row-fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 2px; }
+.row-fields .field { min-width: 0; }
+.row-fields .label { color: var(--text-secondary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+.row-fields .val { font-size: 12px; font-weight: 500; }
+.row-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.rows-toolbar { display: flex; justify-content: flex-end; padding: 8px 10px 0; }
+
+@media (max-width: 640px) {
+  .row-fields { grid-template-columns: 1fr; }
+}
+
 .cell-symbol { min-width: 190px; }
 
 .symbol-line {
@@ -479,7 +506,8 @@ table.stock-table {
 .notes-toggle:hover { color: var(--text-primary); border-color: var(--text-primary); }
 .notes-toggle.has-notes { color: #ffcf3d; border-color: rgba(255,207,61,0.4); }
 
-.notes-row td { background: var(--surface-2); padding: 12px 14px; }
+.notes-row { background: var(--surface-2); padding: 12px 14px; border-radius: 8px; }
+.quality-row { background: var(--surface-2); padding: 12px 14px; border-radius: 8px; }
 .notes-panel { display: flex; flex-direction: column; gap: 10px; }
 .notes-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
 .note-entry {
@@ -671,7 +699,7 @@ body { background:#ffffff; color:#000000; }
 }
 
 .table-scroll { background:#ffffff; border:2px solid #000000; }
-.stock-row:hover, .notes-row td { background:#f5f5f5; }
+.stock-row:hover, .notes-row { background:#f5f5f5; }
 
 .ticker-label, .ticker-empty, .name, .tv-link,
 .stat-label, .empty, .loading, footer { color:#333333; }
@@ -920,22 +948,12 @@ LIVE
 </div>
 
 <div class="table-scroll">
-<table class="stock-table">
-<thead>
-<tr>
-<th>Symbol</th>
-<th>Entry</th>
-<th class="sortable" id="th-cmp">CMP ›</th>
-<th>Source</th>
-<th>SL</th>
-<th>Target 1</th>
-<th>Target 2</th>
-</tr>
-</thead>
-<tbody id="rows">
-<tr><td colspan="7" class="loading">Fetching dashboard…</td></tr>
-</tbody>
-</table>
+<div class="rows-toolbar">
+<button class="reset-btn sortable" id="th-cmp" title="Sort by current market price">Sort by CMP ›</button>
+</div>
+<div id="rows">
+<div class="empty loading">Fetching dashboard…</div>
+</div>
 </div>
 
 <footer>Auto-refreshes every 5 minutes · data synced from Chartlink via scheduled job</footer>
@@ -1029,17 +1047,15 @@ function renderNotesRow(stock) {
     : `<div class="note-empty">No notes yet for ${stock.symbol}.</div>`;
 
   return `
-    <tr class="notes-row" data-notes-for="${stock.symbol}">
-      <td colspan="7">
-        <div class="notes-panel">
-          <div class="notes-list">${list}</div>
-          <div class="notes-add">
-            <textarea class="notes-input" placeholder="Add an observation for ${stock.symbol}…" data-symbol="${stock.symbol}"></textarea>
-            <button class="notes-save-btn" data-symbol="${stock.symbol}">Save Note</button>
-          </div>
+    <div class="notes-row" data-notes-for="${stock.symbol}">
+      <div class="notes-panel">
+        <div class="notes-list">${list}</div>
+        <div class="notes-add">
+          <textarea class="notes-input" placeholder="Add an observation for ${stock.symbol}…" data-symbol="${stock.symbol}"></textarea>
+          <button class="notes-save-btn" data-symbol="${stock.symbol}">Save Note</button>
         </div>
-      </td>
-    </tr>
+      </div>
+    </div>
   `;
 }
 
@@ -1063,21 +1079,19 @@ function renderQualityRow(stock) {
     : "No recent 52w breakout found";
 
   return `
-    <tr class="quality-row" data-quality-for="${stock.symbol}">
-      <td colspan="7">
-        <div class="quality-panel">
-          <div class="quality-checks">${checks}</div>
-          <div class="quality-raw">
-            RS vs Nifty: ${stock.rs_vs_nifty !== null ? stock.rs_vs_nifty + "%" : "-"} ·
-            Close location: ${stock.close_location !== null ? stock.close_location : "-"} ·
-            Base days: ${stock.base_days !== null ? stock.base_days : "-"} ·
-            Vol ratio: ${stock.breakout_vol_ratio !== null ? stock.breakout_vol_ratio + "x" : "-"} ·
-            Market regime: ${stock.market_regime || "-"}
-          </div>
-          <div class="quality-raw">${retestInfo}</div>
+    <div class="quality-row" data-quality-for="${stock.symbol}">
+      <div class="quality-panel">
+        <div class="quality-checks">${checks}</div>
+        <div class="quality-raw">
+          RS vs Nifty: ${stock.rs_vs_nifty !== null ? stock.rs_vs_nifty + "%" : "-"} ·
+          Close location: ${stock.close_location !== null ? stock.close_location : "-"} ·
+          Base days: ${stock.base_days !== null ? stock.base_days : "-"} ·
+          Vol ratio: ${stock.breakout_vol_ratio !== null ? stock.breakout_vol_ratio + "x" : "-"} ·
+          Market regime: ${stock.market_regime || "-"}
         </div>
-      </td>
-    </tr>
+        <div class="quality-raw">${retestInfo}</div>
+      </div>
+    </div>
   `;
 }
 
@@ -1173,8 +1187,8 @@ function renderRow(stock) {
   const allGroupedTags = [...greenTags, ...redTags, ...neutralTags].join("");
 
   return `
-    <tr class="stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
-      <td class="cell-symbol">
+    <div class="row stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
+      <div class="row-top">
         <div class="symbol-line">
           <input type="checkbox" class="watch-check" data-symbol="${stock.symbol}" ${stock.watchlisted ? "checked" : ""} title="Add to Watchlist" />
           <span class="symbol">${stock.symbol}</span>
@@ -1183,41 +1197,29 @@ function renderRow(stock) {
           <button class="analyze-btn" data-symbol="${stock.symbol}" title="Analyze ${stock.symbol}">📊 Analyse</button>
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
-        <div class="name">${stock.name || ""}</div>
-        <div class="tag-row">${allGroupedTags}</div>
-      </td>
-      <td class="mono-cell">
-        <div class="value-edit">
-          <input type="number" step="0.01" class="value-input" value="${stock.buy_target || ""}" placeholder="entry" data-symbol="${stock.symbol}" data-field="buy_target" />
-          <button class="save-btn" data-symbol="${stock.symbol}" data-field="buy_target">Save</button>
-        </div>
-      </td>
-      <td class="mono-cell">
         <div class="price-cell">
           <span class="price">₹${Number(stock.price).toFixed(2)}</span>
           <span class="day-change" style="color:${dayChangeColor};"><span class="trend-arrow">${trendArrow}</span>${dayChange >= 0 ? "+" : ""}${dayChange}%</span>
         </div>
-      </td>
-      <td class="mono-cell">${(stock.source || "").split(",").filter(Boolean).join(", ") || "-"}</td>
-      <td class="mono-cell">
-        <div class="value-edit">
-          <input type="number" step="0.01" class="value-input sl-input" value="${stock.stop_loss || ""}" placeholder="SL" data-symbol="${stock.symbol}" data-field="stop_loss" />
-          <button class="save-btn sl-save" data-symbol="${stock.symbol}" data-field="stop_loss">Save</button>
+      </div>
+      <div class="name">${stock.name || ""}</div>
+      <div class="row-fields">
+        <div class="field">
+          <div class="label">Entry</div>
+          <div class="val">
+            <div class="value-edit">
+              <input type="number" step="0.01" class="value-input" value="${stock.buy_target || ""}" placeholder="entry" data-symbol="${stock.symbol}" data-field="buy_target" />
+              <button class="save-btn" data-symbol="${stock.symbol}" data-field="buy_target">Save</button>
+            </div>
+          </div>
         </div>
-      </td>
-      <td class="mono-cell">
-        <div class="value-edit">
-          <input type="number" step="0.01" class="value-input" value="${stock.target_1 || ""}" placeholder="target 1" data-symbol="${stock.symbol}" data-field="target_1" />
-          <button class="save-btn" data-symbol="${stock.symbol}" data-field="target_1">Save</button>
+        <div class="field">
+          <div class="label">Source</div>
+          <div class="val">${(stock.source || "").split(",").filter(Boolean).join(", ") || "-"}</div>
         </div>
-      </td>
-      <td class="mono-cell">
-        <div class="value-edit">
-          <input type="number" step="0.01" class="value-input" value="${stock.target_2 || ""}" placeholder="target 2" data-symbol="${stock.symbol}" data-field="target_2" />
-          <button class="save-btn" data-symbol="${stock.symbol}" data-field="target_2">Save</button>
-        </div>
-      </td>
-    </tr>
+      </div>
+      ${allGroupedTags ? `<div class="row-badges">${allGroupedTags}</div>` : ""}
+    </div>
     ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
     ${expandedQuality.has(stock.symbol) ? renderQualityRow(stock) : ""}
   `;
@@ -1281,7 +1283,7 @@ function render() {
   renderTickerBand(filtered);
 
   if (filtered.length === 0) {
-    container.innerHTML = '<tr><td colspan="7" class="empty">Nothing matches this filter right now.</td></tr>';
+    container.innerHTML = '<div class="empty">Nothing matches this filter right now.</div>';
   } else {
     container.innerHTML = filtered.map(renderRow).join("");
   }
@@ -1314,7 +1316,7 @@ async function loadDashboard() {
     const data = await res.json();
 
     if (data.error) {
-      document.getElementById("rows").innerHTML = `<tr><td colspan="7" class="empty">Error loading data: ${data.error}</td></tr>`;
+      document.getElementById("rows").innerHTML = `<div class="empty">Error loading data: ${data.error}</div>`;
       return;
     }
 
@@ -1325,7 +1327,7 @@ async function loadDashboard() {
     const syncedDate = new Date(data.syncedAt);
     document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
   } catch (e) {
-    document.getElementById("rows").innerHTML = `<tr><td colspan="7" class="empty">Could not reach the dashboard API.</td></tr>`;
+    document.getElementById("rows").innerHTML = `<div class="empty">Could not reach the dashboard API.</div>`;
   }
 }
 

@@ -12,10 +12,11 @@
  * (this file does not auto-wire row buttons itself, since each page's
  * table markup differs -- it only owns the modal itself, once opened.)
  *
- * Nothing here fetches automatically. The modal opens empty with two
- * buttons -- "Get Plan" and "Get AI Narrative" -- and neither the Angel
- * SmartAPI-backed plan nor the Gemini-backed narrative is called until
- * the person explicitly clicks one of them.
+ * Nothing here fetches automatically. The modal opens empty with three
+ * buttons -- "Get Plan", "Get AI Narrative" and "Get Outlook" -- and none of
+ * the Angel SmartAPI-backed plan, the Gemini-backed narrative or the
+ * Nifty/sector/stock outlook is called until the person explicitly clicks
+ * one of them.
  */
 
 const ANALYZE_API_BASE = "https://nse-stock-chatbot.vercel.app/api";
@@ -70,6 +71,8 @@ const ANALYZE_API_BASE = "https://nse-stock-chatbot.vercel.app/api";
       fetchPlan(e.target.dataset.symbol, e.target);
     } else if (e.target.id === "get-narrative-btn" || e.target.id === "load-narrative-btn") {
       loadNarrative(e.target.dataset.symbol, e.target);
+    } else if (e.target.id === "get-outlook-btn") {
+      loadOutlook(e.target.dataset.symbol, e.target);
     }
   });
 })();
@@ -143,6 +146,58 @@ function renderAnalyzeResult(result) {
     html += `<div style="margin-top:12px;"><button class="analyze-btn" id="load-narrative-btn" data-symbol="${result.symbol}">🧠 Get AI Narrative</button></div>`;
   }
 
+  html += `<div style="margin-top:8px;"><button class="analyze-btn" id="get-outlook-btn" data-symbol="${result.symbol}">🔭 Get Outlook</button></div>`;
+
+  return html;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Nifty -> sector -> stock outlook (api ?mode=outlook, core/outlook.py in
+// the nse-stock-chatbot repo). Rule-based: no Gemini call, no backtest, so
+// it is much lighter than "Get Plan" / "Get AI Narrative".
+function renderOutlookResult(result) {
+  if (result.error) {
+    return `<div class="empty">⚠️ ${escapeHtml(result.error)}</div>`;
+  }
+
+  const bias = String(result.bias || "");
+  const isBull = /bullish/i.test(bias);
+  const isBear = /bearish/i.test(bias);
+  const pillBg = isBull ? "#d1fae5" : isBear ? "#fee2e2" : "#e2e8f0";
+  const pillFg = isBull ? "#065f46" : isBear ? "#b91c1c" : "#475569";
+
+  const marketTxt = result.market && !result.market.error ? `${result.market.label} (${result.market.score >= 0 ? "+" : ""}${result.market.score})` : "n/a";
+  const sectorTxt = result.sector ? `${escapeHtml(result.sector.name)}: ${result.sector.label} (${result.sector.score >= 0 ? "+" : ""}${result.sector.score})` : "n/a";
+  const st = result.stock || {};
+  const stockScore = st.score_with_patterns !== undefined ? st.score_with_patterns : st.score;
+  const stockTxt = st.label ? `${st.label} (${stockScore >= 0 ? "+" : ""}${stockScore})` : "n/a";
+
+  let html = `<div style="margin-bottom:10px;"><b>${escapeHtml(result.symbol)}</b> — as of ${escapeHtml(result.as_of)}<br/>Last close: ₹${result.last_close}</div>`;
+
+  html += `<div style="margin-bottom:10px;">
+    <span class="bs-pill" style="background:${pillBg}; color:${pillFg};">🔭 ${escapeHtml(bias)}</span>
+    <span style="font-size:12px; margin-left:6px;">score ${result.score >= 0 ? "+" : ""}${result.score} / 100</span>
+  </div>`;
+
+  html += `<div style="margin-bottom:10px; padding:10px; border:1px solid var(--border,#ddd); border-radius:8px; white-space:pre-wrap; line-height:1.5;">${escapeHtml(result.summary || "")}</div>`;
+
+  html += `<div style="font-size:12px; margin-bottom:6px;">Market: <b>${marketTxt}</b> · Sector: <b>${sectorTxt}</b> · Stock: <b>${stockTxt}</b></div>`;
+
+  if (result.data_notes && result.data_notes.length) {
+    html += `<div style="font-size:11px; color:var(--text-secondary,#666); margin-top:6px;">${result.data_notes.map(escapeHtml).join("<br/>")}</div>`;
+  }
+  if (result.disclaimer) {
+    html += `<div style="font-size:11px; color:var(--text-secondary,#666); margin-top:8px; font-style:italic;">${escapeHtml(result.disclaimer)}</div>`;
+  }
+
+  html += `<div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+    <button class="analyze-btn" id="get-plan-btn" data-symbol="${escapeHtml(result.symbol)}">📊 Get Plan</button>
+    <button class="analyze-btn" id="get-narrative-btn" data-symbol="${escapeHtml(result.symbol)}">🧠 Get AI Narrative</button>
+  </div>`;
+
   return html;
 }
 
@@ -157,6 +212,7 @@ function openAnalyze(symbol) {
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
       <button class="analyze-btn" id="get-plan-btn" data-symbol="${symbol}">📊 Get Plan</button>
       <button class="analyze-btn" id="get-narrative-btn" data-symbol="${symbol}">🧠 Get AI Narrative</button>
+      <button class="analyze-btn" id="get-outlook-btn" data-symbol="${symbol}">🔭 Get Outlook</button>
     </div>
   `;
   document.getElementById("analyze-overlay").classList.add("open");
@@ -190,5 +246,21 @@ async function loadNarrative(symbol, btn) {
     btn.disabled = false;
     btn.textContent = "🧠 Get AI Narrative";
     alert("Could not generate narrative: " + err.message);
+  }
+}
+
+async function loadOutlook(symbol, btn) {
+  // Third opt-in button: Nifty trend -> sector trend -> stock trend/patterns
+  // -> one short outlook summary. Only fires on click, like the other two.
+  btn.disabled = true;
+  btn.textContent = "Loading… up to 30s";
+  try {
+    const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}&mode=outlook`);
+    const result = await res.json();
+    document.getElementById("analyze-body").innerHTML = renderOutlookResult(result);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "🔭 Get Outlook";
+    alert("Could not load outlook: " + err.message);
   }
 }

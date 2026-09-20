@@ -825,6 +825,20 @@ body{background:var(--bg);color:var(--text-primary);}
 .minimize-btn::before{content:'−';}
 .section.minimized .minimize-btn::before{content:'+';}
 </style>
+<style id="outlook-badges">
+.outlook-badge{font-family:"Space Grotesk",sans-serif;font-weight:800;font-size:11px;letter-spacing:.04em;padding:3px 12px;border-radius:5px;border:2px solid transparent;cursor:pointer;flex-shrink:0;color:#fff;}
+.outlook-badge.buy{background:#166534;}
+.outlook-badge.hold{background:#a16207;}
+.outlook-badge.sell{background:#991b1b;}
+.outlook-badge.pending{background:#e2e8f0;color:#64748b;cursor:progress;}
+.outlook-badge.na{background:#fff;color:#64748b;border-color:#94a3b8;border-style:dashed;}
+.outlook-badge:hover{filter:brightness(1.12);}
+.stock-row.act-buy{box-shadow:inset 5px 0 0 #166534;}
+.stock-row.act-hold{box-shadow:inset 5px 0 0 #a16207;}
+.stock-row.act-sell{box-shadow:inset 5px 0 0 #991b1b;}
+.stat-card.red{border-left:6px solid #991b1b;}
+#outlook-progress{font-size:11px;color:#64748b;align-self:center;}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -884,25 +898,25 @@ LIVE
 
 <div class="stat-card green">
 
-<div class="stat-value" id="stat-buyzone">0</div>
+<div class="stat-value" id="stat-buy">0</div>
 
-<div class="stat-label">Buy Zone</div>
+<div class="stat-label">Buy</div>
 
 </div>
 
 <div class="stat-card yellow">
 
-<div class="stat-value" id="stat-neartarget">0</div>
+<div class="stat-value" id="stat-hold">0</div>
 
-<div class="stat-label">Near Target</div>
+<div class="stat-label">Hold</div>
 
 </div>
 
-<div class="stat-card blue">
+<div class="stat-card red">
 
-<div class="stat-value" id="stat-needtarget">0</div>
+<div class="stat-value" id="stat-sell">0</div>
 
-<div class="stat-label">Need Target</div>
+<div class="stat-label">Sell</div>
 
 </div>
 
@@ -916,39 +930,12 @@ LIVE
 <input type="text" id="stock-search" placeholder="Search by symbol or name…" />
 
 <div class="quick-row">
-<label class="chip-check" id="chip-neartarget"><input type="checkbox" data-quick="neartarget"><span>Near Target</span></label>
-<label class="chip-check" id="chip-needtarget"><input type="checkbox" data-quick="needtarget"><span>Need Target</span></label>
-<label class="chip-check" id="chip-buy"><input type="checkbox" data-quick="buy"><span>✅ Buy</span></label>
-<label class="chip-check" id="chip-sell"><input type="checkbox" data-quick="sell"><span>🚫 Sell</span></label>
+<label class="chip-check" id="chip-buy"><input type="checkbox" data-action="BUY"><span>✅ Buy</span></label>
+<label class="chip-check" id="chip-hold"><input type="checkbox" data-action="HOLD"><span>⏸ Hold</span></label>
+<label class="chip-check" id="chip-sell"><input type="checkbox" data-action="SELL"><span>🚫 Sell</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 <button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
-</div>
-
-<div class="dropdown-row">
-<select class="dd-select" id="sel-buysell">
-<option value="all">Bias: All</option>
-<option value="buy">Bias: Bullish</option>
-<option value="sell">Bias: Bearish</option>
-</select>
-
-<select class="dd-select" id="sel-decision">
-<option value="all">Decision: All</option>
-<option value="Confirmed">Decision: Confirmed</option>
-<option value="Watching">Decision: Watching</option>
-</select>
-
-<select class="dd-select" id="sel-source">
-<option value="all">Source: All</option>
-<option value="Breakout">Source: Breakout</option>
-</select>
-
-<select class="dd-select" id="sel-crossage">
-<option value="all">Cross Age: All</option>
-<option value="3">Cross Age: 3 day old</option>
-<option value="5">Cross Age: 5 day old</option>
-<option value="7">Cross Age: 7 day old</option>
-<option value="10">Cross Age: 10 day old</option>
-</select>
+<span id="outlook-progress"></span>
 </div>
 </div>
 
@@ -988,66 +975,186 @@ LIVE
   </div>
 </div>
 
-<script src="/badge-utils.js"></script>
 <script src="/analyze-widget.js"></script>
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let quickFilters = { neartarget: false, needtarget: false, buy: false, sell: false };
-let buysellFilter = "all";
-let decisionFilter = "all";
-let sourceFilter = "all";
-let crossAgeFilter = "all";
+let actionFilter = null; // null | "BUY" | "HOLD" | "SELL"
 let cmpSortDir = null; // null | "asc" | "desc"
 let latestStocks = [];
 let expandedNotes = new Set();
-let expandedQuality = new Set();
 
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function qualityOk(stock) {
-  // quality_score and market_regime are already computed by sync_dashboard.py
-  // but weren't being used to gate the decision -- price hitting your target
-  // was enough to mark "Confirmed" even with a low quality score or during a
-  // Bearish market_regime. Require at least a mid-tier quality score, and
-  // don't confirm fresh buys while the regime is Bearish.
-  const q = stock.quality_score;
-  const qOk = q === null || q === undefined ? true : q >= 2;
-  const regimeOk = stock.market_regime !== "Bearish";
-  return qOk && regimeOk;
+// ---- BUY / HOLD / SELL, straight from the Outlook logic (core/outlook.py in
+// nse-stock-chatbot: Nifty trend -> sector trend -> stock trend/patterns).
+// This is now the ONLY badge and the ONLY set of filters on this page.
+// Results are fetched per ticker in the background (2 at a time), cached for
+// 3 hours in this browser (analyze-widget.js) and for 3 hours on the server,
+// so the Angel account is not hit again for a ticker that is already fresh.
+const outlookBySymbol = {}; // symbol -> outlook result, or {error}
+const outlookFailedAt = {}; // symbol -> ms timestamp of the last failure
+const OUTLOOK_RETRY_MS = 10 * 60 * 1000;
+const OUTLOOK_WORKERS = 2;
+let outlookWarming = false;
+let rerenderTimer = null;
+
+function actionOf(stock) {
+  const o = outlookBySymbol[stock.symbol];
+  if (!o) return "PENDING";
+  if (o.error || !o.action) return "NA";
+  return o.action.label; // BUY | HOLD | SELL
 }
 
-function classify(stock) {
-  if (stock.distance_pct === undefined) return "needtarget";
-  const d = Math.abs(stock.distance_pct);
-  if (stock.distance_pct <= 0) {
-    // "held" is its own bucket, separate from "watch" (genuine near-target
-    // proximity) -- otherwise every quality/regime-blocked stock floods the
-    // Near Target stat and filter alongside stocks that are actually just
-    // approaching their target.
-    return qualityOk(stock) ? "buyzone" : "held";
+function actionClass(stock) {
+  return "act-" + actionOf(stock).toLowerCase();
+}
+
+function actionRank(action) {
+  return { BUY: 0, HOLD: 1, SELL: 2, PENDING: 3, NA: 4 }[action] ?? 5;
+}
+
+function renderActionBadge(symbol) {
+  const o = outlookBySymbol[symbol];
+  let cls = "pending", text = "…", title = "Calculating outlook…";
+  if (o && (o.error || !o.action)) {
+    cls = "na"; text = "N/A"; title = (o.error || "Outlook unavailable") + " — click to retry";
+  } else if (o) {
+    cls = o.action.label.toLowerCase(); text = o.action.label; title = "Click for the outlook summary";
   }
-  if (d <= WATCH_THRESHOLD) return "watch";
-  return "tracking";
+  return `<button class="outlook-badge ${cls}" data-symbol="${escapeHtml(symbol)}" title="${escapeHtml(title)}">${text}</button>`;
 }
 
-function isNearStoploss(stock) {
-  if (!stock.stop_loss || stock.price === undefined) return false;
-  const d = ((stock.price - stock.stop_loss) / stock.stop_loss) * 100;
-  return d >= 0 && d <= WATCH_THRESHOLD;
+function actionReasonText(symbol) {
+  const o = outlookBySymbol[symbol];
+  if (!o) return "Calculating outlook…";
+  if (o.error || !o.action) return "Outlook unavailable right now.";
+  return o.action.reason;
 }
 
-function buySell(stock) {
-  if (stock.buying_selling_verdict === "Heavy Buying") return "buy";
-  if (stock.buying_selling_verdict === "Heavy Selling") return "sell";
-  if (stock.distance_pct !== undefined) return stock.distance_pct <= 0 ? "buy" : "sell";
-  return "buy";
+function renderActionRow(stock) {
+  return `<div class="verdict-row">${renderActionBadge(stock.symbol)}<span class="verdict-reason outlook-reason" data-symbol="${escapeHtml(stock.symbol)}">${escapeHtml(actionReasonText(stock.symbol))}</span></div>`;
 }
 
-function decision(stock) {
-  return classify(stock) === "buyzone" ? "Confirmed" : "Watching";
+function paintOutlook(symbol) {
+  // Update badges/reasons in place so typing in a notes box or an entry
+  // field is never interrupted by a full re-render.
+  document.querySelectorAll(`.outlook-badge[data-symbol="${symbol}"]`).forEach((el) => {
+    el.outerHTML = renderActionBadge(symbol);
+  });
+  document.querySelectorAll(`.outlook-reason[data-symbol="${symbol}"]`).forEach((el) => {
+    el.textContent = actionReasonText(symbol);
+  });
+  const stock = latestStocks.find((s) => s.symbol === symbol);
+  if (stock) {
+    document.querySelectorAll(`.outlook-reason[data-symbol="${symbol}"]`).forEach((el) => {
+      const row = el.closest(".stock-row");
+      if (!row) return;
+      row.classList.remove("act-buy", "act-hold", "act-sell", "act-pending", "act-na");
+      row.classList.add(actionClass(stock));
+    });
+  }
+}
+
+function userIsEditing() {
+  const a = document.activeElement;
+  return !!a && !!a.closest && !!a.closest("#rows, #watchlist-rows") && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+}
+
+function scheduleRerender(final) {
+  // Only re-order/re-filter when it matters: a filter is active, or the
+  // whole batch just finished. Never while the person is typing.
+  if (!final && !actionFilter) return;
+  clearTimeout(rerenderTimer);
+  const tick = () => {
+    if (userIsEditing()) { rerenderTimer = setTimeout(tick, 3000); return; }
+    render();
+  };
+  rerenderTimer = setTimeout(tick, 1500);
+}
+
+function updateOutlookProgress() {
+  const el = document.getElementById("outlook-progress");
+  if (!el) return;
+  const active = latestStocks.filter((s) => !s.archived);
+  const pending = active.filter((s) => !outlookBySymbol[s.symbol]).length;
+  const failed = active.filter((s) => outlookBySymbol[s.symbol] && outlookBySymbol[s.symbol].error).length;
+  if (pending > 0) {
+    el.textContent = `Outlook: ${active.length - pending} of ${active.length} ready…`;
+  } else if (failed > 0) {
+    el.textContent = `${failed} outlook${failed > 1 ? "s" : ""} unavailable — click N/A to retry`;
+  } else {
+    el.textContent = "";
+  }
+}
+
+function hydrateOutlooksFromCache() {
+  latestStocks.forEach((s) => {
+    if (!outlookBySymbol[s.symbol]) {
+      const cached = readOutlookCache(String(s.symbol).toUpperCase());
+      if (cached) outlookBySymbol[s.symbol] = cached;
+    }
+  });
+}
+
+async function warmOutlooks() {
+  if (outlookWarming) return;
+  outlookWarming = true;
+  try {
+    const ordered = latestStocks
+      .filter((s) => !s.archived)
+      .sort((a, b) => (b.watchlisted ? 1 : 0) - (a.watchlisted ? 1 : 0))
+      .map((s) => s.symbol);
+    const queue = [...new Set(ordered)].filter((sym) => {
+      const o = outlookBySymbol[sym];
+      if (!o) return true;
+      return !!o.error && Date.now() - (outlookFailedAt[sym] || 0) > OUTLOOK_RETRY_MS;
+    });
+
+    const worker = async () => {
+      while (queue.length) {
+        const sym = queue.shift();
+        try {
+          const result = await fetchOutlook(sym);
+          outlookBySymbol[sym] = result;
+          if (result.error) outlookFailedAt[sym] = Date.now(); else delete outlookFailedAt[sym];
+          // Angel is throttling the account: back off instead of hammering it.
+          if (result.error && /rate.?limit/i.test(result.error)) await new Promise((r) => setTimeout(r, 30000));
+        } catch (e) {
+          outlookBySymbol[sym] = { error: (e && e.message) || "Network error" };
+          outlookFailedAt[sym] = Date.now();
+        }
+        paintOutlook(sym);
+        updateStats();
+        updateOutlookProgress();
+        scheduleRerender(false);
+      }
+    };
+    await Promise.all(Array.from({ length: OUTLOOK_WORKERS }, worker));
+  } finally {
+    outlookWarming = false;
+    updateOutlookProgress();
+    scheduleRerender(true);
+  }
+}
+
+async function retryOutlook(symbol) {
+  delete outlookBySymbol[symbol];
+  delete outlookFailedAt[symbol];
+  paintOutlook(symbol);
+  try {
+    outlookBySymbol[symbol] = await fetchOutlook(symbol, true);
+  } catch (e) {
+    outlookBySymbol[symbol] = { error: (e && e.message) || "Network error" };
+  }
+  if (outlookBySymbol[symbol] && outlookBySymbol[symbol].error) outlookFailedAt[symbol] = Date.now();
+  paintOutlook(symbol);
+  updateStats();
+  updateOutlookProgress();
+  scheduleRerender(false);
+  if (outlookBySymbol[symbol] && !outlookBySymbol[symbol].error) openOutlook(symbol);
 }
 
 function renderNotesRow(stock) {
@@ -1069,154 +1176,14 @@ function renderNotesRow(stock) {
   `;
 }
 
-const QUALITY_FLAG_LABELS = {
-  rs_positive: "Outperforming Nifty (20d)",
-  strong_close: "Closed strong in day's range",
-  solid_base: "Base held \u226510 days",
-  volume_surge: "Volume surge on breakout",
-  retest_52w_breakout: "At 52w breakout retest",
-};
-
-function renderQualityRow(stock) {
-  const passed = (stock.quality_flags || "").split(",").filter(Boolean);
-  const checks = Object.keys(QUALITY_FLAG_LABELS).map((key) => {
-    const ok = passed.includes(key);
-    return `<div class="quality-check ${ok ? "pass" : "fail"}">${ok ? "\u2714" : "\u2718"} ${QUALITY_FLAG_LABELS[key]}</div>`;
-  }).join("");
-
-  const retestInfo = stock.retest_52w_level !== null
-    ? `52W breakout: ₹${stock.retest_52w_level} (${stock.days_since_52w_breakout}d ago, now ${stock.retest_pct_from_52w > 0 ? "+" : ""}${stock.retest_pct_from_52w}% from it)`
-    : "No recent 52w breakout found";
-
-  return `
-    <div class="quality-row" data-quality-for="${stock.symbol}">
-      <div class="quality-panel">
-        <div class="quality-checks">${checks}</div>
-        <div class="quality-raw">
-          RS vs Nifty: ${stock.rs_vs_nifty !== null ? stock.rs_vs_nifty + "%" : "-"} ·
-          Close location: ${stock.close_location !== null ? stock.close_location : "-"} ·
-          Base days: ${stock.base_days !== null ? stock.base_days : "-"} ·
-          Vol ratio: ${stock.breakout_vol_ratio !== null ? stock.breakout_vol_ratio + "x" : "-"} ·
-          Market regime: ${stock.market_regime || "-"}
-        </div>
-        <div class="quality-raw">${retestInfo}</div>
-      </div>
-    </div>
-  `;
-}
-
-function computeFinalVerdict(stock) {
-  // Single BUY / HOLD / SELL call + one plain-language reason, replacing the
-  // old pile of ~10 separate badges, PLUS a separate market-caution note
-  // (see marketCautionNote below) rather than letting the broad market
-  // silently override every individual stock's own call.
-  //
-  // IMPORTANT: lib/verdict.js's compute_verdict() checks market_regime
-  // FIRST and returns an immediate blanket "AVOID" for every stock the
-  // instant the market itself is Bearish -- before it ever looks at that
-  // stock's own decision/quality/footprint. So when market_regime is
-  // "Bearish", stock.verdict/verdict_reason carry NO stock-specific
-  // information at all (every stock gets the identical "Bearish market
-  // regime" AVOID). In that state we skip the server verdict entirely and
-  // fall straight to this stock's own raw signals below -- that's the only
-  // way to judge THIS stock's own setup when the market-wide gate has
-  // pre-empted the server's per-stock read.
-
-  // 1. Heavy Selling always overrides everything else -- this is about
-  //    THIS stock's own delivery-volume behavior today, not the market.
-  if (stock.buying_selling_verdict === "Heavy Selling") {
-    return { label: "SELL", reason: "Heavy institutional selling detected today." };
-  }
-
-  // 2. Authoritative server verdict -- but only when it's actually
-  //    stock-specific (i.e. the market-wide regime gate didn't pre-empt it).
-  if (stock.market_regime !== "Bearish") {
-    if (stock.verdict === "BUY-READY") {
-      const bigMove = stock.big_move_setup
-        ? ` Also a Big Move Setup — confirmed cross + 3-week accumulation + Quality ${stock.quality_score}/5.`
-        : "";
-      return { label: "BUY", reason: (stock.verdict_reason || "EMA/delivery cross and footprint evidence line up.") + bigMove };
-    }
-    if (stock.verdict === "AVOID") {
-      return { label: "SELL", reason: stock.verdict_reason || "Cross/footprint evidence points the wrong way." };
-    }
-    if (stock.verdict === "WATCH") {
-      return { label: "HOLD", reason: stock.verdict_reason || "Setup is developing but not confirmed yet." };
-    }
-  }
-
-  // 3. No usable server verdict (either none yet, or the market regime
-  //    gate pre-empted it above) -- judge this stock on its own raw
-  //    signals, strongest first.
-  if (stock.harmonic_pattern && stock.harmonic_days_since_c !== null && stock.harmonic_days_since_c <= 20) {
-    if (stock.harmonic_direction === "Bullish") {
-      return { label: "BUY", reason: `Harmonic ${stock.harmonic_pattern} projects a bullish reversal zone at ₹${stock.harmonic_prz_low}-₹${stock.harmonic_prz_high}, ${stock.harmonic_distance_to_prz_pct}% away.` };
-    }
-    return { label: "SELL", reason: `Harmonic ${stock.harmonic_pattern} projects a bearish reversal zone at ₹${stock.harmonic_prz_low}-₹${stock.harmonic_prz_high}.` };
-  }
-
-  const emaSignalText = stock.ema_cross_signal ? `20/50 EMA cross with volume, target ₹${stock.ema_cross_target}`
-    : stock.ema_pullback_signal ? `EMA Pullback (${stock.ema_pullback_pattern}), target ₹${stock.ema_pullback_target}`
-    : stock.ema_retest_signal ? `EMA${stock.ema_retest_touched} Retest, target ₹${stock.ema_retest_target}`
-    : null;
-
-  if (emaSignalText && stock.buying_selling_verdict === "Heavy Buying") {
-    return { label: "BUY", reason: `Heavy buying today, confirmed by an active ${emaSignalText}.` };
-  }
-  if (emaSignalText) {
-    const hasQuality = stock.quality_score !== null && stock.quality_score !== undefined;
-    if (hasQuality && stock.quality_score >= 3) {
-      return { label: "BUY", reason: `${emaSignalText}.` };
-    }
-    return { label: "HOLD", reason: `${emaSignalText} fired, but breakout quality is weak (${hasQuality ? stock.quality_score : "?"}/5) — needs confirmation.` };
-  }
-
-  if (stock.weekly_accumulation && stock.footprint_direction === "Buying" && stock.footprint_weighted_score !== null && stock.footprint_weighted_score >= 4) {
-    return { label: "BUY", reason: "3-week volume accumulation confirmed by today's big-player buying footprint." };
-  }
-
-  if (stock.st_long_signal) {
-    return { label: "BUY", reason: "Price sustaining above 20/50 EMA since the last bullish cross." };
-  }
-
-  if (stock.at_52w_retest) {
-    return { label: "HOLD", reason: "Sitting at a 52-week retest — waiting for confirmation before entry." };
-  }
-
-  if (stock.archived) {
-    return { label: "HOLD", reason: "No longer an active setup — kept for reference." };
-  }
-
-  return { label: "HOLD", reason: "No strong signal either way right now — just tracking." };
-}
-
-function marketCautionNote(stock) {
-  // Shown ALONGSIDE the stock's own verdict, regardless of what that
-  // verdict is -- even a stock with a genuinely strong BUY setup is riskier
-  // to take when the broader market itself is Bearish, and that context
-  // deserves to stay visible rather than being the thing that silently
-  // determines the verdict.
-  if (stock.market_regime === "Bearish") {
-    return "⚠️ Market regime: Bearish — this call is against the broader trend.";
-  }
-  return "";
-}
-
-function renderVerdictBadge(stock) {
-  const { label, reason } = computeFinalVerdict(stock);
-  const cls = label === "BUY" ? "buy" : label === "SELL" ? "sell" : "hold";
-  const caution = marketCautionNote(stock);
-  return `<div class="verdict-row"><span class="verdict-tag ${cls}">${label}</span><span class="verdict-reason">${reason}</span></div>${caution ? `<div class="caution-row">${caution}</div>` : ""}`;
-}
-
 function renderRow(stock) {
-  const cls = classify(stock);
+  const cls = actionClass(stock);
 
   const dayChange = stock.percent_change || 0;
   const dayChangeColor = dayChange >= 0 ? "var(--accent-buy)" : "var(--accent-loss)";
   const trendArrow = dayChange >= 0 ? "▲" : "▼";
 
-  const verdictHtml = renderVerdictBadge(stock);
+  const verdictHtml = renderActionRow(stock);
 
   return `
     <div class="row stock-row ${cls}${stock.archived ? " archived" : ""}" data-category="${cls}">
@@ -1224,7 +1191,6 @@ function renderRow(stock) {
         <div class="symbol-line">
           <input type="checkbox" class="watch-check" data-symbol="${stock.symbol}" ${stock.watchlisted ? "checked" : ""} title="Add to Watchlist" />
           <span class="symbol">${stock.symbol}</span>
-          ${stock.quality_score !== null && stock.quality_score !== undefined ? `<button class="quality-badge ${stock.quality_score >= 4 ? "q-high" : stock.quality_score >= 2 ? "q-mid" : "q-low"}" data-symbol="${stock.symbol}" title="Breakout quality — click for breakdown">Q ${stock.quality_score}/5</button>` : ""}
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
           <button class="analyze-btn" data-symbol="${stock.symbol}" title="Analyze ${stock.symbol}">📊 Analyse</button>
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
@@ -1253,34 +1219,15 @@ function renderRow(stock) {
       ${verdictHtml}
     </div>
     ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
-    ${expandedQuality.has(stock.symbol) ? renderQualityRow(stock) : ""}
   `;
 }
 
 function computeFilteredStocks() {
   let filtered = latestStocks.filter((s) => !s.archived);
 
-  if (buysellFilter !== "all") {
-    filtered = filtered.filter((s) => buySell(s) === buysellFilter);
+  if (actionFilter) {
+    filtered = filtered.filter((s) => actionOf(s) === actionFilter);
   }
-
-  if (decisionFilter !== "all") {
-    filtered = filtered.filter((s) => decision(s) === decisionFilter);
-  }
-
-  if (sourceFilter !== "all") {
-    filtered = filtered.filter((s) => (s.source || "").split(",").includes(sourceFilter));
-  }
-
-  if (crossAgeFilter !== "all") {
-    const exactAge = parseInt(crossAgeFilter, 10);
-    filtered = filtered.filter((s) => s.adp_crossover_age !== null && s.adp_crossover_age !== undefined && Number(s.adp_crossover_age) === exactAge);
-  }
-
-  if (quickFilters.neartarget) filtered = filtered.filter((s) => classify(s) === "watch");
-  if (quickFilters.needtarget) filtered = filtered.filter((s) => classify(s) === "needtarget");
-  if (quickFilters.buy) filtered = filtered.filter((s) => computeFinalVerdict(s).label === "BUY");
-  if (quickFilters.sell) filtered = filtered.filter((s) => computeFinalVerdict(s).label === "SELL");
 
   if (currentSearch.trim() !== "") {
     const q = currentSearch.trim().toLowerCase();
@@ -1292,12 +1239,10 @@ function computeFilteredStocks() {
   if (cmpSortDir) {
     filtered.sort((a, b) => cmpSortDir === "asc" ? a.price - b.price : b.price - a.price);
   } else {
-    filtered.sort((a, b) => (b.quality_score ?? -1) - (a.quality_score ?? -1));
+    // Default: Buy first, then Hold, then Sell; strongest outlook score first within each.
+    const score = (s) => (outlookBySymbol[s.symbol] && outlookBySymbol[s.symbol].score) ?? -999;
+    filtered.sort((a, b) => actionRank(actionOf(a)) - actionRank(actionOf(b)) || score(b) - score(a));
   }
-
-  // Big Move Setups always float to the top, on top of whatever sort/filter
-  // is active -- the whole point is not having to hunt for them.
-  filtered.sort((a, b) => (b.big_move_setup ? 1 : 0) - (a.big_move_setup ? 1 : 0));
 
   return filtered;
 }
@@ -1330,10 +1275,11 @@ function renderTickerBand(filtered) {
 }
 
 function updateStats() {
+  const active = latestStocks.filter((s) => !s.archived);
   document.getElementById("stat-total").textContent = latestStocks.length;
-  document.getElementById("stat-buyzone").textContent = latestStocks.filter((s) => classify(s) === "buyzone").length;
-  document.getElementById("stat-neartarget").textContent = latestStocks.filter((s) => classify(s) === "watch").length;
-  document.getElementById("stat-needtarget").textContent = latestStocks.filter((s) => classify(s) === "needtarget").length;
+  document.getElementById("stat-buy").textContent = active.filter((s) => actionOf(s) === "BUY").length;
+  document.getElementById("stat-hold").textContent = active.filter((s) => actionOf(s) === "HOLD").length;
+  document.getElementById("stat-sell").textContent = active.filter((s) => actionOf(s) === "SELL").length;
 }
 
 async function loadDashboard() {
@@ -1347,8 +1293,11 @@ async function loadDashboard() {
     }
 
     latestStocks = data.stocks || [];
+    hydrateOutlooksFromCache();
     updateStats();
+    updateOutlookProgress();
     render();
+    warmOutlooks();
 
     const syncedDate = new Date(data.syncedAt);
     document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
@@ -1413,14 +1362,8 @@ document.getElementById("rows").addEventListener("click", async (e) => {
     return;
   }
 
-  if (e.target.classList.contains("quality-badge")) {
-    const symbol = e.target.dataset.symbol;
-    if (expandedQuality.has(symbol)) {
-      expandedQuality.delete(symbol);
-    } else {
-      expandedQuality.add(symbol);
-    }
-    render();
+  if (e.target.classList.contains("outlook-badge")) {
+    handleOutlookBadgeClick(e.target.dataset.symbol);
     return;
   }
 
@@ -1466,37 +1409,27 @@ document.getElementById("rows").addEventListener("click", async (e) => {
   }
 });
 
+function handleOutlookBadgeClick(symbol) {
+  const o = outlookBySymbol[symbol];
+  if (!o) return; // still calculating; the badge fills itself in when ready
+  if (o.error || !o.action) { retryOutlook(symbol); return; }
+  openOutlook(symbol);
+}
+
 document.getElementById("stock-search").addEventListener("input", (e) => {
   currentSearch = e.target.value;
   render();
 });
 
-document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
+document.querySelectorAll(".chip-check input[data-action]").forEach((cb) => {
   cb.addEventListener("change", () => {
-    quickFilters[cb.dataset.quick] = cb.checked;
-    cb.closest(".chip-check").classList.toggle("on", cb.checked);
+    actionFilter = cb.checked ? cb.dataset.action : null;
+    document.querySelectorAll(".chip-check input[data-action]").forEach((other) => {
+      other.checked = other.dataset.action === actionFilter;
+      other.closest(".chip-check").classList.toggle("on", other.checked);
+    });
     render();
   });
-});
-
-document.getElementById("sel-buysell").addEventListener("change", (e) => {
-  buysellFilter = e.target.value;
-  render();
-});
-
-document.getElementById("sel-decision").addEventListener("change", (e) => {
-  decisionFilter = e.target.value;
-  render();
-});
-
-document.getElementById("sel-source").addEventListener("change", (e) => {
-  sourceFilter = e.target.value;
-  render();
-});
-
-document.getElementById("sel-crossage").addEventListener("change", (e) => {
-  crossAgeFilter = e.target.value;
-  render();
 });
 
 document.getElementById("th-cmp").addEventListener("click", () => {
@@ -1507,15 +1440,11 @@ document.getElementById("th-cmp").addEventListener("click", () => {
 document.getElementById("reset-filters").addEventListener("click", () => {
   currentSearch = "";
   document.getElementById("stock-search").value = "";
-  quickFilters = { neartarget: false, needtarget: false, buy: false, sell: false };
-  document.querySelectorAll(".chip-check input[data-quick]").forEach((cb) => {
+  actionFilter = null;
+  document.querySelectorAll(".chip-check input[data-action]").forEach((cb) => {
     cb.checked = false;
     cb.closest(".chip-check").classList.remove("on");
   });
-  buysellFilter = "all"; document.getElementById("sel-buysell").value = "all";
-  decisionFilter = "all"; document.getElementById("sel-decision").value = "all";
-  sourceFilter = "all"; document.getElementById("sel-source").value = "all";
-  crossAgeFilter = "all"; document.getElementById("sel-crossage").value = "all";
   cmpSortDir = null;
   render();
 });
@@ -1560,7 +1489,7 @@ function renderWatchlistModal() {
 
   container.innerHTML = watched.map((s) => `
     <tr data-symbol="${s.symbol}">
-      <td><b class="watchlist-symbol">${s.symbol}</b> ${renderStLongBadge(s.st_long_signal, s.st_long_days_since_cross, s.st_long_pct_above_ema50)}</td>
+      <td><b class="watchlist-symbol">${s.symbol}</b> ${renderActionBadge(s.symbol)}</td>
       <td><a href="https://www.tradingview.com/chart/?symbol=NSE:${s.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a></td>
       <td><button class="analyze-btn" data-symbol="${s.symbol}">Analyze</button></td>
       <td class="mono-cell">
@@ -1602,6 +1531,10 @@ document.getElementById("watchlist-rows").addEventListener("click", async (e) =>
   }
   if (e.target.classList.contains("analyze-btn")) {
     openAnalyze(symbol);
+    return;
+  }
+  if (e.target.classList.contains("outlook-badge")) {
+    handleOutlookBadgeClick(symbol);
     return;
   }
   if (e.target.classList.contains("save-btn")) {

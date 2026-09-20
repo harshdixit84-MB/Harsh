@@ -164,10 +164,9 @@ function renderOutlookResult(result) {
   }
 
   const bias = String(result.bias || "");
-  const isBull = /bullish/i.test(bias);
-  const isBear = /bearish/i.test(bias);
-  const pillBg = isBull ? "#d1fae5" : isBear ? "#fee2e2" : "#e2e8f0";
-  const pillFg = isBull ? "#065f46" : isBear ? "#b91c1c" : "#475569";
+  const act = (result.action && result.action.label) || "";
+  const pillBg = act === "BUY" ? "#d1fae5" : act === "SELL" ? "#fee2e2" : "#fef3c7";
+  const pillFg = act === "BUY" ? "#065f46" : act === "SELL" ? "#b91c1c" : "#92400e";
 
   const marketTxt = result.market && !result.market.error ? `${result.market.label} (${result.market.score >= 0 ? "+" : ""}${result.market.score})` : "n/a";
   const sectorTxt = result.sector ? `${escapeHtml(result.sector.name)}: ${result.sector.label} (${result.sector.score >= 0 ? "+" : ""}${result.sector.score})` : "n/a";
@@ -178,8 +177,8 @@ function renderOutlookResult(result) {
   let html = `<div style="margin-bottom:10px;"><b>${escapeHtml(result.symbol)}</b> — as of ${escapeHtml(result.as_of)}<br/>Last close: ₹${result.last_close}</div>`;
 
   html += `<div style="margin-bottom:10px;">
-    <span class="bs-pill" style="background:${pillBg}; color:${pillFg};">🔭 ${escapeHtml(bias)}</span>
-    <span style="font-size:12px; margin-left:6px;">score ${result.score >= 0 ? "+" : ""}${result.score} / 100</span>
+    <span class="bs-pill" style="background:${pillBg}; color:${pillFg}; font-size:14px; padding:4px 14px;">${escapeHtml(act || "n/a")}</span>
+    <span style="font-size:12px; margin-left:8px;">${escapeHtml(bias)} · score ${result.score >= 0 ? "+" : ""}${result.score} / 100</span>
   </div>`;
 
   html += `<div style="margin-bottom:10px; padding:10px; border:1px solid var(--border,#ddd); border-radius:8px; white-space:pre-wrap; line-height:1.5;">${escapeHtml(result.summary || "")}</div>`;
@@ -249,18 +248,80 @@ async function loadNarrative(symbol, btn) {
   }
 }
 
+// ---- Outlook client (shared by the Analyze modal and the dashboard's
+// Buy/Hold/Sell badges). Results are cached in localStorage for 3 hours and
+// concurrent requests for the same symbol are merged, so each ticker costs
+// the Angel account at most one outlook call per 3 hours. ----
+const OUTLOOK_CACHE_PREFIX = "outlook-v2:";
+const OUTLOOK_CACHE_TTL_MS = 3 * 60 * 60 * 1000;
+const outlookInflight = {};
+
+function readOutlookCache(symbol) {
+  try {
+    const raw = localStorage.getItem(OUTLOOK_CACHE_PREFIX + symbol);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry || Date.now() - entry.t > OUTLOOK_CACHE_TTL_MS) return null;
+    return entry.r;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeOutlookCache(symbol, result) {
+  try {
+    localStorage.setItem(OUTLOOK_CACHE_PREFIX + symbol, JSON.stringify({ t: Date.now(), r: result }));
+  } catch (e) { /* storage full or blocked: caching is optional */ }
+}
+
+function fetchOutlook(symbol, force) {
+  symbol = String(symbol).toUpperCase();
+  if (!force) {
+    const cached = readOutlookCache(symbol);
+    if (cached) return Promise.resolve(cached);
+  }
+  if (outlookInflight[symbol]) return outlookInflight[symbol];
+  const url = `${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}&mode=outlook${force ? "&fresh=1" : ""}`;
+  outlookInflight[symbol] = fetch(url)
+    .then((res) => res.json())
+    .then((result) => {
+      if (result && !result.error) writeOutlookCache(symbol, result);
+      return result;
+    })
+    .finally(() => { delete outlookInflight[symbol]; });
+  return outlookInflight[symbol];
+}
+
 async function loadOutlook(symbol, btn) {
-  // Third opt-in button: Nifty trend -> sector trend -> stock trend/patterns
-  // -> one short outlook summary. Only fires on click, like the other two.
+  // Opt-in button inside the Analyze modal: only fires on click.
   btn.disabled = true;
   btn.textContent = "Loading… up to 30s";
   try {
-    const res = await fetch(`${ANALYZE_API_BASE}?symbol=${encodeURIComponent(symbol)}&mode=outlook`);
-    const result = await res.json();
+    const result = await fetchOutlook(symbol);
     document.getElementById("analyze-body").innerHTML = renderOutlookResult(result);
   } catch (err) {
     btn.disabled = false;
     btn.textContent = "🔭 Get Outlook";
     alert("Could not load outlook: " + err.message);
+  }
+}
+
+// Opens the popup straight on the outlook summary (used by the dashboard's
+// BUY / HOLD / SELL badges). Shows the cached result instantly if there is one.
+async function openOutlook(symbol) {
+  symbol = String(symbol).toUpperCase();
+  document.getElementById("analyze-title").textContent = `Outlook — ${symbol}`;
+  const body = document.getElementById("analyze-body");
+  document.getElementById("analyze-overlay").classList.add("open");
+  const cached = readOutlookCache(symbol);
+  if (cached) {
+    body.innerHTML = renderOutlookResult(cached);
+    return;
+  }
+  body.innerHTML = `<div class="loading">Loading outlook for ${escapeHtml(symbol)}… up to 30 seconds.</div>`;
+  try {
+    body.innerHTML = renderOutlookResult(await fetchOutlook(symbol));
+  } catch (err) {
+    body.innerHTML = `<div class="empty">⚠️ Could not load outlook: ${escapeHtml(err.message)}</div>`;
   }
 }

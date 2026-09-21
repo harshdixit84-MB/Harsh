@@ -1,0 +1,49 @@
+name: Daily outlook (Buy / Hold / Sell)
+
+# Runs once a day, Monday to Friday, at 4:00 PM IST -- after the 3:30 PM close,
+# so the daily candle every outlook is built on is final.
+# GitHub cron runs on UTC: 10:30 UTC = 4:00 PM IST, and both fall on the same
+# weekday at that hour, so "1-5" is Monday-Friday in IST too.
+# GitHub can start scheduled runs several minutes late when it is busy.
+# The "Run workflow" button (workflow_dispatch) runs it on demand.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "30 10 * * 1-5"
+
+permissions:
+  contents: write   # lets the job commit data/outlook.json back to the repo
+
+concurrency:
+  group: outlook-daily
+  cancel-in-progress: false
+
+jobs:
+  outlook:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install gspread google-auth requests
+
+      - name: Calculate every tracked ticker's outlook
+        run: python outlook_batch.py
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+
+      - name: Commit data/outlook.json, if it changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/outlook.json
+          git diff --staged --quiet || git commit -m "Update daily outlook [automated]"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push

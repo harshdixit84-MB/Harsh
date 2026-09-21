@@ -9,10 +9,14 @@ What it does
 ------------
 1. Reads every non-archived symbol from the "Monthly Breakout Scan" sheet
    (the same list the dashboard shows).
-2. Asks the nse-stock-chatbot API for each symbol's outlook, one at a time,
-   with fresh=1 so yesterday's server-side cache is never reused. The
+2. Asks the nse-stock-chatbot API for the outlooks in small batches
+   (mode=outlook_batch), with fresh=1 so yesterday's server-side cache is never
+   reused. One batch request fetches Nifty and each sector once and spaces the
+   stock fetches out, which keeps the run under Angel's rate limit. The
    outlook logic itself lives in that repo (core/outlook.py): Nifty trend ->
    sector trend -> stock trend/patterns -> BUY / HOLD / SELL.
+   The pace adapts: every rate-limit answer slows it down and pauses it, and
+   it speeds up again after a few clean batches.
 3. Writes data/outlook.json, which the dashboard (index.html) reads. The
    workflow commits that file back to the repo.
 
@@ -35,7 +39,7 @@ import os
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from collections import deque
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -45,18 +49,20 @@ API_URL = os.environ.get("OUTLOOK_API_URL", "https://nse-stock-chatbot.vercel.ap
 OUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "outlook.json")
 
 REQUEST_TIMEOUT = 65      # Vercel functions stop at 60 s; give the response a little longer to arrive
-WORKERS = 1               # one ticker at a time: Angel's history API allows only ~3 requests/second for the whole
-                          # account, and the first live run got rate-limited with 2 at a time
-PAUSE_SECONDS = 1.0       # gap after each ticker
-MAX_ATTEMPTS = 2          # for ordinary errors (timeouts, 5xx)
+CHUNK_SIZE = 8            # tickers per API request
+PACE_START = 1.0          # seconds the server waits between stock fetches inside a batch
+PACE_MAX = 8.0
+PAUSE_SECONDS = 1.0       # gap between batch requests
+MAX_ATTEMPTS = 2          # for ordinary errors (timeouts, 5xx, calculation errors)
 RETRY_WAIT_SECONDS = 20
 NON_RETRYABLE = ("valid NSE equity symbol",)
 RATE_LIMIT_MARKERS = ("rate-limit", "rate limit", "too many requests", "exceeding access rate")
-RATE_LIMIT_PAUSE_SECONDS = 60
-MAX_RATE_LIMIT_RETRIES = 3  # each one waits longer: 60 s, 120 s, 180 s (shared by every ticker, see Throttle)
-BUDGET_SECONDS = 45 * 60  # stop starting new tickers after this, so partial results are still saved
+RATE_LIMIT_PAUSE_SECONDS = 30   # 30 s, then 60, 90 ... (max 240) while it keeps happening; see Throttle
+MAX_RATE_LIMIT_RETRIES = 4      # per ticker
+MAX_RATE_LIMITED_CHUNKS_IN_A_ROW = 8  # Angel is blocking us outright: stop instead of waiting for ever
+BUDGET_SECONDS = 45 * 60  # stop starting new batches after this, so partial results are still saved
                           # (the GitHub job itself is cut off at 60 minutes and would save nothing)
-MAX_CONSECUTIVE_FAILURES = 5  # this many failures in a row means something systemic is wrong: stop early
+MAX_CONSECUTIVE_FAILURES = 5  # tickers failing for real reasons in a row: something systemic is wrong
 
 # A re-run resumes instead of starting over: results from the previous run are reused when that run
 # finished after the 3:30 PM close (final daily candles) and is at most this old.
@@ -84,10 +90,9 @@ def get_active_symbols():
 
 class Throttle:
     """
-    Shared brake for Angel's rate limit. When any ticker is told "rate
-    limit", everything waits (60 s, then 120 s, then 180 s if it keeps
-    happening); the first success resets it. This replaces hammering the
-    API again 20 seconds later, which is what made the first live run fail.
+    Brake for Angel's rate limit: after a "rate limit" answer everything waits
+    (30 s, then 60 s, then 90 s ... if it keeps happening); a clean batch
+    resets it.
     """
 
     def __init__(self):
@@ -105,7 +110,7 @@ class Throttle:
     def hit(self):
         with self.lock:
             self.level += 1
-            pause = RATE_LIMIT_PAUSE_SECONDS * self.level
+            pause = min(RATE_LIMIT_PAUSE_SECONDS * self.level, 240)
             self.until = max(self.until, time.time() + pause)
             return pause
 
@@ -119,50 +124,24 @@ def is_rate_limited(error_text):
     return any(marker in lowered for marker in RATE_LIMIT_MARKERS)
 
 
-def fetch_one(symbol, throttle=None):
-    "-> (outlook_dict, None) on success, (None, error_text) after the retries are used up."
-    last_error = "unknown error"
-    attempts = 0
-    rate_limit_hits = 0
-    while attempts < MAX_ATTEMPTS:
-        if throttle:
-            throttle.wait()
-        try:
-            resp = requests.get(
-                API_URL,
-                params={"symbol": symbol.upper(), "mode": "outlook", "fresh": "1"},
-                timeout=REQUEST_TIMEOUT,
-            )
-        except Exception as e:  # timeout or connection error
-            last_error = f"{type(e).__name__}: {e}"
-        else:
-            try:
-                data = resp.json()
-            except ValueError:  # e.g. Vercel's HTML "504 gateway timeout" page
-                last_error = f"HTTP {resp.status_code}, not JSON: {resp.text[:150]!r}"
-            else:
-                if isinstance(data, dict) and "error" not in data and data.get("action"):
-                    if throttle:
-                        throttle.ok()
-                    return data, None
-                last_error = str(data.get("error", "unexpected response")) if isinstance(data, dict) else "unexpected response"
-                if any(marker in last_error for marker in NON_RETRYABLE):
-                    break
-
-        if is_rate_limited(last_error):
-            rate_limit_hits += 1
-            if rate_limit_hits > MAX_RATE_LIMIT_RETRIES:
-                break
-            pause = throttle.hit() if throttle else RETRY_WAIT_SECONDS
-            log(f"  {symbol}: Angel rate limit hit; pausing {pause}s before retrying")
-            if not throttle:
-                time.sleep(pause)
-            continue  # a rate-limit wait is not one of the ordinary attempts
-
-        attempts += 1
-        if attempts < MAX_ATTEMPTS:
-            time.sleep(RETRY_WAIT_SECONDS)
-    return None, last_error
+def request_chunk(symbols, pace):
+    "-> ({SYMBOL: outlook_or_error}, None), or (None, error_text) when the request itself failed."
+    try:
+        resp = requests.get(
+            API_URL,
+            params={"mode": "outlook_batch", "symbols": ",".join(sym.upper() for sym in symbols),
+                    "pace": f"{pace:.1f}", "fresh": "1"},
+            timeout=REQUEST_TIMEOUT,
+        )
+    except Exception as e:  # timeout or connection error
+        return None, f"{type(e).__name__}: {e}"
+    try:
+        data = resp.json()
+    except ValueError:  # e.g. Vercel's HTML "504 gateway timeout" page
+        return None, f"HTTP {resp.status_code}, not JSON: {resp.text[:150]!r}"
+    if not isinstance(data, dict) or not isinstance(data.get("results"), dict):
+        return None, str(data.get("error", "unexpected response")) if isinstance(data, dict) else "unexpected response"
+    return {str(k).upper(): v for k, v in data["results"].items()}, None
 
 
 def load_previous_file():
@@ -234,8 +213,8 @@ def log(message):
 def main():
     started = time.time()
     symbols = get_active_symbols()
-    log(f"{len(symbols)} active symbols to process via {API_URL} "
-        f"({WORKERS} at a time, stop starting new ones after {BUDGET_SECONDS // 60} min)")
+    log(f"{len(symbols)} active symbols; batches of {CHUNK_SIZE} via {API_URL} "
+        f"(stop starting new batches after {BUDGET_SECONDS // 60} min)")
 
     now = datetime.now(timezone.utc)
     previous_file = load_previous_file()
@@ -246,41 +225,96 @@ def main():
             f"(after the close, less than {REUSE_MAX_AGE.seconds // 3600} hours ago); {len(todo)} left to calculate")
 
     fresh, failed = {}, {}
-    state = {"consecutive_failures": 0, "abort_reason": None}
-    lock = threading.Lock()
+    ordinary_attempts, rate_limit_retries = {}, {}
+    pending = deque(todo)
     throttle = Throttle()
+    pace, chunk_size = PACE_START, CHUNK_SIZE
+    consecutive_failures = rate_limited_in_a_row = clean_in_a_row = 0
+    abort_reason = None
 
-    def process(item):
-        index, symbol = item
-        with lock:
-            if not state["abort_reason"] and time.time() - started > BUDGET_SECONDS:
-                state["abort_reason"] = f"the {BUDGET_SECONDS // 60}-minute time budget ran out"
-            reason = state["abort_reason"]
-        if reason:
-            return symbol, None, f"skipped: {reason}"
+    while pending:
+        if time.time() - started > BUDGET_SECONDS:
+            abort_reason = f"the {BUDGET_SECONDS // 60}-minute time budget ran out"
+            break
+        throttle.wait()
+        chunk = [pending.popleft() for _ in range(min(chunk_size, len(pending)))]
         t0 = time.time()
-        data, error = fetch_one(symbol, throttle)
+        results, transport_error = request_chunk(chunk, pace)
         took = time.time() - t0
-        with lock:
-            if data:
-                state["consecutive_failures"] = 0
-                log(f"[{index}/{len(todo)}] {symbol}: {data['action']['label']} ({took:.1f}s)")
-            else:
-                state["consecutive_failures"] += 1
-                log(f"[{index}/{len(todo)}] {symbol}: FAILED after {took:.1f}s ({error})")
-                if state["consecutive_failures"] >= MAX_CONSECUTIVE_FAILURES and not state["abort_reason"]:
-                    state["abort_reason"] = (f"{MAX_CONSECUTIVE_FAILURES} tickers in a row failed "
-                                             f"(last error: {error})")
-                    log(f"STOPPING EARLY: {state['abort_reason']}")
-        time.sleep(PAUSE_SECONDS)
-        return symbol, data, error
+        requeue = []
 
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for symbol, data, error in pool.map(process, enumerate(todo, 1)):
-            if data:
-                fresh[symbol] = data
+        if transport_error:
+            log(f"batch of {len(chunk)} failed after {took:.0f}s: {transport_error}")
+            chunk_size = max(2, chunk_size // 2)  # smaller batches finish inside Vercel's 60 s
+            for sym in chunk:
+                ordinary_attempts[sym] = ordinary_attempts.get(sym, 0) + 1
+                if ordinary_attempts[sym] >= MAX_ATTEMPTS:
+                    failed[sym] = transport_error
+                    consecutive_failures += 1
+                else:
+                    requeue.append(sym)
+            time.sleep(RETRY_WAIT_SECONDS)
+        else:
+            rate_limited = False
+            ok = []
+            problems = []
+            for sym in chunk:
+                r = results.get(sym.upper())
+                if isinstance(r, dict) and "error" not in r and (r.get("action") or {}).get("label"):
+                    fresh[sym] = r
+                    ok.append(f"{sym}:{r['action']['label']}")
+                    consecutive_failures = 0
+                    continue
+                error = str((r or {}).get("error", "missing from the response"))
+                if (r or {}).get("retry") or is_rate_limited(error):
+                    rate_limited = True
+                    rate_limit_retries[sym] = rate_limit_retries.get(sym, 0) + 1
+                    if rate_limit_retries[sym] > MAX_RATE_LIMIT_RETRIES:
+                        failed[sym] = error
+                    else:
+                        requeue.append(sym)
+                elif any(marker in error for marker in NON_RETRYABLE):
+                    failed[sym] = error
+                    problems.append(f"{sym}: {error}")
+                else:
+                    ordinary_attempts[sym] = ordinary_attempts.get(sym, 0) + 1
+                    if ordinary_attempts[sym] >= MAX_ATTEMPTS:
+                        failed[sym] = error
+                        consecutive_failures += 1
+                        problems.append(f"{sym}: {error}")
+                    else:
+                        requeue.append(sym)
+            done = len(fresh) + len(failed)
+            log(f"[{done}/{len(todo)}] {len(ok)}/{len(chunk)} ok in {took:.0f}s (pace {pace:.1f}s): {' '.join(ok)}")
+            for line in problems:
+                log(f"  FAILED {line}")
+
+            if rate_limited:
+                clean_in_a_row = 0
+                rate_limited_in_a_row += 1
+                pace = min(PACE_MAX, pace * 1.6)
+                pause = throttle.hit()
+                log(f"  Angel rate limit: pausing {pause}s, slowing the pace to {pace:.1f}s per ticker")
+                if rate_limited_in_a_row >= MAX_RATE_LIMITED_CHUNKS_IN_A_ROW:
+                    abort_reason = f"Angel kept rate-limiting {MAX_RATE_LIMITED_CHUNKS_IN_A_ROW} batches in a row"
             else:
-                failed[symbol] = error
+                rate_limited_in_a_row = 0
+                throttle.ok()
+                chunk_size = min(CHUNK_SIZE, chunk_size + 1)  # recover from a shrink after a timeout
+                clean_in_a_row += 1
+                if clean_in_a_row >= 3:
+                    pace = max(PACE_START, pace * 0.85)
+
+        pending.extendleft(reversed(requeue))
+        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES and not abort_reason:
+            abort_reason = f"{MAX_CONSECUTIVE_FAILURES} tickers in a row failed"
+        if abort_reason:
+            log(f"STOPPING EARLY: {abort_reason}")
+            break
+        time.sleep(PAUSE_SECONDS)
+
+    for sym in pending:
+        failed.setdefault(sym, f"skipped: {abort_reason or 'not reached'}")
 
     skipped = [sym for sym, err in failed.items() if str(err).startswith("skipped:")]
     if todo and not fresh and not reused:
@@ -308,9 +342,8 @@ def main():
         counts[label] = counts.get(label, 0) + 1
     log(f"Done in {time.time() - started:.0f}s: {len(fresh)} calculated, {len(reused)} reused, {len(carried)} carried over from an "
         f"earlier run, {len(failed) - len(carried)} without any result. Totals: {counts}")
-    if state["abort_reason"]:
-        log(f"::warning::Run stopped early because {state['abort_reason']}. "
-            f"{len(skipped)} ticker(s) were not attempted.")
+    if abort_reason:
+        log(f"::warning::Run stopped early because {abort_reason}. {len(skipped)} ticker(s) were not attempted.")
     elif failed:
         log(f"::warning::{len(failed)} ticker(s) failed today: {', '.join(sorted(failed))}")
 

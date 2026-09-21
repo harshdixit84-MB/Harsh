@@ -277,6 +277,10 @@ function writeOutlookCache(symbol, result) {
 function fetchOutlook(symbol, force) {
   symbol = String(symbol).toUpperCase();
   if (!force) {
+    // A page that keeps its own scheduled results (the dashboard's 4 PM run)
+    // can hand them over here so nothing is recalculated.
+    const stored = typeof window.storedOutlookFor === "function" ? window.storedOutlookFor(symbol) : null;
+    if (stored) return Promise.resolve(stored);
     const cached = readOutlookCache(symbol);
     if (cached) return Promise.resolve(cached);
   }
@@ -313,7 +317,8 @@ async function openOutlook(symbol) {
   document.getElementById("analyze-title").textContent = `Outlook — ${symbol}`;
   const body = document.getElementById("analyze-body");
   document.getElementById("analyze-overlay").classList.add("open");
-  const cached = readOutlookCache(symbol);
+  const stored = typeof window.storedOutlookFor === "function" ? window.storedOutlookFor(symbol) : null;
+  const cached = stored || readOutlookCache(symbol);
   if (cached) {
     body.innerHTML = renderOutlookResult(cached);
     return;

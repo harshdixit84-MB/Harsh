@@ -990,20 +990,31 @@ function escapeHtml(str) {
 
 // ---- BUY / HOLD / SELL, straight from the Outlook logic (core/outlook.py in
 // nse-stock-chatbot: Nifty trend -> sector trend -> stock trend/patterns).
-// This is now the ONLY badge and the ONLY set of filters on this page.
-// Results are fetched per ticker in the background (2 at a time), cached for
-// 3 hours in this browser (analyze-widget.js) and for 3 hours on the server,
-// so the Angel account is not hit again for a ticker that is already fresh.
+// This is the ONLY badge and the ONLY set of filters on this page.
+//
+// The outlooks are calculated ONCE A DAY, at 4:00 PM IST Monday-Friday, by
+// .github/workflows/outlook-daily.yml (outlook_batch.py), which commits
+// data/outlook.json. This page only reads that file -- it never calculates
+// outlooks in the background. The one exception is a ticker that is not in
+// the file yet (e.g. added after 4 PM): clicking its "—" badge calculates
+// that single ticker on demand.
 const outlookBySymbol = {}; // symbol -> outlook result, or {error}
-const outlookFailedAt = {}; // symbol -> ms timestamp of the last failure
-const OUTLOOK_RETRY_MS = 10 * 60 * 1000;
-const OUTLOOK_WORKERS = 2;
-let outlookWarming = false;
-let rerenderTimer = null;
+const outlookLoading = new Set();
+let outlookMeta = null; // header of data/outlook.json (generated_at, ...)
+let outlookFileLoadedAt = 0;
+let outlookFileError = false;
+const OUTLOOK_FILE_REFRESH_MS = 30 * 60 * 1000;
+
+// analyze-widget.js asks this first, so the popup and the Analyze modal's
+// "Get Outlook" show the same 4 PM result as the badge instead of recalculating.
+window.storedOutlookFor = (symbol) => {
+  const o = outlookBySymbol[symbol];
+  return o && !o.error && o.action ? o : null;
+};
 
 function actionOf(stock) {
   const o = outlookBySymbol[stock.symbol];
-  if (!o) return "PENDING";
+  if (!o) return "NONE";
   if (o.error || !o.action) return "NA";
   return o.action.label; // BUY | HOLD | SELL
 }
@@ -1013,24 +1024,30 @@ function actionClass(stock) {
 }
 
 function actionRank(action) {
-  return { BUY: 0, HOLD: 1, SELL: 2, PENDING: 3, NA: 4 }[action] ?? 5;
+  return { BUY: 0, HOLD: 1, SELL: 2, NONE: 3, NA: 4 }[action] ?? 5;
 }
 
 function renderActionBadge(symbol) {
   const o = outlookBySymbol[symbol];
-  let cls = "pending", text = "…", title = "Calculating outlook…";
-  if (o && (o.error || !o.action)) {
+  let cls = "na", text = "—", title = "Not in the last 4 PM run — click to calculate it now";
+  if (outlookLoading.has(symbol)) {
+    cls = "pending"; text = "…"; title = "Calculating outlook…";
+  } else if (o && (o.error || !o.action)) {
     cls = "na"; text = "N/A"; title = (o.error || "Outlook unavailable") + " — click to retry";
   } else if (o) {
-    cls = o.action.label.toLowerCase(); text = o.action.label; title = "Click for the outlook summary";
+    cls = o.action.label.toLowerCase(); text = o.action.label;
+    title = o.carried_over ? "Carried over from an earlier run — click for the summary" : "Click for the outlook summary";
+  } else if (!outlookMeta) {
+    title = "The daily outlook has not been generated yet — click to calculate it now";
   }
   return `<button class="outlook-badge ${cls}" data-symbol="${escapeHtml(symbol)}" title="${escapeHtml(title)}">${text}</button>`;
 }
 
 function actionReasonText(symbol) {
   const o = outlookBySymbol[symbol];
-  if (!o) return "Calculating outlook…";
-  if (o.error || !o.action) return "Outlook unavailable right now.";
+  if (outlookLoading.has(symbol)) return "Calculating outlook…";
+  if (!o) return "Not calculated yet. Click — to calculate now, or wait for the next 4 PM run.";
+  if (o.error || !o.action) return "Outlook unavailable. Click N/A to retry.";
   return o.action.reason;
 }
 
@@ -1044,53 +1061,55 @@ function paintOutlook(symbol) {
   document.querySelectorAll(`.outlook-badge[data-symbol="${symbol}"]`).forEach((el) => {
     el.outerHTML = renderActionBadge(symbol);
   });
+  const stock = latestStocks.find((s) => s.symbol === symbol);
   document.querySelectorAll(`.outlook-reason[data-symbol="${symbol}"]`).forEach((el) => {
     el.textContent = actionReasonText(symbol);
-  });
-  const stock = latestStocks.find((s) => s.symbol === symbol);
-  if (stock) {
-    document.querySelectorAll(`.outlook-reason[data-symbol="${symbol}"]`).forEach((el) => {
-      const row = el.closest(".stock-row");
-      if (!row) return;
-      row.classList.remove("act-buy", "act-hold", "act-sell", "act-pending", "act-na");
+    const row = el.closest(".stock-row");
+    if (row && stock) {
+      row.classList.remove("act-buy", "act-hold", "act-sell", "act-none", "act-na");
       row.classList.add(actionClass(stock));
-    });
-  }
-}
-
-function userIsEditing() {
-  const a = document.activeElement;
-  return !!a && !!a.closest && !!a.closest("#rows, #watchlist-rows") && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
-}
-
-function scheduleRerender(final) {
-  // Only re-order/re-filter when it matters: a filter is active, or the
-  // whole batch just finished. Never while the person is typing.
-  if (!final && !actionFilter) return;
-  clearTimeout(rerenderTimer);
-  const tick = () => {
-    if (userIsEditing()) { rerenderTimer = setTimeout(tick, 3000); return; }
-    render();
-  };
-  rerenderTimer = setTimeout(tick, 1500);
+    }
+  });
 }
 
 function updateOutlookProgress() {
   const el = document.getElementById("outlook-progress");
   if (!el) return;
+  if (!outlookMeta) {
+    el.textContent = outlookFileError ? "Daily outlook not generated yet — the first run is at 4 PM IST" : "";
+    return;
+  }
+  const when = new Date(outlookMeta.generated_at);
+  const label = when.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+  const ageDays = (Date.now() - when.getTime()) / 86400000;
   const active = latestStocks.filter((s) => !s.archived);
-  const pending = active.filter((s) => !outlookBySymbol[s.symbol]).length;
-  const failed = active.filter((s) => outlookBySymbol[s.symbol] && outlookBySymbol[s.symbol].error).length;
-  if (pending > 0) {
-    el.textContent = `Outlook: ${active.length - pending} of ${active.length} ready…`;
-  } else if (failed > 0) {
-    el.textContent = `${failed} outlook${failed > 1 ? "s" : ""} unavailable — click N/A to retry`;
-  } else {
-    el.textContent = "";
+  const missing = active.filter((s) => !outlookBySymbol[s.symbol]).length;
+  let text = ageDays > 4
+    ? `⚠ Outlook is ${Math.floor(ageDays)} days old — the 4 PM run may have failed`
+    : `Outlook from the ${label} run`;
+  if (missing > 0) text += ` · ${missing} not in it yet (click — to calculate)`;
+  el.textContent = text;
+}
+
+async function loadOutlookFile() {
+  if (Date.now() - outlookFileLoadedAt < OUTLOOK_FILE_REFRESH_MS) return;
+  try {
+    const res = await fetch("/data/outlook.json?t=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    outlookMeta = data;
+    outlookFileError = false;
+    outlookFileLoadedAt = Date.now();
+    Object.keys(data.results || {}).forEach((sym) => { outlookBySymbol[sym] = data.results[sym]; });
+  } catch (e) {
+    outlookFileError = !outlookMeta;
+    outlookFileLoadedAt = 0; // try again on the next 5-minute refresh
   }
 }
 
 function hydrateOutlooksFromCache() {
+  // Tickers that are not in the daily file but were calculated on demand in
+  // the last 3 hours (kept by analyze-widget.js) keep their badge after a reload.
   latestStocks.forEach((s) => {
     if (!outlookBySymbol[s.symbol]) {
       const cached = readOutlookCache(String(s.symbol).toUpperCase());
@@ -1099,62 +1118,22 @@ function hydrateOutlooksFromCache() {
   });
 }
 
-async function warmOutlooks() {
-  if (outlookWarming) return;
-  outlookWarming = true;
-  try {
-    const ordered = latestStocks
-      .filter((s) => !s.archived)
-      .sort((a, b) => (b.watchlisted ? 1 : 0) - (a.watchlisted ? 1 : 0))
-      .map((s) => s.symbol);
-    const queue = [...new Set(ordered)].filter((sym) => {
-      const o = outlookBySymbol[sym];
-      if (!o) return true;
-      return !!o.error && Date.now() - (outlookFailedAt[sym] || 0) > OUTLOOK_RETRY_MS;
-    });
-
-    const worker = async () => {
-      while (queue.length) {
-        const sym = queue.shift();
-        try {
-          const result = await fetchOutlook(sym);
-          outlookBySymbol[sym] = result;
-          if (result.error) outlookFailedAt[sym] = Date.now(); else delete outlookFailedAt[sym];
-          // Angel is throttling the account: back off instead of hammering it.
-          if (result.error && /rate.?limit/i.test(result.error)) await new Promise((r) => setTimeout(r, 30000));
-        } catch (e) {
-          outlookBySymbol[sym] = { error: (e && e.message) || "Network error" };
-          outlookFailedAt[sym] = Date.now();
-        }
-        paintOutlook(sym);
-        updateStats();
-        updateOutlookProgress();
-        scheduleRerender(false);
-      }
-    };
-    await Promise.all(Array.from({ length: OUTLOOK_WORKERS }, worker));
-  } finally {
-    outlookWarming = false;
-    updateOutlookProgress();
-    scheduleRerender(true);
-  }
-}
-
-async function retryOutlook(symbol) {
+async function computeOutlookNow(symbol) {
+  if (outlookLoading.has(symbol)) return;
+  outlookLoading.add(symbol);
   delete outlookBySymbol[symbol];
-  delete outlookFailedAt[symbol];
   paintOutlook(symbol);
   try {
     outlookBySymbol[symbol] = await fetchOutlook(symbol, true);
   } catch (e) {
     outlookBySymbol[symbol] = { error: (e && e.message) || "Network error" };
+  } finally {
+    outlookLoading.delete(symbol);
   }
-  if (outlookBySymbol[symbol] && outlookBySymbol[symbol].error) outlookFailedAt[symbol] = Date.now();
   paintOutlook(symbol);
   updateStats();
   updateOutlookProgress();
-  scheduleRerender(false);
-  if (outlookBySymbol[symbol] && !outlookBySymbol[symbol].error) openOutlook(symbol);
+  if (!outlookBySymbol[symbol].error) openOutlook(symbol);
 }
 
 function renderNotesRow(stock) {
@@ -1293,11 +1272,11 @@ async function loadDashboard() {
     }
 
     latestStocks = data.stocks || [];
+    await loadOutlookFile();
     hydrateOutlooksFromCache();
     updateStats();
     updateOutlookProgress();
     render();
-    warmOutlooks();
 
     const syncedDate = new Date(data.syncedAt);
     document.getElementById("synced-at").textContent = "Last loaded " + syncedDate.toLocaleTimeString();
@@ -1411,9 +1390,8 @@ document.getElementById("rows").addEventListener("click", async (e) => {
 
 function handleOutlookBadgeClick(symbol) {
   const o = outlookBySymbol[symbol];
-  if (!o) return; // still calculating; the badge fills itself in when ready
-  if (o.error || !o.action) { retryOutlook(symbol); return; }
-  openOutlook(symbol);
+  if (o && o.action && !o.error) { openOutlook(symbol); return; }
+  computeOutlookNow(symbol); // not in the daily file yet, or the last attempt failed
 }
 
 document.getElementById("stock-search").addEventListener("input", (e) => {

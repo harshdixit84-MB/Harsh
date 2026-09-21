@@ -33,7 +33,9 @@ OUTLOOK_API_URL             optional override of the chatbot API base URL
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -42,11 +44,15 @@ SHEET_NAME = "Monthly Breakout Scan"
 API_URL = os.environ.get("OUTLOOK_API_URL", "https://nse-stock-chatbot.vercel.app/api")
 OUT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "outlook.json")
 
-REQUEST_TIMEOUT = 70      # Vercel functions stop at 60 s; give the response a little longer to arrive
-PAUSE_SECONDS = 1.0       # gap between tickers: keeps the shared Angel account well under its rate limit
-MAX_ATTEMPTS = 3
+REQUEST_TIMEOUT = 65      # Vercel functions stop at 60 s; give the response a little longer to arrive
+WORKERS = 2               # tickers processed at the same time (gentle on the shared Angel account)
+PAUSE_SECONDS = 1.0       # gap after each ticker, per worker
+MAX_ATTEMPTS = 2
 RETRY_WAIT_SECONDS = 20   # also gives a throttled Angel session time to recover
 NON_RETRYABLE = ("valid NSE equity symbol",)
+BUDGET_SECONDS = 45 * 60  # stop starting new tickers after this, so partial results are still saved
+                          # (the GitHub job itself is cut off at 60 minutes and would save nothing)
+MAX_CONSECUTIVE_FAILURES = 5  # this many failures in a row means something systemic is wrong: stop early
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -77,15 +83,19 @@ def fetch_one(symbol):
                 params={"symbol": symbol.upper(), "mode": "outlook", "fresh": "1"},
                 timeout=REQUEST_TIMEOUT,
             )
-            data = resp.json()
-        except Exception as e:  # timeout, connection reset, or a non-JSON 504 page from Vercel
+        except Exception as e:  # timeout or connection error
             last_error = f"{type(e).__name__}: {e}"
         else:
-            if isinstance(data, dict) and "error" not in data and data.get("action"):
-                return data, None
-            last_error = str(data.get("error", "unexpected response")) if isinstance(data, dict) else "unexpected response"
-            if any(marker in last_error for marker in NON_RETRYABLE):
-                break
+            try:
+                data = resp.json()
+            except ValueError:  # e.g. Vercel's HTML "504 gateway timeout" page
+                last_error = f"HTTP {resp.status_code}, not JSON: {resp.text[:150]!r}"
+            else:
+                if isinstance(data, dict) and "error" not in data and data.get("action"):
+                    return data, None
+                last_error = str(data.get("error", "unexpected response")) if isinstance(data, dict) else "unexpected response"
+                if any(marker in last_error for marker in NON_RETRYABLE):
+                    break
         if attempt < MAX_ATTEMPTS:
             time.sleep(RETRY_WAIT_SECONDS)
     return None, last_error
@@ -126,24 +136,57 @@ def write_atomic(payload):
     os.replace(tmp, OUT_PATH)
 
 
+def log(message):
+    print(message, flush=True)  # flush: GitHub buffers piped output, and a cancelled job would otherwise show nothing
+
+
 def main():
     started = time.time()
     symbols = get_active_symbols()
-    print(f"{len(symbols)} active symbols to process")
+    log(f"{len(symbols)} active symbols to process via {API_URL} "
+        f"({WORKERS} at a time, stop starting new ones after {BUDGET_SECONDS // 60} min)")
 
     fresh, failed = {}, {}
-    for i, symbol in enumerate(symbols, 1):
-        data, error = fetch_one(symbol)
-        if data:
-            fresh[symbol] = data
-            print(f"[{i}/{len(symbols)}] {symbol}: {data['action']['label']}")
-        else:
-            failed[symbol] = error
-            print(f"[{i}/{len(symbols)}] {symbol}: FAILED ({error})")
-        time.sleep(PAUSE_SECONDS)
+    state = {"consecutive_failures": 0, "abort_reason": None}
+    lock = threading.Lock()
 
+    def process(item):
+        index, symbol = item
+        with lock:
+            if not state["abort_reason"] and time.time() - started > BUDGET_SECONDS:
+                state["abort_reason"] = f"the {BUDGET_SECONDS // 60}-minute time budget ran out"
+            reason = state["abort_reason"]
+        if reason:
+            return symbol, None, f"skipped: {reason}"
+        t0 = time.time()
+        data, error = fetch_one(symbol)
+        took = time.time() - t0
+        with lock:
+            if data:
+                state["consecutive_failures"] = 0
+                log(f"[{index}/{len(symbols)}] {symbol}: {data['action']['label']} ({took:.1f}s)")
+            else:
+                state["consecutive_failures"] += 1
+                log(f"[{index}/{len(symbols)}] {symbol}: FAILED after {took:.1f}s ({error})")
+                if state["consecutive_failures"] >= MAX_CONSECUTIVE_FAILURES and not state["abort_reason"]:
+                    state["abort_reason"] = (f"{MAX_CONSECUTIVE_FAILURES} tickers in a row failed "
+                                             f"(last error: {error})")
+                    log(f"STOPPING EARLY: {state['abort_reason']}")
+        time.sleep(PAUSE_SECONDS)
+        return symbol, data, error
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for symbol, data, error in pool.map(process, enumerate(symbols, 1)):
+            if data:
+                fresh[symbol] = data
+            else:
+                failed[symbol] = error
+
+    skipped = [sym for sym, err in failed.items() if str(err).startswith("skipped:")]
     if symbols and not fresh:
-        print("::error::No outlook could be calculated for any symbol; leaving data/outlook.json untouched.")
+        first_error = next(iter(failed.values()), "unknown")
+        print(f"::error::No outlook could be calculated for any symbol ({first_error}); "
+              "leaving data/outlook.json untouched.", flush=True)
         sys.exit(1)
 
     results, carried = merge(load_previous(), fresh, symbols)
@@ -162,10 +205,13 @@ def main():
     for r in results.values():
         label = (r.get("action") or {}).get("label", "?")
         counts[label] = counts.get(label, 0) + 1
-    print(f"Done in {time.time() - started:.0f}s: {len(fresh)} refreshed, {len(carried)} carried over, "
-          f"{len(failed) - len(carried)} without a result. Totals: {counts}")
-    if failed:
-        print(f"::warning::{len(failed)} ticker(s) failed today: {', '.join(sorted(failed))}")
+    log(f"Done in {time.time() - started:.0f}s: {len(fresh)} refreshed, {len(carried)} carried over from an "
+        f"earlier run, {len(failed) - len(carried)} without any result. Totals: {counts}")
+    if state["abort_reason"]:
+        log(f"::warning::Run stopped early because {state['abort_reason']}. "
+            f"{len(skipped)} ticker(s) were not attempted.")
+    elif failed:
+        log(f"::warning::{len(failed)} ticker(s) failed today: {', '.join(sorted(failed))}")
 
 
 if __name__ == "__main__":

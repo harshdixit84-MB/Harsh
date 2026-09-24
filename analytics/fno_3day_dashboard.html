@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F&amp;O 3-Day Move Screener — CE/PE Candidates</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#12171f; --panel-2:#171d27; --line:#1f2733;
+    --ink:#dfe6ee; --ink-dim:#7c8898; --up:#3fb87f; --down:#e2584c;
+    --accent:#e0a13a; --mono:'IBM Plex Mono','SF Mono',Consolas,monospace;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans); font-size:14px; line-height:1.45;
+  }
+  header{
+    padding:28px 32px 20px; border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;
+  }
+  header h1{margin:0; font-size:20px; font-weight:600; letter-spacing:-0.01em}
+  header .sub{color:var(--ink-dim); font-size:12.5px; margin-top:4px; font-family:var(--mono)}
+  #generated{color:var(--ink-dim); font-size:12px; font-family:var(--mono)}
+  main{padding:24px 32px 60px; max-width:1280px; margin:0 auto}
+
+  .verdict{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    padding:16px 20px; border-radius:4px; margin-bottom:24px; font-size:15px;
+  }
+  .verdict b{color:var(--accent)}
+
+  .kpi-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:28px}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:14px 16px}
+  .kpi .label{color:var(--ink-dim); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em}
+  .kpi .value{font-family:var(--mono); font-size:24px; font-weight:600; margin-top:6px}
+  .kpi .value.up{color:var(--up)} .kpi .value.down{color:var(--down)}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:18px 20px; margin-bottom:20px}
+  .panel h2{margin:0 0 14px; font-size:13px; text-transform:none; color:var(--ink); font-weight:600}
+  .panel .note{color:var(--ink-dim); font-size:12px; margin-top:10px}
+
+  table{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px}
+  th,td{text-align:left; padding:7px 8px; border-bottom:1px solid var(--line)}
+  th{color:var(--ink-dim); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.03em;
+     cursor:pointer; user-select:none}
+  th:hover{color:var(--ink)}
+  td.num{text-align:right}
+  .empty{color:var(--ink-dim); padding:20px; text-align:center}
+
+  .filter-row{display:flex; align-items:center; gap:8px; margin-bottom:14px; font-size:12.5px; color:var(--ink-dim)}
+  select{
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line); border-radius:4px;
+    padding:5px 8px; font-family:var(--sans); font-size:12.5px;
+  }
+
+  .badge{display:inline-block; padding:2px 8px; border-radius:3px; font-size:11px; font-weight:600;
+         font-family:var(--mono); letter-spacing:.02em}
+  .badge.CE{color:var(--up); border:1px solid #1e3d2c; background:#0f1d15}
+  .badge.PE{color:var(--down); border:1px solid #3a2422; background:#1f1310}
+
+  .hit-rate{font-weight:600}
+  .hit-rate.good{color:var(--up)}
+  .hit-rate.weak{color:var(--down)}
+  .hit-rate.none{color:var(--ink-dim); font-weight:400}
+
+  .note-cell{color:var(--ink-dim); font-size:11.5px; max-width:340px}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>F&amp;O 3-Day Move Screener</h1>
+    <div class="sub">Price action + volume only · target ≥5% move · max 3-trading-day hold · CE/PE candidates</div>
+  </div>
+  <div id="generated">loading…</div>
+</header>
+
+<main>
+  <div class="verdict" id="verdict-box">Loading data/fno_3day_candidates.json…</div>
+
+  <div class="kpi-row">
+    <div class="kpi"><div class="label">Candidates</div><div class="value" id="kpi-total">–</div></div>
+    <div class="kpi"><div class="label">CE (bullish)</div><div class="value up" id="kpi-ce">–</div></div>
+    <div class="kpi"><div class="label">PE (bearish)</div><div class="value down" id="kpi-pe">–</div></div>
+    <div class="kpi"><div class="label">Avg historical hit rate</div><div class="value" id="kpi-hitrate">–</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Today's candidates</h2>
+    <div class="filter-row">
+      <span>Show:</span>
+      <select id="filter-setup">
+        <option value="ALL">All (CE + PE)</option>
+        <option value="CE">CE only</option>
+        <option value="PE">PE only</option>
+      </select>
+      <span style="margin-left:12px">Sort by:</span>
+      <select id="sort-by">
+        <option value="rs">|Relative strength|</option>
+        <option value="hitrate">Historical hit rate</option>
+        <option value="symbol">Symbol</option>
+        <option value="vol">Volume vs avg</option>
+      </select>
+    </div>
+    <table id="candidates-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Setup</th>
+          <th class="num">Close</th>
+          <th class="num">Vol vs Avg</th>
+          <th class="num">RS vs NIFTY</th>
+          <th class="num">Stop Ref</th>
+          <th class="num">Hist. Hit Rate</th>
+          <th>Note</th>
+        </tr>
+      </thead>
+      <tbody id="candidates-body">
+        <tr><td colspan="8" class="empty">No data loaded yet.</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      Hit rate = how often this exact setup actually reached the 5% move within 3 trading days, historically,
+      for that specific stock. Low or missing hit-rates mean the setup looks clean today but hasn't proven out —
+      don't size a trade the same way you would a high hit-rate name.
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Screen config used for this run</h2>
+    <table id="config-table">
+      <tbody id="config-body"><tr><td colspan="2" class="empty">–</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const DATA_URL = 'data/fno_3day_candidates.json';
+// const DATA_URL = '../data/fno_3day_candidates.json';   // opening the file directly from disk
+// const DATA_URL = 'https://raw.githubusercontent.com/<user>/Harsh/main/data/fno_3day_candidates.json';
+
+let CANDIDATES = [];
+let BACKTEST = {};
+
+function hitRateFor(c) {
+  const bt = BACKTEST[c.symbol];
+  if (!bt) return null;
+  return c.setup === 'CE' ? bt.CE_hit_rate_pct : bt.PE_hit_rate_pct;
+}
+
+function hitRateClass(hr) {
+  if (hr === null || hr === undefined) return 'none';
+  if (hr >= 55) return 'good';
+  if (hr < 40) return 'weak';
+  return '';
+}
+
+function render(data) {
+  CANDIDATES = data.candidates || [];
+  BACKTEST = data.backtest || {};
+
+  document.getElementById('generated').textContent =
+    'Generated: ' + (data.generated_at || 'unknown');
+
+  const ceCount = CANDIDATES.filter(c => c.setup === 'CE').length;
+  const peCount = CANDIDATES.filter(c => c.setup === 'PE').length;
+  const rates = CANDIDATES.map(hitRateFor).filter(r => r !== null && r !== undefined);
+  const avgRate = rates.length ? (rates.reduce((a, b) => a + b, 0) / rates.length) : null;
+
+  document.getElementById('kpi-total').textContent = CANDIDATES.length;
+  document.getElementById('kpi-ce').textContent = ceCount;
+  document.getElementById('kpi-pe').textContent = peCount;
+  document.getElementById('kpi-hitrate').textContent = avgRate !== null ? avgRate.toFixed(1) + '%' : '–';
+
+  const verdict = document.getElementById('verdict-box');
+  if (CANDIDATES.length === 0) {
+    verdict.innerHTML = '<b>No candidates</b> in the latest scan — no F&O stock currently shows the ' +
+      'contraction + volume-surge + breakout setup with confirming relative strength. That\'s a valid outcome, not an error.';
+  } else {
+    verdict.innerHTML = `<b>${CANDIDATES.length} candidate${CANDIDATES.length === 1 ? '' : 's'}</b> — ` +
+      `${ceCount} CE, ${peCount} PE` +
+      (avgRate !== null ? `, averaging ${avgRate.toFixed(1)}% historical hit rate for the 5%-in-3-days target.` : '.');
+  }
+
+  renderConfig(data.config || {});
+  renderTable();
+}
+
+function renderConfig(cfg) {
+  const body = document.getElementById('config-body');
+  const labels = {
+    move_threshold: 'Move threshold', max_hold_days: 'Max hold (days)',
+    contraction_days: 'Contraction window (days)', base_days: 'Base window (days)',
+    vol_multiplier: 'Volume multiplier', breakout_lookback_days: 'Breakout lookback (days)',
+    rs_lookback_days: 'RS lookback (days)', min_avg_volume: 'Min avg volume (liquidity floor)',
+  };
+  const rows = Object.keys(labels).filter(k => cfg[k] !== undefined).map(k => {
+    let v = cfg[k];
+    if (k === 'move_threshold') v = (v * 100).toFixed(0) + '%';
+    if (k === 'min_avg_volume') v = Number(v).toLocaleString();
+    return `<tr><td>${labels[k]}</td><td class="num">${v}</td></tr>`;
+  });
+  body.innerHTML = rows.length ? rows.join('') : '<tr><td colspan="2" class="empty">No config in file.</td></tr>';
+}
+
+function renderTable() {
+  const setupFilter = document.getElementById('filter-setup').value;
+  const sortBy = document.getElementById('sort-by').value;
+
+  let rows = CANDIDATES.filter(c => setupFilter === 'ALL' || c.setup === setupFilter);
+
+  rows = rows.map(c => ({ ...c, _hitRate: hitRateFor(c) }));
+
+  const sorters = {
+    rs: (a, b) => Math.abs(b.relative_strength_pct) - Math.abs(a.relative_strength_pct),
+    hitrate: (a, b) => (b._hitRate ?? -1) - (a._hitRate ?? -1),
+    symbol: (a, b) => a.symbol.localeCompare(b.symbol),
+    vol: (a, b) => b.volume_vs_avg - a.volume_vs_avg,
+  };
+  rows.sort(sorters[sortBy] || sorters.rs);
+
+  const body = document.getElementById('candidates-body');
+  if (rows.length === 0) {
+    body.innerHTML = '<tr><td colspan="8" class="empty">No candidates match this filter.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = rows.map(c => {
+    const hr = c._hitRate;
+    const hrText = (hr === null || hr === undefined) ? '–' : hr.toFixed(1) + '%';
+    const hrClass = hitRateClass(hr);
+    return `<tr>
+      <td>${c.symbol}</td>
+      <td><span class="badge ${c.setup}">${c.setup}</span></td>
+      <td class="num">${c.close}</td>
+      <td class="num">${c.volume_vs_avg}x</td>
+      <td class="num">${c.relative_strength_pct}%</td>
+      <td class="num">${c.stop_ref}</td>
+      <td class="num hit-rate ${hrClass}">${hrText}</td>
+      <td class="note-cell">${c.note || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('filter-setup').addEventListener('change', renderTable);
+document.getElementById('sort-by').addEventListener('change', renderTable);
+
+fetch(DATA_URL).then(r => {
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}).then(render).catch(err => {
+  document.getElementById('verdict-box').textContent =
+    'Could not load ' + DATA_URL + ' — ' + err + '. Run analytics/fno_3day_move_screener.py first, or point DATA_URL at the raw GitHub file.';
+  document.getElementById('generated').textContent = '';
+});
+</script>
+</body>
+</html>

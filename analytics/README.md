@@ -38,6 +38,20 @@ Copy this `analytics/` folder into the root of the `Harsh` repo.
   `FNO_*`. Uses yfinance for OHLCV (same as `strategy_confluence.py`) —
   Angel login is only needed later, at order-placement time (reuse the
   `angelLogin()` pattern from `api/option-chain.js`).
+- `fno_3day_dashboard.html` — standalone viewer for
+  `data/fno_3day_candidates.json` (separate from `dashboard.html` above,
+  which is for the execution-analytics dataset). Same dark-mode visual
+  style. Shows today's CE/PE candidates with their historical hit rate,
+  sortable/filterable, plus the screen config used for that run. No build
+  step — open it directly, or host it next to the data file (GitHub Pages,
+  Vercel, etc.). Same `DATA_URL` pattern as `dashboard.html` — edit the
+  constant near the top of the `<script>` tag if hosting the page and data
+  file separately.
+
+Automated via `.github/workflows/fno-3day-screener.yml` — runs after
+market close on trading days and commits `data/fno_3day_candidates.json`
+back to the repo automatically (also has a manual "Run workflow" button
+under the Actions tab), same pattern as `update-analytics.yml`.
 
 ## Run it
 

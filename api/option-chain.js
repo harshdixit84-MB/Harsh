@@ -100,7 +100,13 @@ module.exports = async (req, res) => {
     const expiries = [...new Set(optionContracts.map((c) => c.expiry))].sort(
       (a, b) => new Date(a) - new Date(b)
     );
-    const nearestExpiry = expiries[0];
+    // expiryIndex=0 (default, unchanged behavior) = nearest/current-month expiry
+    // expiryIndex=1 = next expiry after that, etc.
+    const requestedIndex = parseInt(req.query.expiryIndex, 10);
+    const expiryIndex = Number.isInteger(requestedIndex)
+      ? Math.max(0, Math.min(requestedIndex, expiries.length - 1))
+      : 0;
+    const nearestExpiry = expiries[expiryIndex];
     const nearestContracts = optionContracts.filter((c) => c.expiry === nearestExpiry);
 
     const equityMatch = allInstruments.find(
@@ -261,6 +267,8 @@ module.exports = async (req, res) => {
     res.status(200).json({
       symbol,
       expiry: nearestExpiry,
+      expiry_index_used: expiryIndex,
+      available_expiries: expiries.slice(0, 6),
       spot_price: spotPrice,
       pcr: pcr !== null ? Math.round(pcr * 100) / 100 : null,
       bias,

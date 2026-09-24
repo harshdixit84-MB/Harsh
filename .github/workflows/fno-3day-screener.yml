@@ -1,0 +1,38 @@
+name: F&O 3-day move screener
+
+# Runs automatically after market close, AND gives you a manual
+# "Run workflow" button under the Actions tab on github.com for
+# on-demand runs.
+on:
+  schedule:
+    - cron: "45 11 * * 1-5"   # 11:45 UTC = 5:15 PM IST, Mon-Fri (after market close, after update-analytics)
+  workflow_dispatch: {}        # <-- this is what adds the manual "Run workflow" button
+
+permissions:
+  contents: write   # needed so the workflow can commit data/fno_3day_candidates.json back to the repo
+
+jobs:
+  fno-3day-screener:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Scan F&O universe for 3-day move candidates
+        run: python analytics/fno_3day_move_screener.py
+
+      - name: Commit updated data/fno_3day_candidates.json, if anything changed
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/fno_3day_candidates.json
+          git diff --staged --quiet || git commit -m "Update F&O 3-day candidates [automated]"
+          git push

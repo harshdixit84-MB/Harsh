@@ -64,3 +64,18 @@ UPTREND_SOS_LOOKBACK_WEEKS = 8      # how far back to look for the high-volume S
 UPTREND_LPS_LOOKAHEAD_WEEKS = 4     # weeks after an SOS to look for the Last-Point-of-Support pullback
 UPTREND_PULLBACK_VOL_MULT = 0.85    # pullback volume must be BELOW this multiple of the SOS leg's volume (drying-up supply, not real selling)
 UPTREND_MIN_AVG_VOLUME = 500_000    # liquidity filter, same floor as the other strategies
+
+# ---- F&O 3-Day Move Screener (CE/PE candidate finder) ----
+# Price action + volume only, DAILY bars. Buys option lots (not intraday --
+# holds up to FNO_MAX_HOLD_DAYS), looking for stocks set up to move at
+# least FNO_MOVE_THRESHOLD. Direction (CE vs PE) comes from breakout side
+# + relative strength vs NIFTY, not from an oscillator.
+FNO_MOVE_THRESHOLD = 0.05        # target move, 5%
+FNO_MAX_HOLD_DAYS = 3            # hard cap on holding period (trading days)
+FNO_CONTRACTION_DAYS = 3         # recent days checked for a tight range ("coiling")
+FNO_BASE_DAYS = 15               # prior period the contraction is compared against
+FNO_VOL_AVG_DAYS = 20
+FNO_VOL_MULTIPLIER = 1.5         # breakout-day volume vs its own 20-day average
+FNO_BREAKOUT_LOOKBACK_DAYS = 20  # N-day high/low that sets breakout direction
+FNO_RS_LOOKBACK_DAYS = 10        # relative-strength-vs-NIFTY comparison window
+FNO_MIN_AVG_VOLUME = 500_000     # liquidity filter, same floor as the other strategies

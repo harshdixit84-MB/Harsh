@@ -26,6 +26,18 @@ Copy this `analytics/` folder into the root of the `Harsh` repo.
   `data/history.json` and renders it. No build step — open it directly or
   host it (e.g. GitHub Pages, or drop it into your existing Vercel/static
   deploy).
+- `fno_3day_move_screener.py` — independent of the above (different
+  purpose: option-lot buying, not swing equity signals). Scans the current
+  F&O stock universe (from Angel's public scrip master, no login needed)
+  for price-action + volume setups (range contraction + volume surge +
+  N-day breakout + relative strength vs NIFTY) that have historically had a
+  real chance of moving >=5% within 3 trading days. CE candidates on
+  bullish setups, PE on bearish. Writes `data/fno_3day_candidates.json`,
+  including a per-symbol historical hit-rate so you can sanity-check a
+  setup before trusting it live. Tunables live in `config.py` under
+  `FNO_*`. Uses yfinance for OHLCV (same as `strategy_confluence.py`) —
+  Angel login is only needed later, at order-placement time (reuse the
+  `angelLogin()` pattern from `api/option-chain.js`).
 
 ## Run it
 

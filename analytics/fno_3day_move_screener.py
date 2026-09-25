@@ -173,43 +173,86 @@ def relative_strength(stock_df, index_df):
     return stock_chg - index_chg
 
 
-def screen_stock(df, index_df):
+def screen_setup(df, index_df, is_benchmark=False):
+    """
+    Applies the range-contraction + volume-surge + breakout (+ relative
+    strength) setup to one instrument.
+
+    is_benchmark=True is for screening NIFTY itself:
+      - the relative-strength-vs-NIFTY filter is skipped (comparing NIFTY
+        to itself is meaningless -- it would always be 0 and fail both
+        directions).
+      - the volume-surge check is skipped gracefully if the index's volume
+        data is unusable (Yahoo Finance often reports 0/NaN volume for
+        index tickers like ^NSEI, since an index isn't itself traded the
+        way a stock is). Contraction + breakout still both apply.
+    """
     min_len = cfg.FNO_BASE_DAYS + cfg.FNO_CONTRACTION_DAYS + 5
     if len(df) < min_len:
         return None
+
     avg_vol = df["volume"].iloc[-(cfg.FNO_VOL_AVG_DAYS + 1):-1].mean()
-    if pd.isna(avg_vol) or avg_vol < cfg.FNO_MIN_AVG_VOLUME:
+    volume_usable = not (pd.isna(avg_vol) or avg_vol == 0)
+
+    if not is_benchmark:
+        if not volume_usable or avg_vol < cfg.FNO_MIN_AVG_VOLUME:
+            return None
+        if not has_volume_surge(df):
+            return None
+    elif volume_usable:
+        # NIFTY volume data happened to be usable this run -- still require
+        # the surge if so, no reason to skip a check that actually works.
+        if not has_volume_surge(df):
+            return None
+
+    if not has_range_contraction(df):
         return None
-    if not (has_range_contraction(df) and has_volume_surge(df)):
-        return None
+
     setup = breakout_direction(df)
     if setup == "NONE":
         return None
-    rs = relative_strength(df, index_df)
-    if setup == "CE" and rs <= 0:
-        return None
-    if setup == "PE" and rs >= 0:
-        return None
+
+    if is_benchmark:
+        rs = None
+    else:
+        rs = relative_strength(df, index_df)
+        if setup == "CE" and rs <= 0:
+            return None
+        if setup == "PE" and rs >= 0:
+            return None
+
     lookback = df.iloc[-(cfg.FNO_BREAKOUT_LOOKBACK_DAYS + 1):-1]
     stop_ref = lookback["low"].min() if setup == "CE" else lookback["high"].max()
+    vol_vs_avg = round(float(df["volume"].iloc[-1] / avg_vol), 2) if volume_usable else None
+
+    if is_benchmark:
+        note = (f"NIFTY {setup} bias: range contraction + "
+                f"{cfg.FNO_BREAKOUT_LOOKBACK_DAYS}-day breakout"
+                + (f", {vol_vs_avg}x volume" if vol_vs_avg is not None else " (index volume data unavailable/unreliable, not checked)")
+                + " -- index-wide bias, not a single stock's move.")
+    else:
+        note = (f"{setup} setup: range contraction + {vol_vs_avg}x volume "
+                f"+ {cfg.FNO_BREAKOUT_LOOKBACK_DAYS}-day breakout, RS {round(rs * 100, 1)}% vs NIFTY")
+
     return {
         "setup": setup,
         "close": round(float(df["close"].iloc[-1]), 2),
-        "relative_strength_pct": round(rs * 100, 2),
-        "volume_vs_avg": round(float(df["volume"].iloc[-1] / avg_vol), 2),
+        "relative_strength_pct": round(rs * 100, 2) if rs is not None else None,
+        "volume_vs_avg": vol_vs_avg,
         "stop_ref": round(float(stop_ref), 2),
-        "note": f"{setup} setup: range contraction + {round(df['volume'].iloc[-1] / avg_vol, 1)}x volume "
-                f"+ {cfg.FNO_BREAKOUT_LOOKBACK_DAYS}-day breakout, RS {round(rs * 100, 1)}% vs NIFTY",
+        "is_benchmark": is_benchmark,
+        "note": note,
     }
 
 
 # ----------------------------- Historical hit-rate check ----------------------------- #
 
-def backtest_hit_rate(df, index_df):
-    """Walk the stock's own history day by day; every day the setup would
-    have fired, check whether price reached the FNO_MOVE_THRESHOLD move
-    within the next FNO_MAX_HOLD_DAYS trading days (best favorable close in
-    that window, since you could book profit before the window ends)."""
+def backtest_hit_rate(df, index_df, is_benchmark=False):
+    """Walk the instrument's own history day by day; every day the setup
+    would have fired, check whether price reached the FNO_MOVE_THRESHOLD
+    move within the next FNO_MAX_HOLD_DAYS trading days (best favorable
+    close in that window, since you could book profit before the window
+    ends)."""
     hits = {"CE": 0, "PE": 0}
     total = {"CE": 0, "PE": 0}
     min_window = cfg.FNO_BASE_DAYS + cfg.FNO_CONTRACTION_DAYS + 5
@@ -217,7 +260,7 @@ def backtest_hit_rate(df, index_df):
     for i in range(min_window, len(df) - cfg.FNO_MAX_HOLD_DAYS):
         window = df.iloc[: i + 1]
         idx_window = index_df.iloc[: i + 1] if len(index_df) > i else index_df
-        result = screen_stock(window, idx_window)
+        result = screen_setup(window, idx_window, is_benchmark=is_benchmark)
         if not result:
             continue
         setup = result["setup"]
@@ -255,19 +298,37 @@ def main():
 
     candidates = []
     backtests = {}
+
+    # Screen NIFTY itself first -- it's the macro driver behind most of
+    # these stock moves anyway, so its own CE/PE bias is worth having
+    # alongside the stock candidates, not just implied by them.
+    nifty_result = screen_setup(index_df, index_df, is_benchmark=True)
+    if nifty_result:
+        nifty_result["symbol"] = "NIFTY"
+        candidates.append(nifty_result)
+        backtests["NIFTY"] = backtest_hit_rate(index_df, index_df, is_benchmark=True)
+        print(f"NIFTY: {nifty_result['setup']} bias -- {nifty_result['note']}")
+    else:
+        print("NIFTY: no setup today.")
+
     for i, symbol in enumerate(symbols):
         df = fetch_ohlcv(symbol)
         if df.empty:
             continue
-        result = screen_stock(df, index_df)
+        result = screen_setup(df, index_df, is_benchmark=False)
         if result:
             result["symbol"] = symbol
             candidates.append(result)
-            backtests[symbol] = backtest_hit_rate(df, index_df)
+            backtests[symbol] = backtest_hit_rate(df, index_df, is_benchmark=False)
         if (i + 1) % 25 == 0:
             print(f"...{i + 1}/{len(symbols)} scanned, {len(candidates)} candidates so far")
 
-    candidates.sort(key=lambda c: abs(c["relative_strength_pct"]), reverse=True)
+    # NIFTY (is_benchmark, RS=None) sorts first since it's the macro read;
+    # stocks after it, ranked by |relative strength| same as before.
+    candidates.sort(key=lambda c: (
+        0 if c.get("is_benchmark") else 1,
+        -abs(c["relative_strength_pct"]) if c["relative_strength_pct"] is not None else 0,
+    ))
 
     output = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -293,9 +354,10 @@ def main():
     for c in candidates:
         bt = backtests.get(c["symbol"], {})
         hr = bt.get(f"{c['setup']}_hit_rate_pct")
+        rs_str = f"{c['relative_strength_pct']}%" if c["relative_strength_pct"] is not None else "n/a (index)"
+        vol_str = f"{c['volume_vs_avg']}x" if c["volume_vs_avg"] is not None else "n/a"
         print(f"  {c['symbol']:15s} {c['setup']}  close={c['close']:<10} "
-              f"vol={c['volume_vs_avg']}x  RS={c['relative_strength_pct']}%  "
-              f"hist_hit_rate={hr}%")
+              f"vol={vol_str}  RS={rs_str}  hist_hit_rate={hr}%")
 
 
 if __name__ == "__main__":

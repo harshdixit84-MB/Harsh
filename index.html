@@ -832,6 +832,7 @@ body{background:var(--bg);color:var(--text-primary);}
 .outlook-badge.sell{background:#991b1b;}
 .outlook-badge.pending{background:#e2e8f0;color:#64748b;cursor:progress;}
 .outlook-badge.na{background:#fff;color:#64748b;border-color:#94a3b8;border-style:dashed;}
+.outlook-badge.carried-over{border-color:#cf222e;border-style:dashed;}
 .outlook-badge:hover{filter:brightness(1.12);}
 .stock-row.act-buy{box-shadow:inset 5px 0 0 #166534;}
 .stock-row.act-hold{box-shadow:inset 5px 0 0 #a16207;}
@@ -1044,7 +1045,13 @@ function renderActionBadge(symbol) {
     cls = "na"; text = "N/A"; title = (o.error || "Outlook unavailable") + " — click to retry";
   } else if (o) {
     cls = o.action.label.toLowerCase(); text = o.action.label;
-    title = o.carried_over ? "Carried over from an earlier run — click for the summary" : "Click for the outlook summary";
+    if (o.carried_over) {
+      cls += " carried-over";
+      text += " ⚠";
+      title = "Carried over — today's run could not refresh this ticker; showing the last successful result. Click for details.";
+    } else {
+      title = "Click for the outlook summary";
+    }
   } else if (!outlookMeta) {
     title = "The daily outlook has not been generated yet — click to calculate it now";
   }
@@ -1092,11 +1099,22 @@ function updateOutlookProgress() {
   const ageDays = (Date.now() - when.getTime()) / 86400000;
   const active = latestStocks.filter((s) => !s.archived);
   const missing = active.filter((s) => !outlookBySymbol[s.symbol]).length;
+  const carriedOver = outlookMeta.carried_over || [];
+  const failedMap = outlookMeta.failed || {};
+  const failedCount = Object.keys(failedMap).length;
+
   let text = ageDays > 4
     ? `⚠ Outlook is ${Math.floor(ageDays)} days old — the 4 PM run may have failed`
     : `Outlook from the ${label} run`;
   if (missing > 0) text += ` · ${missing} not in it yet (click — to calculate)`;
+  if (carriedOver.length > 0) {
+    text += ` · ⚠ ${carriedOver.length} showing yesterday's data (today's refresh failed for them): ${carriedOver.slice(0, 8).join(", ")}${carriedOver.length > 8 ? "…" : ""}`;
+  }
+  if (failedCount > 0 && failedCount > carriedOver.length) {
+    text += ` · ${failedCount - carriedOver.length} have no result at all yet`;
+  }
   el.textContent = text;
+  el.style.color = (carriedOver.length > 0 || ageDays > 4) ? "#cf222e" : "";
 }
 
 async function loadOutlookFile() {

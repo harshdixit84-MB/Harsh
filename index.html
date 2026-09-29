@@ -901,7 +901,7 @@ LIVE
 
 <div class="stat-value" id="stat-total">0</div>
 
-<div class="stat-label">Tracked</div>
+<div class="stat-label">Active <span id="stat-archived-note" style="font-weight:400;"></span></div>
 
 </div>
 
@@ -942,6 +942,7 @@ LIVE
 <label class="chip-check" id="chip-buy"><input type="checkbox" data-action="BUY"><span>✅ Buy</span></label>
 <label class="chip-check" id="chip-hold"><input type="checkbox" data-action="HOLD"><span>⏸ Hold</span></label>
 <label class="chip-check" id="chip-sell"><input type="checkbox" data-action="SELL"><span>🚫 Sell</span></label>
+<label class="chip-check" id="chip-archived"><input type="checkbox" data-action="ARCHIVED"><span>🗄 Archived</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 <button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
 <span id="outlook-progress"></span>
@@ -988,7 +989,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let actionFilter = null; // null | "BUY" | "HOLD" | "SELL"
+let actionFilter = null; // null | "BUY" | "HOLD" | "SELL" | "ARCHIVED"
 let cmpSortDir = null; // null | "asc" | "desc"
 let latestStocks = [];
 let expandedNotes = new Set();
@@ -1228,9 +1229,11 @@ function renderRow(stock) {
 }
 
 function computeFilteredStocks() {
-  let filtered = latestStocks.filter((s) => !s.archived);
+  let filtered = actionFilter === "ARCHIVED"
+    ? latestStocks.filter((s) => s.archived)
+    : latestStocks.filter((s) => !s.archived);
 
-  if (actionFilter) {
+  if (actionFilter && actionFilter !== "ARCHIVED") {
     filtered = filtered.filter((s) => actionOf(s) === actionFilter);
   }
 
@@ -1281,7 +1284,10 @@ function renderTickerBand(filtered) {
 
 function updateStats() {
   const active = latestStocks.filter((s) => !s.archived);
-  document.getElementById("stat-total").textContent = latestStocks.length;
+  const archivedCount = latestStocks.length - active.length;
+  document.getElementById("stat-total").textContent = active.length;
+  const note = document.getElementById("stat-archived-note");
+  if (note) note.textContent = archivedCount > 0 ? `· ${archivedCount} archived` : "";
   document.getElementById("stat-buy").textContent = active.filter((s) => actionOf(s) === "BUY").length;
   document.getElementById("stat-hold").textContent = active.filter((s) => actionOf(s) === "HOLD").length;
   document.getElementById("stat-sell").textContent = active.filter((s) => actionOf(s) === "SELL").length;

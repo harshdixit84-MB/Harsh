@@ -12,10 +12,10 @@ WHERE DATA COMES FROM
 ----------------------
 - F&O universe: Angel One's public scrip master JSON (same URL already used
   by api/fno-list.js -- no login required for this one).
-- Daily OHLCV: yfinance, same as analytics/strategy_confluence.py, so no
-  Angel session/TOTP is needed just to run the screen. (Angel login is only
-  needed later, at order-placement time -- see api/option-chain.js for the
-  existing angelLogin() pattern to reuse for that.)
+- Daily OHLCV: Angel One SmartAPI getCandleData (fresh, includes the latest
+  session). Needs 4 secrets/env vars: ANGEL_API_KEY, ANGEL_CLIENT_ID,
+  ANGEL_PASSWORD (login PIN), ANGEL_TOTP_SECRET. If they are missing, or a
+  symbol fails on Angel, it falls back to yfinance for that run/symbol.
 
 SETUP LOGIC (price action + volume only)
 ------------------------------------------
@@ -55,7 +55,7 @@ The "backtest" block replays this exact setup over each shortlisted
 symbol's own history and reports how often it actually delivered >=5%
 within 3 days historically -- check this before trusting a fresh signal.
 
-Run: pip install yfinance pandas requests
+Run: pip install yfinance pandas requests pyotp
      python analytics/fno_3day_move_screener.py
 Network-heavy (one yfinance fetch per F&O stock) -- run in GitHub Actions
 or interactively with patience, same caveat as strategy_confluence.py.
@@ -65,7 +65,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import requests
@@ -77,22 +77,127 @@ import config as cfg
 SCRIP_MASTER_URL = "https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json"
 NSE_SUFFIX = ".NS"
 OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "fno_3day_candidates.json")
+ANGEL_BASE = "https://apiconnect.angelone.in"
+ANGEL_NIFTY_TOKEN = "99926000"   # NSE index token for NIFTY 50
+ANGEL_MIN_INTERVAL = 0.4         # seconds between getCandleData calls (Angel allows ~3/sec)
+IST = timezone(timedelta(hours=5, minutes=30))
 HISTORY_CALENDAR_DAYS = 400  # comfortably covers FNO_BASE_DAYS + FNO_CONTRACTION_DAYS + backtest lookback
 
 
 # ----------------------------- Universe ----------------------------- #
 
+_scrip_master = None
+
+
+def load_scrip_master():
+    global _scrip_master
+    if _scrip_master is None:
+        resp = requests.get(SCRIP_MASTER_URL, timeout=60)
+        resp.raise_for_status()
+        _scrip_master = resp.json()
+    return _scrip_master
+
+
 def get_fno_symbols():
     """F&O stock underlyings, from Angel's public scrip master (no login needed).
     Same filter as api/fno-list.js: NFO options on individual stocks/index."""
-    resp = requests.get(SCRIP_MASTER_URL, timeout=30)
-    resp.raise_for_status()
-    all_instruments = resp.json()
     names = set()
-    for inst in all_instruments:
+    for inst in load_scrip_master():
         if inst.get("exch_seg") == "NFO" and inst.get("instrumenttype") == "OPTSTK":
             names.add(inst["name"])
     return sorted(names)
+
+
+_nse_tokens = None
+
+
+def nse_token(symbol):
+    """NSE cash-equity token for an F&O underlying (trading symbol 'NAME-EQ')."""
+    global _nse_tokens
+    if _nse_tokens is None:
+        _nse_tokens = {inst["symbol"]: inst["token"]
+                       for inst in load_scrip_master()
+                       if inst.get("exch_seg") == "NSE" and str(inst.get("symbol", "")).endswith("-EQ")}
+    return _nse_tokens.get(symbol + "-EQ")
+
+
+# ----------------------------- Angel One daily candles ----------------------------- #
+
+_angel = {"headers": None, "last_call": 0.0}
+data_source_counts = {"angel": 0, "yfinance": 0}
+
+
+def angel_login():
+    """One login per run. Returns True if we now have a JWT, else False (-> yfinance fallback)."""
+    keys = ["ANGEL_API_KEY", "ANGEL_CLIENT_ID", "ANGEL_PASSWORD", "ANGEL_TOTP_SECRET"]
+    missing = [k for k in keys if not os.environ.get(k)]
+    if missing:
+        print(f"Angel credentials missing ({', '.join(missing)}) -> using yfinance fallback.")
+        return False
+    try:
+        import pyotp
+        common = {
+            "Content-Type": "application/json", "Accept": "application/json",
+            "X-UserType": "USER", "X-SourceID": "WEB",
+            "X-ClientLocalIP": "127.0.0.1", "X-ClientPublicIP": "127.0.0.1",
+            "X-MACAddress": "00:00:00:00:00:00",
+            "X-PrivateKey": os.environ["ANGEL_API_KEY"],
+        }
+        resp = requests.post(
+            ANGEL_BASE + "/rest/auth/angelbroking/user/v1/loginByPassword",
+            headers=common, timeout=30,
+            json={"clientcode": os.environ["ANGEL_CLIENT_ID"],
+                  "password": os.environ["ANGEL_PASSWORD"],
+                  "totp": pyotp.TOTP(os.environ["ANGEL_TOTP_SECRET"]).now()})
+        jwt = (resp.json().get("data") or {}).get("jwtToken")
+        if not jwt:
+            print(f"Angel login failed: {resp.text[:200]} -> using yfinance fallback.")
+            return False
+        _angel["headers"] = {**common, "Authorization": f"Bearer {jwt}"}
+        print("Angel login OK -- fetching daily candles from Angel One.")
+        return True
+    except Exception as e:
+        print(f"Angel login error: {e} -> using yfinance fallback.")
+        return False
+
+
+def angel_fetch_daily(exchange, token):
+    """Daily candles from Angel getCandleData. Empty DataFrame on any failure."""
+    if not _angel["headers"] or not token:
+        return pd.DataFrame()
+    now = datetime.now(IST)
+    payload = {
+        "exchange": exchange, "symboltoken": token, "interval": "ONE_DAY",
+        "fromdate": (now - timedelta(days=HISTORY_CALENDAR_DAYS)).strftime("%Y-%m-%d 09:15"),
+        "todate": now.strftime("%Y-%m-%d %H:%M"),
+    }
+    for attempt in range(4):
+        wait = ANGEL_MIN_INTERVAL - (time.time() - _angel["last_call"])
+        if wait > 0:
+            time.sleep(wait)
+        _angel["last_call"] = time.time()
+        try:
+            r = requests.post(ANGEL_BASE + "/rest/secure/angelbroking/historical/v1/getCandleData",
+                              headers=_angel["headers"], json=payload, timeout=30)
+            try:
+                data = r.json()
+            except ValueError:
+                data = None
+            if data and data.get("status") and isinstance(data.get("data"), list):
+                rows = data["data"]
+                if not rows:
+                    return pd.DataFrame()
+                df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume"])
+                df.index = pd.to_datetime(df["ts"].str[:10])
+                return df[["open", "high", "low", "close", "volume"]].astype(float)
+            text = (str(data) if data else r.text).lower()
+            if r.status_code == 429 or "rate" in text or "access denied" in text:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            return pd.DataFrame()
+        except Exception:
+            time.sleep(1.0)
+    return pd.DataFrame()
 
 
 # ----------------------------- OHLCV (yfinance, same pattern as strategy_confluence.py) ----------------------------- #
@@ -100,44 +205,55 @@ def get_fno_symbols():
 _price_cache = {}
 
 
-def fetch_ohlcv(symbol):
-    if symbol in _price_cache:
-        return _price_cache[symbol]
-    end = datetime.today().strftime("%Y-%m-%d")
+def _yf_history(ticker):
+    # yfinance's `end` is EXCLUSIVE -- use tomorrow so today's/latest candle is included.
+    end = (datetime.today() + timedelta(days=1)).strftime("%Y-%m-%d")
     start = (datetime.today() - timedelta(days=HISTORY_CALENDAR_DAYS)).strftime("%Y-%m-%d")
-    try:
-        df = yf.Ticker(symbol + NSE_SUFFIX).history(start=start, end=end)
-        time.sleep(0.15)  # be polite to Yahoo's rate limits across ~200+ symbols
-    except Exception:
-        df = pd.DataFrame()
+    df = yf.Ticker(ticker).history(start=start, end=end)
     if not df.empty:
         df = df.rename(columns={"Open": "open", "High": "high", "Low": "low",
                                  "Close": "close", "Volume": "volume"})
-        df.index = pd.to_datetime(df.index)
+        df.index = pd.to_datetime(df.index).tz_localize(None).normalize()
+    return df
+
+
+def fetch_ohlcv(symbol):
+    if symbol in _price_cache:
+        return _price_cache[symbol]
+    df = angel_fetch_daily("NSE", nse_token(symbol))
+    if not df.empty:
+        data_source_counts["angel"] += 1
+    else:
+        try:
+            df = _yf_history(symbol + NSE_SUFFIX)
+            time.sleep(0.15)  # be polite to Yahoo's rate limits across ~200+ symbols
+        except Exception:
+            df = pd.DataFrame()
+        if not df.empty:
+            data_source_counts["yfinance"] += 1
     _price_cache[symbol] = df
     return df
 
 
 def fetch_nifty():
-    return fetch_ohlcv_index("^NSEI")
-
-
-def fetch_ohlcv_index(ticker):
-    end = datetime.today().strftime("%Y-%m-%d")
-    start = (datetime.today() - timedelta(days=HISTORY_CALENDAR_DAYS)).strftime("%Y-%m-%d")
-    df = yf.Ticker(ticker).history(start=start, end=end)
-    df = df.rename(columns={"Open": "open", "High": "high", "Low": "low",
-                             "Close": "close", "Volume": "volume"})
-    df.index = pd.to_datetime(df.index)
-    return df
+    df = angel_fetch_daily("NSE", ANGEL_NIFTY_TOKEN)
+    if not df.empty:
+        data_source_counts["angel"] += 1
+        return df
+    data_source_counts["yfinance"] += 1
+    return _yf_history("^NSEI")
 
 
 # ----------------------------- Setup detection ----------------------------- #
 
 def has_range_contraction(df):
+    # The latest candle IS the breakout/breakdown day and naturally has a wide
+    # range, so "coiling" is measured on the FNO_CONTRACTION_DAYS sessions just
+    # BEFORE it (otherwise the breakout candle disqualifies itself).
     rng_pct = (df["high"] - df["low"]) / df["close"]
-    recent = rng_pct.iloc[-cfg.FNO_CONTRACTION_DAYS:].mean()
-    base = rng_pct.iloc[-(cfg.FNO_CONTRACTION_DAYS + cfg.FNO_BASE_DAYS):-cfg.FNO_CONTRACTION_DAYS].mean()
+    c, b = cfg.FNO_CONTRACTION_DAYS, cfg.FNO_BASE_DAYS
+    recent = rng_pct.iloc[-(c + 1):-1].mean()
+    base = rng_pct.iloc[-(c + 1 + b):-(c + 1)].mean()
     if pd.isna(recent) or pd.isna(base) or base == 0:
         return False
     return recent < 0.7 * base
@@ -290,11 +406,13 @@ def backtest_hit_rate(df, index_df, is_benchmark=False):
 # ----------------------------- Main ----------------------------- #
 
 def main():
+    angel_login()
     print("Fetching F&O universe...")
     symbols = get_fno_symbols()
     print(f"{len(symbols)} F&O stocks found.")
 
     index_df = fetch_nifty()
+    print(f"NIFTY latest candle: {index_df.index[-1].date()} (rows: {len(index_df)})")
 
     candidates = []
     backtests = {}
@@ -332,6 +450,8 @@ def main():
 
     output = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
+        "last_candle_date": str(index_df.index[-1].date()),
+        "data_source": dict(data_source_counts),
         "config": {
             "move_threshold": cfg.FNO_MOVE_THRESHOLD,
             "max_hold_days": cfg.FNO_MAX_HOLD_DAYS,
@@ -346,6 +466,7 @@ def main():
         "backtest": backtests,
     }
 
+    print(f"Data source counts: {data_source_counts}")
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w") as f:
         json.dump(output, f, indent=2)

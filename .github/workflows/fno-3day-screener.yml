@@ -24,9 +24,14 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install yfinance pandas requests
+        run: pip install yfinance pandas requests pyotp
 
       - name: Scan F&O universe for 3-day move candidates
+        env:
+          ANGEL_API_KEY: ${{ secrets.ANGEL_API_KEY }}
+          ANGEL_CLIENT_ID: ${{ secrets.ANGEL_CLIENT_ID }}
+          ANGEL_PASSWORD: ${{ secrets.ANGEL_PASSWORD }}
+          ANGEL_TOTP_SECRET: ${{ secrets.ANGEL_TOTP_SECRET }}
         run: python analytics/fno_3day_move_screener.py
 
       - name: Commit updated data/fno_3day_candidates.json, if anything changed

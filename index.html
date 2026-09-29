@@ -942,6 +942,7 @@ LIVE
 <label class="chip-check" id="chip-buy"><input type="checkbox" data-action="BUY"><span>✅ Buy</span></label>
 <label class="chip-check" id="chip-hold"><input type="checkbox" data-action="HOLD"><span>⏸ Hold</span></label>
 <label class="chip-check" id="chip-sell"><input type="checkbox" data-action="SELL"><span>🚫 Sell</span></label>
+<label class="chip-check" id="chip-dpoint"><input type="checkbox" data-action="DPOINT"><span>📐 D Point</span></label>
 <label class="chip-check" id="chip-archived"><input type="checkbox" data-action="ARCHIVED"><span>🗄 Archived</span></label>
 <button class="reset-btn" id="reset-filters" title="Reset filters">⟳</button>
 <button class="reset-btn" id="open-watchlist" title="Open Watchlist">⭐ Watchlist</button>
@@ -989,7 +990,7 @@ LIVE
 <script>
 const WATCH_THRESHOLD = 2; // within this % counts as "watch"
 let currentSearch = "";
-let actionFilter = null; // null | "BUY" | "HOLD" | "SELL" | "ARCHIVED"
+let actionFilter = null; // null | "BUY" | "HOLD" | "SELL" | "DPOINT" | "ARCHIVED"
 let cmpSortDir = null; // null | "asc" | "desc"
 let latestStocks = [];
 let expandedNotes = new Set();
@@ -998,75 +999,24 @@ function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// ---- D POINT (XABCD harmonic setup) ----
+// ---- D POINT filter (XABCD harmonic setup) ----
 // harmonic_patterns.py projects the Potential Reversal Zone (PRZ) for D from the
-// last confirmed X-A-B-C swings and writes it to the Harmonic_Patterns sheet;
-// /api/dashboard merges it into each stock as harmonic_* fields. The button opens
-// a popup with the full setup. No pattern => the button is dimmed.
+// last confirmed X-A-B-C swings; /api/dashboard merges it into each stock as
+// harmonic_* fields. The "D Point" chip keeps only stocks with a live setup, and
+// while it is active each card shows its zone / stop / targets on one line.
 (function () {
   const css = document.createElement("style");
-  css.textContent = `
-    .dpoint-btn{background:#ede9fe;color:#6d28d9;border:none;border-radius:5px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;}
-    .dpoint-btn.bull{background:#dcfce7;color:#166534;}
-    .dpoint-btn.bear{background:#fee2e2;color:#991b1b;}
-    .dpoint-btn.none{background:#f1f5f9;color:#94a3b8;}
-    .dpoint-btn:hover{filter:brightness(.95);}
-    #dpoint-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;align-items:center;justify-content:center;padding:16px;}
-    #dpoint-overlay.open{display:flex;}
-    #dpoint-box{background:#fff;color:#1e293b;border-radius:12px;max-width:420px;width:100%;max-height:90vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 50px rgba(0,0,0,.35);}
-    #dpoint-box h3{margin:0 0 4px;font-size:16px;}
-    #dpoint-box .dp-sub{font-size:12px;color:#64748b;margin-bottom:12px;}
-    #dpoint-box table{width:100%;border-collapse:collapse;font-size:13px;}
-    #dpoint-box td{padding:5px 0;border-bottom:1px solid #e2e8f0;}
-    #dpoint-box td:last-child{text-align:right;font-weight:700;}
-    #dpoint-box .dp-close{float:right;background:none;border:none;font-size:18px;cursor:pointer;color:#64748b;}
-    #dpoint-box .dp-note{font-size:11px;color:#64748b;margin-top:10px;line-height:1.4;}
-  `;
+  css.textContent = `.dpoint-line{font-size:12px;margin-top:6px;padding:6px 8px;border-radius:6px;line-height:1.5;}
+    .dpoint-line.bull{background:#dcfce7;color:#166534;}
+    .dpoint-line.bear{background:#fee2e2;color:#991b1b;}`;
   document.head.appendChild(css);
-
-  const ov = document.createElement("div");
-  ov.id = "dpoint-overlay";
-  ov.innerHTML = '<div id="dpoint-box"></div>';
-  document.body.appendChild(ov);
-  ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.remove("open"); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") ov.classList.remove("open"); });
-
   const fmt = (v) => (v === null || v === undefined || Number.isNaN(v)) ? "—" : "₹" + Number(v).toFixed(2);
-
-  window.renderDPointBtn = function (stock) {
-    if (!stock.harmonic_pattern) {
-      return `<button class="dpoint-btn none" data-symbol="${stock.symbol}" title="No harmonic setup right now">📐 D Point</button>`;
-    }
-    const bull = stock.harmonic_direction === "Bullish";
-    return `<button class="dpoint-btn ${bull ? "bull" : "bear"}" data-symbol="${stock.symbol}" title="${stock.harmonic_direction} ${stock.harmonic_pattern} — click for D point zone">📐 D Point</button>`;
-  };
-
-  window.openDPoint = function (symbol) {
-    const stock = latestStocks.find((s) => s.symbol === symbol);
-    const box = document.getElementById("dpoint-box");
-    let html = `<button class="dp-close" onclick="document.getElementById('dpoint-overlay').classList.remove('open')">✕</button><h3>📐 D Point — ${symbol}</h3>`;
-    if (!stock || !stock.harmonic_pattern) {
-      html += `<div class="dp-sub">No confirmed X-A-B-C harmonic setup right now. The scan refreshes hourly during market hours.</div>`;
-    } else {
-      const h = stock;
-      const bull = h.harmonic_direction === "Bullish";
-      const dist = h.harmonic_distance_to_prz_pct;
-      const distTxt = dist <= 0 ? "Price is inside / past the zone" : dist.toFixed(2) + "% away";
-      html += `<div class="dp-sub">${bull ? "🟢" : "🔴"} ${h.harmonic_direction} ${h.harmonic_pattern} · C confirmed ${h.harmonic_days_since_c ?? "?"}d ago (${h.harmonic_c_date || "—"})</div>
-      <table>
-        <tr><td>D zone (PRZ)</td><td>${fmt(h.harmonic_prz_low)} – ${fmt(h.harmonic_prz_high)}</td></tr>
-        <tr><td>Current price</td><td>${fmt(h.harmonic_current_price)}</td></tr>
-        <tr><td>Distance to zone</td><td>${distTxt}</td></tr>
-        <tr><td>Stop loss</td><td>${fmt(h.harmonic_stop_loss)}</td></tr>
-        <tr><td>Target 1</td><td>${fmt(h.harmonic_target_1)}</td></tr>
-        <tr><td>Target 2</td><td>${fmt(h.harmonic_target_2)}</td></tr>
-        <tr><td>Target 3</td><td>${fmt(h.harmonic_target_3)}</td></tr>
-        <tr><td>X → A → B → C</td><td>${fmt(h.harmonic_x)} → ${fmt(h.harmonic_a)} → ${fmt(h.harmonic_b)} → ${fmt(h.harmonic_c)}</td></tr>
-      </table>
-      <div class="dp-note">${bull ? "Buy setup: D is projected as a low; look for a reversal once price enters the zone." : "Sell setup: D is projected as a high; look for a reversal once price enters the zone."} The zone is projected before D forms, so confirm with a reversal candle before acting.</div>`;
-    }
-    box.innerHTML = html;
-    ov.classList.add("open");
+  window.renderDPointLine = function (h) {
+    if (!h.harmonic_pattern) return "";
+    const bull = h.harmonic_direction === "Bullish";
+    const d = h.harmonic_distance_to_prz_pct;
+    const dist = d <= 0 ? "price is in/past the zone" : d.toFixed(2) + "% away";
+    return `<div class="dpoint-line ${bull ? "bull" : "bear"}">📐 <b>${h.harmonic_direction} ${h.harmonic_pattern}</b> · D zone ${fmt(h.harmonic_prz_low)}–${fmt(h.harmonic_prz_high)} (${dist}) · SL ${fmt(h.harmonic_stop_loss)} · T1 ${fmt(h.harmonic_target_1)} / T2 ${fmt(h.harmonic_target_2)} / T3 ${fmt(h.harmonic_target_3)} · C ${h.harmonic_c_date || "—"}</div>`;
   };
 })();
 
@@ -1271,7 +1221,6 @@ function renderRow(stock) {
           <span class="symbol">${stock.symbol}</span>
           <a href="https://www.tradingview.com/chart/?symbol=NSE:${stock.symbol}" target="_blank" rel="noopener" class="tv-link">TV ↗</a>
           <button class="analyze-btn" data-symbol="${stock.symbol}" title="Analyze ${stock.symbol}">📊 Analyse</button>
-          ${renderDPointBtn(stock)}
           <button class="notes-toggle${(stock.comments || []).length ? " has-notes" : ""}" data-symbol="${stock.symbol}" title="Notes for ${stock.symbol}">📝 ${(stock.comments || []).length}</button>
         </div>
         <div class="price-cell">
@@ -1296,6 +1245,7 @@ function renderRow(stock) {
         </div>
       </div>
       ${verdictHtml}
+      ${actionFilter === "DPOINT" ? renderDPointLine(stock) : ""}
     </div>
     ${expandedNotes.has(stock.symbol) ? renderNotesRow(stock) : ""}
   `;
@@ -1306,7 +1256,9 @@ function computeFilteredStocks() {
     ? latestStocks.filter((s) => s.archived)
     : latestStocks.filter((s) => !s.archived);
 
-  if (actionFilter && actionFilter !== "ARCHIVED") {
+  if (actionFilter === "DPOINT") {
+    filtered = filtered.filter((s) => s.harmonic_pattern);
+  } else if (actionFilter && actionFilter !== "ARCHIVED") {
     filtered = filtered.filter((s) => actionOf(s) === actionFilter);
   }
 
@@ -1319,6 +1271,8 @@ function computeFilteredStocks() {
 
   if (cmpSortDir) {
     filtered.sort((a, b) => cmpSortDir === "asc" ? a.price - b.price : b.price - a.price);
+  } else if (actionFilter === "DPOINT") {
+    filtered.sort((a, b) => (a.harmonic_distance_to_prz_pct ?? 999) - (b.harmonic_distance_to_prz_pct ?? 999));
   } else {
     // Default: Buy first, then Hold, then Sell; strongest outlook score first within each.
     const score = (s) => (outlookBySymbol[s.symbol] && outlookBySymbol[s.symbol].score) ?? -999;
@@ -1432,11 +1386,6 @@ async function saveValueField(btn) {
 document.getElementById("rows").addEventListener("click", async (e) => {
   if (e.target.classList.contains("analyze-btn")) {
     openAnalyze(e.target.dataset.symbol);
-    return;
-  }
-
-  if (e.target.classList.contains("dpoint-btn")) {
-    openDPoint(e.target.dataset.symbol);
     return;
   }
 

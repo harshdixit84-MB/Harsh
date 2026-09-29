@@ -1,5 +1,10 @@
 {
-  "generated_at": "2026-09-28T18:44:55.109321Z",
+  "generated_at": "2026-09-29T04:28:39.624918Z",
+  "last_candle_date": "2026-09-29",
+  "data_source": {
+    "angel": 0,
+    "yfinance": 211
+  },
   "config": {
     "move_threshold": 0.05,
     "max_hold_days": 3,

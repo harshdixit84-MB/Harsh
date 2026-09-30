@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-09-29T17:02:02.032828Z",
-  "last_candle_date": "2026-09-29",
+  "generated_at": "2026-09-30T17:01:12.946508Z",
+  "last_candle_date": "2026-09-30",
   "data_source": {
     "angel": 0,
-    "yfinance": 211
+    "yfinance": 214
   },
   "config": {
     "move_threshold": 0.05,
